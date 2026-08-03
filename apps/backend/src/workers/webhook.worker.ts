@@ -341,14 +341,18 @@ export const webhookWorker = new Worker(
           }
 
           if (recipient) {
-            const recipientUpdateData: Record<string, any> = {
-              status: statusMap[status.status] as any,
-            };
+            const recipientUpdateData: Record<string, any> = {};
+
+            // Do NOT downgrade/overwrite REPLIED status with late READ or DELIVERED status webhooks
+            if (String(recipient.status) !== 'REPLIED') {
+              recipientUpdateData.status = statusMap[status.status] as any;
+            }
 
             if (status.status === 'sent') recipientUpdateData.sentAt = new Date();
             if (status.status === 'delivered') recipientUpdateData.deliveredAt = new Date();
             if (status.status === 'read') recipientUpdateData.readAt = new Date();
             if (status.status === 'failed' && status.errors?.[0]) {
+              recipientUpdateData.status = 'FAILED';
               recipientUpdateData.errorCode = String(status.errors[0].code);
               recipientUpdateData.errorMessage = status.errors[0].title || 'Meta API Error';
             }

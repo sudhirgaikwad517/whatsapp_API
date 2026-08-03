@@ -173,20 +173,35 @@ export async function listCampaigns(organizationId: string) {
     orderBy: { createdAt: 'desc' },
   });
 
-  return campaigns.map((c) => {
-    const pendingCount = Math.max(0, c.totalTarget - (c.sentCount + c.failedCount));
-    const deliveryRate = c.sentCount > 0 ? Number(((c.deliveredCount / c.sentCount) * 100).toFixed(1)) : 0;
-    const readRate = c.deliveredCount > 0 ? Number(((c.readCount / c.deliveredCount) * 100).toFixed(1)) : 0;
-    const replyRate = c.deliveredCount > 0 ? Number(((c.repliedCount / c.deliveredCount) * 100).toFixed(1)) : 0;
+  return Promise.all(
+    campaigns.map(async (c) => {
+      const [sentCount, deliveredCount, readCount, repliedCount, failedCount] = await Promise.all([
+        prisma.campaignRecipient.count({ where: { campaignId: c.id, sentAt: { not: null } } }),
+        prisma.campaignRecipient.count({ where: { campaignId: c.id, deliveredAt: { not: null } } }),
+        prisma.campaignRecipient.count({ where: { campaignId: c.id, readAt: { not: null } } }),
+        prisma.campaignRecipient.count({ where: { campaignId: c.id, repliedAt: { not: null } } }),
+        prisma.campaignRecipient.count({ where: { campaignId: c.id, status: 'FAILED' } }),
+      ]);
 
-    return {
-      ...c,
-      pendingCount,
-      deliveryRate,
-      readRate,
-      replyRate,
-    };
-  });
+      const pendingCount = Math.max(0, c.totalTarget - (sentCount + failedCount));
+      const deliveryRate = sentCount > 0 ? Number(((deliveredCount / sentCount) * 100).toFixed(1)) : 0;
+      const readRate = deliveredCount > 0 ? Number(((readCount / deliveredCount) * 100).toFixed(1)) : 0;
+      const replyRate = deliveredCount > 0 ? Number(((repliedCount / deliveredCount) * 100).toFixed(1)) : 0;
+
+      return {
+        ...c,
+        sentCount,
+        deliveredCount,
+        readCount,
+        repliedCount,
+        failedCount,
+        pendingCount,
+        deliveryRate,
+        readRate,
+        replyRate,
+      };
+    })
+  );
 }
 
 export async function getCampaignAnalytics(organizationId: string, campaignId: string) {
@@ -199,13 +214,26 @@ export async function getCampaignAnalytics(organizationId: string, campaignId: s
 
   if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
 
-  const pendingCount = Math.max(0, campaign.totalTarget - (campaign.sentCount + campaign.failedCount));
-  const deliveryRate = campaign.sentCount > 0 ? Number(((campaign.deliveredCount / campaign.sentCount) * 100).toFixed(1)) : 0;
-  const readRate = campaign.deliveredCount > 0 ? Number(((campaign.readCount / campaign.deliveredCount) * 100).toFixed(1)) : 0;
-  const replyRate = campaign.deliveredCount > 0 ? Number(((campaign.repliedCount / campaign.deliveredCount) * 100).toFixed(1)) : 0;
+  const [sentCount, deliveredCount, readCount, repliedCount, failedCount] = await Promise.all([
+    prisma.campaignRecipient.count({ where: { campaignId, sentAt: { not: null } } }),
+    prisma.campaignRecipient.count({ where: { campaignId, deliveredAt: { not: null } } }),
+    prisma.campaignRecipient.count({ where: { campaignId, readAt: { not: null } } }),
+    prisma.campaignRecipient.count({ where: { campaignId, repliedAt: { not: null } } }),
+    prisma.campaignRecipient.count({ where: { campaignId, status: 'FAILED' } }),
+  ]);
+
+  const pendingCount = Math.max(0, campaign.totalTarget - (sentCount + failedCount));
+  const deliveryRate = sentCount > 0 ? Number(((deliveredCount / sentCount) * 100).toFixed(1)) : 0;
+  const readRate = deliveredCount > 0 ? Number(((readCount / deliveredCount) * 100).toFixed(1)) : 0;
+  const replyRate = deliveredCount > 0 ? Number(((repliedCount / deliveredCount) * 100).toFixed(1)) : 0;
 
   return {
     ...campaign,
+    sentCount,
+    deliveredCount,
+    readCount,
+    repliedCount,
+    failedCount,
     pendingCount,
     deliveryRate,
     readRate,
@@ -232,25 +260,34 @@ export async function getCampaignRecipients(
   const where: any = { campaignId };
 
   if (tab === 'SENT') {
-    where.status = 'SENT';
+    where.sentAt = { not: null };
   } else if (tab === 'DELIVERED') {
-    where.status = 'DELIVERED';
+    where.deliveredAt = { not: null };
   } else if (tab === 'READ') {
-    where.status = 'READ';
+    where.readAt = { not: null };
   } else if (tab === 'REPLIED') {
-    where.status = 'REPLIED';
+    where.repliedAt = { not: null };
   } else if (tab === 'FAILED') {
     where.status = 'FAILED';
   } else if (tab === 'PENDING') {
     where.status = 'ACCEPTED';
+    where.sentAt = null;
   }
 
   if (options.search) {
     const searchStr = options.search.trim();
-    where.OR = [
-      { phoneNumberSnapshot: { contains: searchStr } },
-      { nameSnapshot: { contains: searchStr, mode: 'insensitive' } },
-    ];
+    const searchCondition = {
+      OR: [
+        { phoneNumberSnapshot: { contains: searchStr } },
+        { nameSnapshot: { contains: searchStr, mode: 'insensitive' } },
+      ],
+    };
+
+    if (where.OR) {
+      where.AND = [searchCondition];
+    } else {
+      where.OR = searchCondition.OR;
+    }
   }
 
   const [recipients, total] = await Promise.all([

@@ -255,23 +255,28 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                         {rec.phoneNumberSnapshot || rec.contact?.phoneNumber}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                            rec.status === 'SENT'
-                              ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-                              : rec.status === 'DELIVERED'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : rec.status === 'READ'
-                              ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                              : rec.status === 'REPLIED'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : rec.status === 'FAILED'
-                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {rec.status}
-                        </span>
+                        {(() => {
+                          const statusKey = rec.repliedAt ? 'REPLIED' : rec.status;
+                          return (
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                statusKey === 'SENT'
+                                  ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                                  : statusKey === 'DELIVERED'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : statusKey === 'READ'
+                                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                  : statusKey === 'REPLIED'
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                  : statusKey === 'FAILED'
+                                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {statusKey}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 text-slate-400 text-[11px] space-y-0.5">
                         {rec.sentAt && <div>Sent: {new Date(rec.sentAt).toLocaleTimeString()}</div>}
