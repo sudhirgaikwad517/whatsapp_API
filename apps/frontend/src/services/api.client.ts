@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+const isProduction =
+  typeof window !== 'undefined' &&
+  (window.location.hostname.includes('wabtic.com') || window.location.protocol === 'https:');
+
+export const API_BASE_URL =
+  (import.meta as any).env?.VITE_API_URL || (isProduction ? 'https://api.wabtic.com/api/v1' : '/api/v1');
+
 export const apiClient = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -27,7 +34,7 @@ apiClient.interceptors.response.use(
 
       if (refreshToken) {
         try {
-          const res = await axios.post('/api/v1/auth/refresh', { refreshToken });
+          const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
           const newAccessToken = res.data.data.accessToken;
           localStorage.setItem('access_token', newAccessToken);
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
