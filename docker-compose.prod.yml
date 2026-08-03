@@ -39,7 +39,7 @@ services:
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-prowexa_production_jwt_secret_987654321}
       REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-prowexa_production_refresh_secret_123456789}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-12345678901234567890123456789012}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-prowexa_whatsapp_webhook_secret_123}
     depends_on:
       - postgres
