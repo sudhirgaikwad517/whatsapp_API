@@ -30,7 +30,12 @@ export const Signup: React.FC = () => {
       setAuth(user, tokens.accessToken, tokens.refreshToken);
       window.location.href = '/settings';
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to complete registration.');
+      const serverMsg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message;
+      setError(typeof serverMsg === 'string' ? serverMsg : 'Failed to complete registration.');
     } finally {
       setIsLoading(false);
     }
