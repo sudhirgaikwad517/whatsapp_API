@@ -21,7 +21,7 @@ import { SendTemplateModal } from '../components/inbox/SendTemplateModal';
 export const Inbox: React.FC = () => {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const contactIdParam = searchParams.get('contactId');
   const conversationIdParam = searchParams.get('conversationId');
@@ -60,7 +60,7 @@ export const Inbox: React.FC = () => {
     refetchInterval: 3000,
   });
 
-  // Auto-select conversation based on URL parameters (e.g. redirected from Campaign Analytics)
+  // Auto-select conversation based on URL parameters (only on initial load or URL change)
   useEffect(() => {
     if (conversationIdParam) {
       setActiveConversationId(conversationIdParam);
@@ -68,13 +68,11 @@ export const Inbox: React.FC = () => {
       const matched = convData.find((c: any) => c.contactId === contactIdParam || c.contact?.id === contactIdParam);
       if (matched) {
         setActiveConversationId(matched.id);
-      } else if (!activeConversationId) {
-        setActiveConversationId(convData[0].id);
       }
     } else if (!activeConversationId && convData && convData.length > 0) {
       setActiveConversationId(convData[0].id);
     }
-  }, [contactIdParam, conversationIdParam, convData, activeConversationId]);
+  }, [contactIdParam, conversationIdParam, convData?.length]);
 
   // Fetch messages for selected conversation
   const { data: msgData, isLoading: loadingMsgs } = useQuery({
@@ -228,7 +226,10 @@ export const Inbox: React.FC = () => {
             convData?.map((chat: any) => (
               <button
                 key={chat.id}
-                onClick={() => setActiveConversationId(chat.id)}
+                onClick={() => {
+                  setActiveConversationId(chat.id);
+                  setSearchParams({ contactId: chat.contactId });
+                }}
                 className={`w-full p-4 text-left hover:bg-slate-800/50 transition-all flex items-start space-x-3 ${
                   activeConversationId === chat.id ? 'bg-slate-800 border-l-4 border-emerald-500' : ''
                 }`}

@@ -95,7 +95,6 @@ export const webhookWorker = new Worker(
               },
             },
             update: {
-              unreadCount: { increment: 1 },
               windowExpiresAt,
               status: 'OPEN',
             },
@@ -103,7 +102,7 @@ export const webhookWorker = new Worker(
               organizationId: waAccount.organizationId,
               whatsappAccountId: waAccount.id,
               contactId: contact.id,
-              unreadCount: 1,
+              unreadCount: 0,
               windowExpiresAt,
             },
           });
