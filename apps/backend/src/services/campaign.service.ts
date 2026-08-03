@@ -22,6 +22,17 @@ export interface CreateCampaignInput {
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+export function formatFirstName(rawName?: string | null): string {
+  if (!rawName || !rawName.trim()) return 'Valued Customer';
+  const cleanStr = rawName.trim().replace(/^["']+|["']+$|["']/g, '');
+  if (!cleanStr) return 'Valued Customer';
+  
+  const firstWord = cleanStr.split(/[\s,_]+/)[0];
+  if (!firstWord) return 'Valued Customer';
+  
+  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+}
+
 export async function createCampaign(organizationId: string, input: CreateCampaignInput) {
   // Gracefully handle lookup by UUID, template name, or metaTemplateId
   const isUuid = UUID_REGEX.test(input.templateId);
@@ -58,12 +69,18 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   let targetContacts: Array<{ id: string; phoneNumber: string; firstName?: string | null }> = [];
 
   if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
-    // ── Option B: CSV Upload Specific Audience ─────────────────────────────
+    // ── Option B: CSV Upload Specific Audience (Deduplicated & Formatted) ──────
+    const processedPhones = new Set<string>();
+
     for (const rawContact of input.csvContacts) {
       if (!rawContact.phoneNumber) continue;
       const formattedPhone = cleanPhone(rawContact.phoneNumber);
+      if (processedPhones.has(formattedPhone)) continue; // Skip duplicate inside CSV file
+      processedPhones.add(formattedPhone);
 
-      // Find or create in CRM to ensure zero duplicate contacts
+      const cleanedFirstName = formatFirstName(rawContact.firstName);
+
+      // Find existing contact in CRM (Deduplication against existing database)
       let contact = await prisma.contact.findUnique({
         where: {
           organizationId_phoneNumber: {
@@ -74,28 +91,31 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       });
 
       if (!contact) {
+        // Create new contact if not present in database
         contact = await prisma.contact.create({
           data: {
             organizationId,
             phoneNumber: formattedPhone,
-            firstName: rawContact.firstName || null,
-            lastName: rawContact.lastName || null,
+            firstName: cleanedFirstName,
             email: rawContact.email || null,
             isOptedIn: true,
           },
         });
-      } else if (rawContact.firstName && !contact.firstName) {
-        contact = await prisma.contact.update({
-          where: { id: contact.id },
-          data: { firstName: rawContact.firstName },
-        });
+      } else {
+        // Contact already exists — reuse existing contact without creating duplicate
+        if (cleanedFirstName && cleanedFirstName !== 'Valued Customer') {
+          contact = await prisma.contact.update({
+            where: { id: contact.id },
+            data: { firstName: cleanedFirstName },
+          });
+        }
       }
 
       if (contact.isOptedIn !== false && !contact.deletedAt) {
         targetContacts.push({
           id: contact.id,
           phoneNumber: contact.phoneNumber,
-          firstName: contact.firstName,
+          firstName: contact.firstName || cleanedFirstName,
         });
       }
     }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api.client';
 
@@ -15,10 +15,21 @@ interface CsvParsedContact {
   email?: string;
 }
 
+function cleanAndFormatFirstName(rawName?: string): string | undefined {
+  if (!rawName || !rawName.trim()) return undefined;
+  const cleanStr = rawName.trim().replace(/^["']+|["']+$|["']/g, '');
+  if (!cleanStr) return undefined;
+  const firstWord = cleanStr.split(/[\s,_]+/)[0];
+  if (!firstWord) return undefined;
+  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+}
+
 export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen, onClose }) => {
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
+  const [dispatchTiming, setDispatchTiming] = useState<'NOW' | 'SCHEDULED'>('NOW');
+  const [scheduledAt, setScheduledAt] = useState<string>('');
   const [audienceSource, setAudienceSource] = useState<'CRM' | 'CSV'>('CRM');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [csvContacts, setCsvContacts] = useState<CsvParsedContact[]>([]);
@@ -79,9 +90,11 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
           const phone = cols[phoneIdx];
           if (!phone) continue;
 
+          const rawName = nameIdx !== -1 ? cols[nameIdx] : undefined;
+
           parsedList.push({
             phoneNumber: phone,
-            firstName: nameIdx !== -1 ? cols[nameIdx] : undefined,
+            firstName: cleanAndFormatFirstName(rawName),
             email: emailIdx !== -1 ? cols[emailIdx] : undefined,
           });
         }
@@ -107,6 +120,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         name,
         templateId,
         headerMediaUrl,
+        scheduledAt: dispatchTiming === 'SCHEDULED' && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
         audienceSource,
         tagIds: audienceSource === 'CRM' ? selectedTagIds : undefined,
         csvContacts: audienceSource === 'CSV' ? csvContacts : undefined,
@@ -118,6 +132,8 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setName('');
       setTemplateId('');
       setHeaderMediaUrl('');
+      setDispatchTiming('NOW');
+      setScheduledAt('');
       setAudienceSource('CRM');
       setSelectedTagIds([]);
       setCsvContacts([]);
@@ -213,6 +229,55 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
               onChange={(e) => setHeaderMediaUrl(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
             />
+          </div>
+
+          {/* ── Dispatch Timing Options (Now vs Schedule for Later) ───────── */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              Dispatch Schedule Timing
+            </label>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <button
+                type="button"
+                onClick={() => setDispatchTiming('NOW')}
+                className={`p-3 rounded-xl border flex items-center justify-center space-x-2 text-xs font-bold transition-all ${
+                  dispatchTiming === 'NOW'
+                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Send className="w-4 h-4" />
+                <span>Send Immediately</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDispatchTiming('SCHEDULED')}
+                className={`p-3 rounded-xl border flex items-center justify-center space-x-2 text-xs font-bold transition-all ${
+                  dispatchTiming === 'SCHEDULED'
+                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-sm'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>Schedule for Later</span>
+              </button>
+            </div>
+
+            {dispatchTiming === 'SCHEDULED' && (
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5 animate-fadeIn">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Select Future Date & Time
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Audience Selection Source ─────────────────────────────────── */}
