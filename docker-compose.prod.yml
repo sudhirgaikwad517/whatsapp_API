@@ -34,7 +34,7 @@ services:
     environment:
       PORT: 5050
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-prowexa_secure_pass_123}@postgres:5432/${POSTGRES_DB:-prowexa_whatsapp}?schema=public
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:prowexa_secure_pass_123@postgres:5432/prowexa_whatsapp?schema=public}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-prowexa_production_jwt_secret_987654321}
