@@ -10,7 +10,12 @@ const envSchema = z.object({
   PORT: z.string().transform(Number).default('5000'),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_URL: z.string().optional().transform((val) => {
+    if (val) return val;
+    const host = process.env.REDIS_HOST || 'redis';
+    const port = process.env.REDIS_PORT || '6379';
+    return `redis://${host}:${port}`;
+  }),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   REFRESH_TOKEN_SECRET: z.string().min(16, 'REFRESH_TOKEN_SECRET must be at least 16 characters'),
