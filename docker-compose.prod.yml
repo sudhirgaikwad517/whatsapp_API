@@ -6,9 +6,9 @@ services:
     container_name: prowexa_postgres
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prowexa_secure_pass_123}
-      POSTGRES_DB: ${POSTGRES_DB:-prowexa_whatsapp}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
@@ -34,13 +34,13 @@ services:
     environment:
       PORT: 5050
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:prowexa_secure_pass_123@postgres:5432/prowexa_whatsapp?schema=public}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-prowexa_production_jwt_secret_987654321}
-      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-prowexa_production_refresh_secret_123456789}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
-      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-prowexa_whatsapp_webhook_secret_123}
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN}
     depends_on:
       - postgres
       - redis
