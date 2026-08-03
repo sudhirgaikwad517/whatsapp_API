@@ -16,10 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@prowexa/shared-types": [
-        "../../packages/shared-types/src/index.ts",
-        "../../packages/shared-types/dist/index.d.ts"
-      ]
+      "@prowexa/shared-types": ["../../packages/shared-types/src/index.ts"]
     }
   },
   "include": ["src"],
