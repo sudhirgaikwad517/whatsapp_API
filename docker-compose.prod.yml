@@ -34,6 +34,7 @@ services:
     environment:
       PORT: 5050
       NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:-https://wabtic.com}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_HOST: redis
       REDIS_PORT: 6379

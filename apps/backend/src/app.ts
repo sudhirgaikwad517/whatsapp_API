@@ -22,11 +22,23 @@ import superAdminRoutes from './routes/superadmin.routes.js';
 export function createApp(): Application {
   const app = express();
 
-  // ── Security Headers ──────────────────────────────────────────────────────
-  app.use(helmet());
+  // ── Security Headers & Production CORS ─────────────────────────────────────
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(
     cors({
-      origin: env.FRONTEND_URL,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (like webhooks, curl, postman, mobile apps)
+        if (!origin) return callback(null, true);
+        if (
+          origin === env.FRONTEND_URL ||
+          origin.includes('wabtic.com') ||
+          origin.includes('localhost') ||
+          origin.includes('127.0.0.1')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
