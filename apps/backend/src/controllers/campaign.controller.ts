@@ -33,6 +33,17 @@ export async function getCampaignAnalytics(req: AuthenticatedRequest, res: Respo
   }
 }
 
+export async function retryCampaign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const campaignId = req.params.id;
+    const data = await CampaignService.retryCampaign(orgId, campaignId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function removeCampaign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

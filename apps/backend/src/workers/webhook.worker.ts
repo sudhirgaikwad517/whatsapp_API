@@ -53,15 +53,20 @@ export const webhookWorker = new Worker(
             continue;
           }
 
-          const rawPhone = msg.from;
-          const formattedPhone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
+          const digitsOnly = msg.from.replace(/\D/g, '');
+          const tenDigits = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+          const formattedPhone = `+${digitsOnly}`;
           const senderName = value.contacts?.find((c: { wa_id: string; profile: { name: string } }) => c.wa_id === msg.from)?.profile?.name;
 
-          // Find or create contact (support both +E164 and raw digit formats)
+          // Robust contact matching (find existing contact regardless of spaces or country code prefix)
           let contact = await prisma.contact.findFirst({
             where: {
               organizationId: waAccount.organizationId,
-              phoneNumber: { in: [formattedPhone, rawPhone] },
+              OR: [
+                { phoneNumber: { contains: tenDigits } },
+                { phoneNumber: formattedPhone },
+                { phoneNumber: digitsOnly },
+              ],
             },
           });
 
@@ -103,9 +108,24 @@ export const webhookWorker = new Worker(
             },
           });
 
+          // Extract text for all inbound message types (text, button quick reply, interactive list/button)
+          const rawMsg = msg as any;
+          let extractedText: string | null = null;
+          if (msg.type === 'text' && msg.text) {
+            extractedText = msg.text.body;
+          } else if (msg.type === 'button' && rawMsg.button) {
+            extractedText = rawMsg.button.text || rawMsg.button.payload;
+          } else if (msg.type === 'interactive' && rawMsg.interactive) {
+            if (rawMsg.interactive.type === 'button_reply') {
+              extractedText = rawMsg.interactive.button_reply?.title || rawMsg.interactive.button_reply?.id;
+            } else if (rawMsg.interactive.type === 'list_reply') {
+              extractedText = rawMsg.interactive.list_reply?.title || rawMsg.interactive.list_reply?.id;
+            }
+          }
+
           // Build content payload
           const content: Record<string, any> = {};
-          if (msg.type === 'text' && msg.text) content.text = msg.text.body;
+          if (extractedText) content.text = extractedText;
           if (msg.type === 'image' && msg.image) content.mediaId = msg.image.id;
           if (msg.type === 'audio' && msg.audio) content.mediaId = msg.audio.id;
           if (msg.type === 'video' && msg.video) content.mediaId = msg.video.id;
@@ -116,23 +136,26 @@ export const webhookWorker = new Worker(
           if (msg.type === 'location' && msg.location) content.location = msg.location;
 
           // Save message to database
+          const msgTypeStr = ['text', 'button', 'interactive'].includes(msg.type) ? 'TEXT' : msg.type.toUpperCase();
+
           const savedMessage = await prisma.message.create({
             data: {
               organizationId: waAccount.organizationId,
               conversationId: conversation.id,
               wamid: msg.id,
               direction: 'INBOUND',
-              type: msg.type.toUpperCase() as any,
+              type: msgTypeStr as any,
               content,
               status: 'DELIVERED',
             },
           });
 
           // Update conversation snippet
+          const lastSnippet = extractedText ? extractedText.slice(0, 100) : `[${msg.type}]`;
           await prisma.conversation.update({
             where: { id: conversation.id },
             data: {
-              lastMessageSnippet: msg.type === 'text' ? msg.text?.body?.slice(0, 100) : `[${msg.type}]`,
+              lastMessageSnippet: lastSnippet,
               lastMessageAt: new Date(),
             },
           });
@@ -148,7 +171,7 @@ export const webhookWorker = new Worker(
           }
 
           logger.info(
-            { wamid: msg.id, conversationId: conversation.id, type: msg.type },
+            { wamid: msg.id, conversationId: conversation.id, type: msg.type, extractedText },
             'Inbound message processed and saved.'
           );
 
@@ -159,8 +182,8 @@ export const webhookWorker = new Worker(
           });
 
           // ── Automated Multi-Tenant Keyword Auto-Responder Engine ────────────────────────
-          if (msg.type === 'text' && msg.text?.body) {
-            const textBody = msg.text.body.trim();
+          if (extractedText) {
+            const textBody = extractedText.trim();
 
             // Import intelligent keyword matching engine
             const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');

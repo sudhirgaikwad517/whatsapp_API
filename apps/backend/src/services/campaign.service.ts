@@ -132,6 +132,52 @@ export async function getCampaignAnalytics(organizationId: string, campaignId: s
   return campaign;
 }
 
+export async function retryCampaign(organizationId: string, campaignId: string) {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, organizationId },
+    include: {
+      template: true,
+      recipients: {
+        where: { status: { in: ['ACCEPTED', 'FAILED'] } },
+        include: { contact: { select: { id: true, phoneNumber: true } } },
+      },
+    },
+  });
+
+  if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
+
+  if (!campaign.recipients.length) {
+    throw new AppError('No unsent or failed recipients to retry for this campaign.', 400, 'NO_RECIPIENTS_TO_RETRY');
+  }
+
+  // Update status to PROCESSING
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { status: 'PROCESSING' },
+  });
+
+  // Re-enqueue jobs to BullMQ for unsent/failed recipients
+  for (const rec of campaign.recipients) {
+    await marketingQueue.add(
+      'send-campaign-message',
+      {
+        campaignId: campaign.id,
+        organizationId,
+        contactId: rec.contact.id,
+        phoneNumber: rec.contact.phoneNumber,
+        templateName: campaign.template.name,
+        templateLanguage: campaign.template.language,
+      },
+      {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 3000 },
+      }
+    );
+  }
+
+  return { success: true, retriedCount: campaign.recipients.length, message: `Re-queued ${campaign.recipients.length} messages for dispatch.` };
+}
+
 export async function deleteCampaign(organizationId: string, campaignId: string) {
   const campaign = await prisma.campaign.findFirst({
     where: { id: campaignId, organizationId },

@@ -57,12 +57,20 @@ export async function listContacts(
   };
 }
 
+function cleanPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  const cleanDigits = digits.length === 10 ? `91${digits}` : digits;
+  return `+${cleanDigits}`;
+}
+
 export async function createContact(organizationId: string, input: CreateContactInput) {
+  const formattedPhone = cleanPhone(input.phoneNumber);
+
   const existing = await prisma.contact.findUnique({
     where: {
       organizationId_phoneNumber: {
         organizationId,
-        phoneNumber: input.phoneNumber,
+        phoneNumber: formattedPhone,
       },
     },
   });
@@ -74,7 +82,7 @@ export async function createContact(organizationId: string, input: CreateContact
   const contact = await prisma.contact.create({
     data: {
       organizationId,
-      phoneNumber: input.phoneNumber,
+      phoneNumber: formattedPhone,
       firstName: input.firstName,
       lastName: input.lastName,
       email: input.email,

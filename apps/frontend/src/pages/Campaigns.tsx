@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateCampaignModal } from '../components/campaigns/CreateCampaignModal';
 
 export const Campaigns: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: campaigns, isLoading } = useQuery({
@@ -17,6 +18,19 @@ export const Campaigns: React.FC = () => {
     },
     refetchInterval: 3000,
   });
+
+  const handleRetryCampaign = async (id: string, name: string) => {
+    try {
+      setRetryingId(id);
+      const res = await apiClient.post(`/campaigns/${id}/retry`);
+      alert(res.data.data?.message || `Campaign "${name}" resumed! Re-queued messages for dispatch.`);
+      await queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    } catch (err: any) {
+      alert(`Failed to retry campaign: ${err?.response?.data?.error?.message || err.message}`);
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const handleDeleteCampaign = async (id: string, name: string) => {
     if (!window.confirm(`Are you sure you want to delete campaign "${name}"? This action cannot be undone.`)) {
@@ -80,7 +94,15 @@ export const Campaigns: React.FC = () => {
                     <td className="py-4 px-6 font-semibold text-white">{camp.name}</td>
                     <td className="py-4 px-6 text-slate-400">{camp.template?.name || '—'}</td>
                     <td className="py-4 px-6">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          camp.status === 'COMPLETED'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : camp.status === 'PROCESSING'
+                            ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}
+                      >
                         {camp.status}
                       </span>
                     </td>
@@ -91,7 +113,18 @@ export const Campaigns: React.FC = () => {
                     <td className="py-4 px-6 text-slate-400 text-xs">
                       {new Date(camp.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-6 text-right flex items-center justify-end space-x-2">
+                      {camp.sentCount < camp.totalTarget && (
+                        <button
+                          onClick={() => handleRetryCampaign(camp.id, camp.name)}
+                          disabled={retryingId === camp.id}
+                          title="Retry/Resume Unsent Campaign Messages"
+                          className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-semibold flex items-center transition-all disabled:opacity-50"
+                        >
+                          <RotateCw className={`w-3.5 h-3.5 mr-1.5 ${retryingId === camp.id ? 'animate-spin' : ''}`} />
+                          Retry
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteCampaign(camp.id, camp.name)}
                         disabled={deletingId === camp.id}

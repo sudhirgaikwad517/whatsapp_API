@@ -330,6 +330,9 @@ export const Inbox: React.FC = () => {
                               : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700'
                           }`}
                         >
+                          {msg.content?.headerMediaUrl && (
+                            <img src={msg.content.headerMediaUrl} alt="Header" className="rounded-lg max-h-48 w-full object-cover mb-2 border border-emerald-400/30" />
+                          )}
                           {msg.type === 'IMAGE' && msg.content?.mediaUrl ? (
                             <div className="space-y-1">
                               <img src={msg.content.mediaUrl} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-emerald-400/30" />
@@ -340,7 +343,7 @@ export const Inbox: React.FC = () => {
                               📎 <span>{msg.content.filename || 'Download Document'}</span>
                             </a>
                           ) : (
-                            <p>{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
+                            <p className="whitespace-pre-line">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
                           )}
                           <span className="text-[10px] opacity-75 mt-1 block text-right">
                             {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

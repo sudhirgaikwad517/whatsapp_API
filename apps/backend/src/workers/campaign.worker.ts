@@ -62,16 +62,26 @@ export const campaignWorker = new Worker(
         });
       }
 
-      // Auto-populate body parameters matching the exact count of placeholders (e.g. {{1}}, {{2}}, {{3}})
+      // Render Full Message Body Text for Live Inbox
+      let renderedBodyText = '';
+      const bodyComp = (tpl?.components as any[])?.find((c) => c.type === 'BODY' || c.type === 'body');
+      if (bodyComp?.text) {
+        renderedBodyText = bodyComp.text
+          .replace(/\{\{1\}\}/g, recipientName)
+          .replace(/\{\{2\}\}/g, 'Shrishti Dairy Farm')
+          .replace(/\{\{3\}\}/g, 'Pure A2 Milk');
+      } else {
+        renderedBodyText = `Template: ${data.templateName}`;
+      }
+
+      // Auto-populate body parameters matching the EXACT unique count of placeholders (e.g. {{1}}, {{2}})
       if (tpl?.components && Array.isArray(tpl.components)) {
-        const bodyComp = (tpl.components as any[]).find((c) => c.type === 'BODY' || c.type === 'body');
         if (bodyComp?.text) {
-          const matches = bodyComp.text.match(/\{\{(\d+)\}\}/g);
-          if (matches && matches.length > 0) {
-            const params = matches.map((_: string, idx: number) => {
+          const uniqueMatches = Array.from(new Set(bodyComp.text.match(/\{\{(\d+)\}\}/g) || []));
+          if (uniqueMatches.length > 0) {
+            const params = uniqueMatches.map((_: any, idx: number) => {
               if (idx === 0) return { type: 'text', text: recipientName };
               if (idx === 1) return { type: 'text', text: 'Shrishti Dairy Farm' };
-              if (idx === 2) return { type: 'text', text: 'Pure A2 Milk' };
               return { type: 'text', text: 'Valued Customer' };
             });
             componentsList.push({
@@ -98,6 +108,8 @@ export const campaignWorker = new Worker(
       });
 
       if (waAccount) {
+        const snippet = renderedBodyText.slice(0, 100);
+
         // Upsert conversation (24-hour window extension)
         const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         const conversation = await prisma.conversation.upsert({
@@ -109,7 +121,7 @@ export const campaignWorker = new Worker(
           },
           update: {
             windowExpiresAt,
-            lastMessageSnippet: `[Template: ${data.templateName}]`,
+            lastMessageSnippet: snippet,
             lastMessageAt: new Date(),
             status: 'OPEN',
           },
@@ -118,7 +130,7 @@ export const campaignWorker = new Worker(
             whatsappAccountId: waAccount.id,
             contactId: data.contactId,
             windowExpiresAt,
-            lastMessageSnippet: `[Template: ${data.templateName}]`,
+            lastMessageSnippet: snippet,
             lastMessageAt: new Date(),
             status: 'OPEN',
           },
@@ -132,7 +144,12 @@ export const campaignWorker = new Worker(
             wamid: metaRes.wamid,
             direction: 'OUTBOUND',
             type: 'TEMPLATE',
-            content: { templateName: data.templateName, language: data.templateLanguage },
+            content: {
+              text: renderedBodyText,
+              headerMediaUrl: data.headerMediaUrl,
+              templateName: data.templateName,
+              language: data.templateLanguage,
+            },
             status: 'SENT',
             sentAt: new Date(),
           },

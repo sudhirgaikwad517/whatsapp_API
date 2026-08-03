@@ -31,6 +31,13 @@ router.get('/', CampaignController.getCampaigns);
 router.get('/:id/analytics', CampaignController.getCampaignAnalytics);
 
 /**
+ * @route   POST /api/v1/campaigns/:id/retry
+ * @desc    Retry/Resume unsent or failed campaign dispatches
+ * @access  Bearer (Business Owner, Manager)
+ */
+router.post('/:id/retry', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), CampaignController.retryCampaign);
+
+/**
  * @route   DELETE /api/v1/campaigns/:id
  * @desc    Delete a campaign and its recipient history
  * @access  Bearer (Business Owner, Manager)
