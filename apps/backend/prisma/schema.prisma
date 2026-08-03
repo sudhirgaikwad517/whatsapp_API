@@ -33,6 +33,7 @@ enum MessageStatus {
   DELIVERED
   READ
   FAILED
+  REPLIED
 }
 
 enum MessageType {

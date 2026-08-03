@@ -231,7 +231,7 @@ export const webhookWorker = new Worker(
               await prisma.campaignRecipient.update({
                 where: { id: recentRecipient.id },
                 data: {
-                  status: 'REPLIED',
+                  status: 'REPLIED' as any,
                   repliedAt: new Date(),
                 },
               });

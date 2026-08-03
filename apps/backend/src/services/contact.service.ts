@@ -57,7 +57,7 @@ export async function listContacts(
   };
 }
 
-function cleanPhone(phone: string): string {
+export function cleanPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   const cleanDigits = digits.length === 10 ? `91${digits}` : digits;
   return `+${cleanDigits}`;
