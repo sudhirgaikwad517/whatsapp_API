@@ -272,6 +272,8 @@ export const webhookWorker = new Worker(
       // ── Process Delivery Status Updates ───────────────────────────────────
       if (value.statuses && value.statuses.length > 0) {
         for (const status of value.statuses) {
+          logger.info({ statusId: status.id, status: status.status, recipient: status.recipient_id }, 'Processing Meta Status Update Webhook');
+
           const dedupKey = `dedup:status:${status.id}:${status.status}`;
           const isNew = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
           if (!isNew) continue;
