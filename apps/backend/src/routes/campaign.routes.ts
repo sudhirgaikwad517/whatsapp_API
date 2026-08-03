@@ -31,6 +31,13 @@ router.get('/', CampaignController.getCampaigns);
 router.get('/:id/analytics', CampaignController.getCampaignAnalytics);
 
 /**
+ * @route   GET /api/v1/campaigns/:id/recipients
+ * @desc    Get tabbed campaign recipient status records with timestamps & Meta errors
+ * @access  Bearer (All roles)
+ */
+router.get('/:id/recipients', CampaignController.getCampaignRecipients);
+
+/**
  * @route   POST /api/v1/campaigns/:id/retry
  * @desc    Retry/Resume unsent or failed campaign dispatches
  * @access  Bearer (Business Owner, Manager)

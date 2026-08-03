@@ -1,13 +1,23 @@
 import { prisma } from '../config/database.js';
 import { marketingQueue } from '../queues/index.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { cleanPhone } from './contact.service.js';
+
+export interface CsvContactItem {
+  phoneNumber: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
 
 export interface CreateCampaignInput {
   name: string;
   templateId: string;
   headerMediaUrl?: string;
   scheduledAt?: string;
+  audienceSource?: 'CRM' | 'CSV';
   tagIds?: string[];
+  csvContacts?: CsvContactItem[];
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -45,22 +55,68 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     );
   }
 
-  // Select target audience based on tags
-  const contactWhere: any = { organizationId, deletedAt: null, NOT: { isOptedIn: false } };
-  if (input.tagIds?.length) {
-    contactWhere.tags = { some: { tagId: { in: input.tagIds } } };
-  }
+  let targetContacts: Array<{ id: string; phoneNumber: string; firstName?: string | null }> = [];
 
-  const targetContacts = await prisma.contact.findMany({
-    where: contactWhere,
-    select: { id: true, phoneNumber: true },
-  });
+  if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
+    // ── Option B: CSV Upload Specific Audience ─────────────────────────────
+    for (const rawContact of input.csvContacts) {
+      if (!rawContact.phoneNumber) continue;
+      const formattedPhone = cleanPhone(rawContact.phoneNumber);
+
+      // Find or create in CRM to ensure zero duplicate contacts
+      let contact = await prisma.contact.findUnique({
+        where: {
+          organizationId_phoneNumber: {
+            organizationId,
+            phoneNumber: formattedPhone,
+          },
+        },
+      });
+
+      if (!contact) {
+        contact = await prisma.contact.create({
+          data: {
+            organizationId,
+            phoneNumber: formattedPhone,
+            firstName: rawContact.firstName || null,
+            lastName: rawContact.lastName || null,
+            email: rawContact.email || null,
+            isOptedIn: true,
+          },
+        });
+      } else if (rawContact.firstName && !contact.firstName) {
+        contact = await prisma.contact.update({
+          where: { id: contact.id },
+          data: { firstName: rawContact.firstName },
+        });
+      }
+
+      if (contact.isOptedIn !== false && !contact.deletedAt) {
+        targetContacts.push({
+          id: contact.id,
+          phoneNumber: contact.phoneNumber,
+          firstName: contact.firstName,
+        });
+      }
+    }
+  } else {
+    // ── Option A: Existing CRM Audience Selection ──────────────────────────
+    const contactWhere: any = { organizationId, deletedAt: null, NOT: { isOptedIn: false } };
+    if (input.tagIds?.length) {
+      contactWhere.tags = { some: { tagId: { in: input.tagIds } } };
+    }
+
+    targetContacts = await prisma.contact.findMany({
+      where: contactWhere,
+      select: { id: true, phoneNumber: true, firstName: true },
+    });
+  }
 
   if (!targetContacts.length) {
     throw new AppError('No eligible opted-in contacts found for the selected campaign audience.', 400, 'NO_TARGET_CONTACTS');
   }
 
-  // Create campaign record
+  // Create campaign record with recipient snapshots
   const campaign = await prisma.campaign.create({
     data: {
       organizationId,
@@ -72,6 +128,8 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,
+          phoneNumberSnapshot: c.phoneNumber,
+          nameSnapshot: c.firstName || 'Customer',
           status: 'ACCEPTED',
         })),
       },
@@ -106,13 +164,28 @@ export async function listCampaigns(organizationId: string) {
     where: { organizationId, deletedAt: null },
   });
 
-  return prisma.campaign.findMany({
+  const campaigns = await prisma.campaign.findMany({
     where: {
       organizationId,
       ...(activeWa ? { template: { whatsappAccountId: activeWa.id } } : {}),
     },
     include: { template: { select: { id: true, name: true, category: true } } },
     orderBy: { createdAt: 'desc' },
+  });
+
+  return campaigns.map((c) => {
+    const pendingCount = Math.max(0, c.totalTarget - (c.sentCount + c.failedCount));
+    const deliveryRate = c.sentCount > 0 ? Number(((c.deliveredCount / c.sentCount) * 100).toFixed(1)) : 0;
+    const readRate = c.deliveredCount > 0 ? Number(((c.readCount / c.deliveredCount) * 100).toFixed(1)) : 0;
+    const replyRate = c.deliveredCount > 0 ? Number(((c.repliedCount / c.deliveredCount) * 100).toFixed(1)) : 0;
+
+    return {
+      ...c,
+      pendingCount,
+      deliveryRate,
+      readRate,
+      replyRate,
+    };
   });
 }
 
@@ -121,15 +194,93 @@ export async function getCampaignAnalytics(organizationId: string, campaignId: s
     where: { id: campaignId, organizationId },
     include: {
       template: true,
-      recipients: {
-        include: { contact: { select: { id: true, phoneNumber: true, firstName: true } } },
-      },
     },
   });
 
   if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
 
-  return campaign;
+  const pendingCount = Math.max(0, campaign.totalTarget - (campaign.sentCount + campaign.failedCount));
+  const deliveryRate = campaign.sentCount > 0 ? Number(((campaign.deliveredCount / campaign.sentCount) * 100).toFixed(1)) : 0;
+  const readRate = campaign.deliveredCount > 0 ? Number(((campaign.readCount / campaign.deliveredCount) * 100).toFixed(1)) : 0;
+  const replyRate = campaign.deliveredCount > 0 ? Number(((campaign.repliedCount / campaign.deliveredCount) * 100).toFixed(1)) : 0;
+
+  return {
+    ...campaign,
+    pendingCount,
+    deliveryRate,
+    readRate,
+    replyRate,
+  };
+}
+
+export async function getCampaignRecipients(
+  organizationId: string,
+  campaignId: string,
+  options: { tab?: string; search?: string; page?: number; limit?: number }
+) {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, organizationId },
+  });
+
+  if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
+
+  const tab = (options.tab || 'ALL').toUpperCase();
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 50));
+  const skip = (page - 1) * limit;
+
+  const where: any = { campaignId };
+
+  if (tab === 'SENT') {
+    where.status = 'SENT';
+  } else if (tab === 'DELIVERED') {
+    where.status = 'DELIVERED';
+  } else if (tab === 'READ') {
+    where.status = 'READ';
+  } else if (tab === 'REPLIED') {
+    where.status = 'REPLIED';
+  } else if (tab === 'FAILED') {
+    where.status = 'FAILED';
+  } else if (tab === 'PENDING') {
+    where.status = 'ACCEPTED';
+  }
+
+  if (options.search) {
+    const searchStr = options.search.trim();
+    where.OR = [
+      { phoneNumberSnapshot: { contains: searchStr } },
+      { nameSnapshot: { contains: searchStr, mode: 'insensitive' } },
+    ];
+  }
+
+  const [recipients, total] = await Promise.all([
+    prisma.campaignRecipient.findMany({
+      where,
+      include: {
+        contact: {
+          select: {
+            id: true,
+            phoneNumber: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.campaignRecipient.count({ where }),
+  ]);
+
+  return {
+    recipients,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 export async function retryCampaign(organizationId: string, campaignId: string) {

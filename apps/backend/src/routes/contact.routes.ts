@@ -52,6 +52,13 @@ router.post('/tags', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), Conta
 router.patch('/:id/opt-status', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), ContactController.toggleOptStatus);
 
 /**
+ * @route   GET /api/v1/contacts/:id/timeline
+ * @desc    Get complete contact communication history timeline
+ * @access  Bearer (All roles)
+ */
+router.get('/:id/timeline', ContactController.getContactTimeline);
+
+/**
  * @route   DELETE /api/v1/contacts/:id
  * @desc    Soft delete contact
  * @access  Bearer (Manager, Business Owner)

@@ -177,3 +177,24 @@ export async function deleteContact(organizationId: string, contactId: string) {
     data: { deletedAt: new Date() },
   });
 }
+
+export async function getContactTimeline(organizationId: string, contactId: string) {
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, organizationId, deletedAt: null },
+  });
+
+  if (!contact) {
+    throw new AppError('Contact not found', 404, 'CONTACT_NOT_FOUND');
+  }
+
+  const timeline = await prisma.contactTimeline.findMany({
+    where: { organizationId, contactId },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+
+  return {
+    contact,
+    timeline,
+  };
+}

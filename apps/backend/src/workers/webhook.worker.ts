@@ -216,6 +216,56 @@ export const webhookWorker = new Worker(
               }, 1000);
             }
           }
+          // Track Campaign Reply Attribution
+          try {
+            const recentRecipient = await prisma.campaignRecipient.findFirst({
+              where: {
+                contactId: contact.id,
+                status: { in: ['SENT', 'DELIVERED', 'READ'] },
+                updatedAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+              },
+              orderBy: { updatedAt: 'desc' },
+            });
+
+            if (recentRecipient) {
+              await prisma.campaignRecipient.update({
+                where: { id: recentRecipient.id },
+                data: {
+                  status: 'REPLIED',
+                  repliedAt: new Date(),
+                },
+              });
+
+              await prisma.campaign.update({
+                where: { id: recentRecipient.campaignId },
+                data: { repliedCount: { increment: 1 } },
+              });
+
+              await prisma.contactTimeline.create({
+                data: {
+                  organizationId: waAccount.organizationId,
+                  contactId: contact.id,
+                  type: 'CAMPAIGN_REPLIED',
+                  title: 'Replied to Campaign Broadcast',
+                  description: `Customer replied: "${extractedText ? extractedText.slice(0, 100) : 'Media reply'}"`,
+                  metadata: { campaignId: recentRecipient.campaignId, text: extractedText },
+                },
+              });
+            } else {
+              await prisma.contactTimeline.create({
+                data: {
+                  organizationId: waAccount.organizationId,
+                  contactId: contact.id,
+                  type: 'INBOUND_MESSAGE',
+                  title: 'Received Inbound Message',
+                  description: extractedText ? extractedText.slice(0, 100) : 'Incoming media message',
+                  metadata: { messageType: msg.type },
+                },
+              });
+            }
+          } catch (timelineErr) {
+            logger.warn({ timelineErr }, 'Failed to record inbound timeline event');
+          }
         }
       }
 
@@ -253,13 +303,25 @@ export const webhookWorker = new Worker(
           // Also update campaign recipient and campaign counters if applicable
           const recipient = await prisma.campaignRecipient.findFirst({
             where: { wamid: status.id },
-            select: { campaignId: true },
+            select: { id: true, campaignId: true, contactId: true },
           });
 
           if (recipient) {
+            const recipientUpdateData: Record<string, any> = {
+              status: statusMap[status.status] as any,
+            };
+
+            if (status.status === 'sent') recipientUpdateData.sentAt = new Date();
+            if (status.status === 'delivered') recipientUpdateData.deliveredAt = new Date();
+            if (status.status === 'read') recipientUpdateData.readAt = new Date();
+            if (status.status === 'failed' && status.errors?.[0]) {
+              recipientUpdateData.errorCode = String(status.errors[0].code);
+              recipientUpdateData.errorMessage = status.errors[0].title || 'Meta API Error';
+            }
+
             await prisma.campaignRecipient.updateMany({
               where: { wamid: status.id },
-              data: { status: statusMap[status.status] as any },
+              data: recipientUpdateData,
             });
 
             if (status.status === 'delivered') {
@@ -267,10 +329,45 @@ export const webhookWorker = new Worker(
                 where: { id: recipient.campaignId },
                 data: { deliveredCount: { increment: 1 } },
               });
+              await prisma.contactTimeline.create({
+                data: {
+                  organizationId: waAccount.organizationId,
+                  contactId: recipient.contactId,
+                  type: 'CAMPAIGN_DELIVERED',
+                  title: 'Campaign Message Delivered',
+                  description: `Broadcast message delivered to customer device. WAMID: ${status.id}`,
+                  metadata: { campaignId: recipient.campaignId, wamid: status.id },
+                },
+              });
             } else if (status.status === 'read') {
               await prisma.campaign.update({
                 where: { id: recipient.campaignId },
                 data: { readCount: { increment: 1 } },
+              });
+              await prisma.contactTimeline.create({
+                data: {
+                  organizationId: waAccount.organizationId,
+                  contactId: recipient.contactId,
+                  type: 'CAMPAIGN_READ',
+                  title: 'Campaign Message Read',
+                  description: `Customer opened and read the broadcast message. WAMID: ${status.id}`,
+                  metadata: { campaignId: recipient.campaignId, wamid: status.id },
+                },
+              });
+            } else if (status.status === 'failed') {
+              await prisma.campaign.update({
+                where: { id: recipient.campaignId },
+                data: { failedCount: { increment: 1 } },
+              });
+              await prisma.contactTimeline.create({
+                data: {
+                  organizationId: waAccount.organizationId,
+                  contactId: recipient.contactId,
+                  type: 'CAMPAIGN_FAILED',
+                  title: 'Campaign Message Delivery Failed',
+                  description: status.errors?.[0]?.title || 'Meta API delivery failure',
+                  metadata: { campaignId: recipient.campaignId, errorCode: status.errors?.[0]?.code },
+                },
               });
             }
           }

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw } from 'lucide-react';
+import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw, BarChart3, Eye } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateCampaignModal } from '../components/campaigns/CreateCampaignModal';
+import { CampaignAnalyticsModal } from '../components/campaigns/CampaignAnalyticsModal';
 
 export const Campaigns: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedAnalyticsId, setSelectedAnalyticsId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -19,7 +21,8 @@ export const Campaigns: React.FC = () => {
     refetchInterval: 3000,
   });
 
-  const handleRetryCampaign = async (id: string, name: string) => {
+  const handleRetryCampaign = async (id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       setRetryingId(id);
       const res = await apiClient.post(`/campaigns/${id}/retry`);
@@ -32,7 +35,8 @@ export const Campaigns: React.FC = () => {
     }
   };
 
-  const handleDeleteCampaign = async (id: string, name: string) => {
+  const handleDeleteCampaign = async (id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!window.confirm(`Are you sure you want to delete campaign "${name}"? This action cannot be undone.`)) {
       return;
     }
@@ -53,7 +57,7 @@ export const Campaigns: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Marketing Campaigns</h1>
-          <p className="text-sm text-slate-400 mt-1">Bulk WhatsApp Template Broadcast Manager</p>
+          <p className="text-sm text-slate-400 mt-1">Bulk WhatsApp Template Broadcast Manager & Analytics</p>
         </div>
 
         <button
@@ -75,8 +79,9 @@ export const Campaigns: React.FC = () => {
                 <th className="py-4 px-6">Campaign Name</th>
                 <th className="py-4 px-6">Template</th>
                 <th className="py-4 px-6">Status</th>
-                <th className="py-4 px-6">Target Audience</th>
-                <th className="py-4 px-6">Sent / Delivered</th>
+                <th className="py-4 px-6">Total Audience</th>
+                <th className="py-4 px-6">Sent / Delivered / Read</th>
+                <th className="py-4 px-6">Rates (Del / Read)</th>
                 <th className="py-4 px-6">Created At</th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
@@ -84,14 +89,23 @@ export const Campaigns: React.FC = () => {
             <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
               {campaigns?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-500">
+                  <td colSpan={8} className="text-center py-8 text-slate-500">
                     No marketing campaigns created yet. Click "Create Campaign" to launch a broadcast.
                   </td>
                 </tr>
               ) : (
                 campaigns?.map((camp: any) => (
-                  <tr key={camp.id} className="hover:bg-slate-800/40 transition-all">
-                    <td className="py-4 px-6 font-semibold text-white">{camp.name}</td>
+                  <tr
+                    key={camp.id}
+                    onClick={() => setSelectedAnalyticsId(camp.id)}
+                    className="hover:bg-slate-800/40 cursor-pointer transition-all"
+                  >
+                    <td className="py-4 px-6 font-semibold text-white">
+                      <div className="flex items-center space-x-2">
+                        <span>{camp.name}</span>
+                        <BarChart3 className="w-4 h-4 text-emerald-400 opacity-60 group-hover:opacity-100" />
+                      </div>
+                    </td>
                     <td className="py-4 px-6 text-slate-400">{camp.template?.name || '—'}</td>
                     <td className="py-4 px-6">
                       <span
@@ -106,17 +120,33 @@ export const Campaigns: React.FC = () => {
                         {camp.status}
                       </span>
                     </td>
-                    <td className="py-4 px-6 font-semibold">{camp.totalTarget.toLocaleString()} contacts</td>
-                    <td className="py-4 px-6 text-slate-300">
-                      {camp.sentCount} / <span className="text-emerald-400 font-semibold">{camp.deliveredCount}</span>
+                    <td className="py-4 px-6 font-semibold">{camp.totalTarget?.toLocaleString()} contacts</td>
+                    <td className="py-4 px-6 text-slate-300 text-xs">
+                      {camp.sentCount} / <span className="text-emerald-400 font-semibold">{camp.deliveredCount}</span> /{' '}
+                      <span className="text-purple-400 font-semibold">{camp.readCount}</span>
+                    </td>
+                    <td className="py-4 px-6 text-xs">
+                      <span className="text-emerald-400 font-bold">{camp.deliveryRate}%</span> /{' '}
+                      <span className="text-purple-400 font-bold">{camp.readRate}%</span>
                     </td>
                     <td className="py-4 px-6 text-slate-400 text-xs">
                       {new Date(camp.createdAt).toLocaleDateString()}
                     </td>
                     <td className="py-4 px-6 text-right flex items-center justify-end space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAnalyticsId(camp.id);
+                        }}
+                        title="View Detailed Analytics & Status Tabs"
+                        className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-semibold flex items-center transition-all"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 mr-1.5" />
+                        Analytics
+                      </button>
                       {camp.sentCount < camp.totalTarget && (
                         <button
-                          onClick={() => handleRetryCampaign(camp.id, camp.name)}
+                          onClick={(e) => handleRetryCampaign(camp.id, camp.name, e)}
                           disabled={retryingId === camp.id}
                           title="Retry/Resume Unsent Campaign Messages"
                           className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-semibold flex items-center transition-all disabled:opacity-50"
@@ -126,7 +156,7 @@ export const Campaigns: React.FC = () => {
                         </button>
                       )}
                       <button
-                        onClick={() => handleDeleteCampaign(camp.id, camp.name)}
+                        onClick={(e) => handleDeleteCampaign(camp.id, camp.name, e)}
                         disabled={deletingId === camp.id}
                         title="Delete Campaign"
                         className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all disabled:opacity-50"
@@ -143,6 +173,11 @@ export const Campaigns: React.FC = () => {
       )}
 
       <CreateCampaignModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      <CampaignAnalyticsModal
+        isOpen={Boolean(selectedAnalyticsId)}
+        campaignId={selectedAnalyticsId}
+        onClose={() => setSelectedAnalyticsId(null)}
+      />
     </div>
   );
 };

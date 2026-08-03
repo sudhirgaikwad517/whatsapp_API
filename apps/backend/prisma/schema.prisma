@@ -133,6 +133,7 @@ model Organization {
   superAdminAuditLogs SuperAdminAuditLog[]
   autoResponderRules AutoResponderRule[]
   auditLogs         AuditLog[]
+  timelines         ContactTimeline[]
 
   @@index([deletedAt])
 }
@@ -250,6 +251,7 @@ model Contact {
   tags           ContactTag[]
   conversations  Conversation[]
   campaignLogs   CampaignRecipient[]
+  timeline       ContactTimeline[]
 
   @@unique([organizationId, phoneNumber])
   @@index([organizationId, phoneNumber])
@@ -364,6 +366,7 @@ model Campaign {
   sentCount      Int             @default(0)
   deliveredCount Int             @default(0)
   readCount      Int             @default(0)
+  repliedCount   Int             @default(0)
   failedCount    Int             @default(0)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -377,20 +380,44 @@ model Campaign {
 }
 
 model CampaignRecipient {
-  id          String        @id @default(uuid()) @db.Uuid
-  campaignId  String        @db.Uuid
-  contactId   String        @db.Uuid
-  wamid       String?       @db.VarChar(255)
-  status      MessageStatus @default(ACCEPTED)
-  variables   Json?
-  errorMessage String?      @db.Text
-  updatedAt   DateTime      @updatedAt
+  id                  String        @id @default(uuid()) @db.Uuid
+  campaignId          String        @db.Uuid
+  contactId           String        @db.Uuid
+  phoneNumberSnapshot String?       @db.VarChar(50)
+  nameSnapshot        String?       @db.VarChar(100)
+  wamid               String?       @db.VarChar(255)
+  status              MessageStatus @default(ACCEPTED)
+  variables           Json?
+  errorCode           String?       @db.VarChar(100)
+  errorMessage        String?       @db.Text
+  sentAt              DateTime?
+  deliveredAt         DateTime?
+  readAt              DateTime?
+  repliedAt           DateTime?
+  updatedAt           DateTime      @updatedAt
 
-  campaign    Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  campaign            Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact             Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, contactId])
   @@index([campaignId, status])
+}
+
+model ContactTimeline {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  contactId      String       @db.Uuid
+  type           String       @db.VarChar(50)
+  title          String       @db.VarChar(255)
+  description    String?      @db.Text
+  metadata       Json?        @default("{}")
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact        Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, contactId])
+  @@index([contactId, createdAt])
 }
 
 model AuditLog {

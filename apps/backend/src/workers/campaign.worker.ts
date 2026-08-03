@@ -156,20 +156,33 @@ export const campaignWorker = new Worker(
         });
       }
 
-      // 3. Update recipient log status to SENT
+      // 3. Update recipient log status to SENT and record sentAt
       await prisma.campaignRecipient.updateMany({
         where: { campaignId: data.campaignId, contactId: data.contactId },
         data: {
           wamid: metaRes.wamid,
           status: 'SENT',
+          sentAt: new Date(),
         },
       });
 
-      // 3. Increment campaign sent count
+      // Increment campaign sent count
       await prisma.campaign.update({
         where: { id: data.campaignId },
         data: {
           sentCount: { increment: 1 },
+        },
+      });
+
+      // Record Contact Timeline Entry
+      await prisma.contactTimeline.create({
+        data: {
+          organizationId: data.organizationId,
+          contactId: data.contactId,
+          type: 'CAMPAIGN_SENT',
+          title: `Campaign Message Sent: ${data.templateName}`,
+          description: `Broadcast message sent via campaign. WAMID: ${metaRes.wamid || 'N/A'}`,
+          metadata: { campaignId: data.campaignId, wamid: metaRes.wamid },
         },
       });
 
@@ -182,6 +195,7 @@ export const campaignWorker = new Worker(
         where: { campaignId: data.campaignId, contactId: data.contactId },
         data: {
           status: 'FAILED',
+          errorCode: err.code || 'META_DISPATCH_ERROR',
           errorMessage: err.message || 'Meta API Dispatch Failed',
         },
       });
@@ -191,6 +205,18 @@ export const campaignWorker = new Worker(
         where: { id: data.campaignId },
         data: {
           failedCount: { increment: 1 },
+        },
+      });
+
+      // Record Contact Timeline Entry
+      await prisma.contactTimeline.create({
+        data: {
+          organizationId: data.organizationId,
+          contactId: data.contactId,
+          type: 'CAMPAIGN_FAILED',
+          title: `Campaign Message Failed: ${data.templateName}`,
+          description: `Dispatch failed: ${err.message || 'Meta API Error'}`,
+          metadata: { campaignId: data.campaignId, error: err.message },
         },
       });
     }

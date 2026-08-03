@@ -81,3 +81,14 @@ export async function deleteContact(req: AuthenticatedRequest, res: Response, ne
     next(err);
   }
 }
+
+export async function getContactTimeline(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const contactId = req.params.id;
+    const data = await ContactService.getContactTimeline(orgId, contactId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

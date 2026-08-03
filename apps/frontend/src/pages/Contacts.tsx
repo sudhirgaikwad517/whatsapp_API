@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, UserPlus, Upload, Tag, Trash2, CheckCircle2, XCircle } from 'lucide-react';
+import { Users, Search, UserPlus, Upload, Tag, Trash2, CheckCircle2, XCircle, History } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { AddContactModal } from '../components/contacts/AddContactModal';
 import { ImportCsvModal } from '../components/contacts/ImportCsvModal';
+import { ContactTimelineModal } from '../components/contacts/ContactTimelineModal';
 
 export const Contacts: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [selectedTimelineId, setSelectedTimelineId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -61,7 +63,7 @@ export const Contacts: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Contacts CRM</h1>
-          <p className="text-sm text-slate-400 mt-1">Manage Opted-in WhatsApp Audience, Custom Attributes & Compliance</p>
+          <p className="text-sm text-slate-400 mt-1">Manage Opted-in WhatsApp Audience, Custom Attributes & Activity Timelines</p>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -186,7 +188,15 @@ export const Contacts: React.FC = () => {
                         )}
                       </button>
                     </td>
-                    <td className="py-4 px-6 text-right">
+                    <td className="py-4 px-6 text-right flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => setSelectedTimelineId(c.id)}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center transition-all"
+                        title="View Contact Timeline"
+                      >
+                        <History className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                        Timeline
+                      </button>
                       <button
                         onClick={() => {
                           if (confirm(`Are you sure you want to delete contact ${c.phoneNumber}?`)) {
@@ -209,6 +219,11 @@ export const Contacts: React.FC = () => {
 
       <AddContactModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} />
       <ImportCsvModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
+      <ContactTimelineModal
+        isOpen={Boolean(selectedTimelineId)}
+        contactId={selectedTimelineId}
+        onClose={() => setSelectedTimelineId(null)}
+      />
     </div>
   );
 };

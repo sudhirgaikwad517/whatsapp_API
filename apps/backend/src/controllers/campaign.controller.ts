@@ -33,6 +33,23 @@ export async function getCampaignAnalytics(req: AuthenticatedRequest, res: Respo
   }
 }
 
+export async function getCampaignRecipients(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const campaignId = req.params.id;
+    const { tab, search, page, limit } = req.query;
+    const data = await CampaignService.getCampaignRecipients(orgId, campaignId, {
+      tab: tab as string,
+      search: search as string,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function retryCampaign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
