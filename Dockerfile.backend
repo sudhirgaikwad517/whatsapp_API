@@ -40,4 +40,4 @@ COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
 
 EXPOSE 5050
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node apps/backend/dist/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=apps/backend/prisma/schema.prisma && node apps/backend/dist/server.js"]
