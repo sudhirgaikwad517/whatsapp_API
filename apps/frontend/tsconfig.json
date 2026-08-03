@@ -15,11 +15,9 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@prowexa/shared-types": ["../../packages/shared-types/src/index.ts"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  "references": [{ "path": "../../packages/shared-types" }]
+  "include": ["src"]
 }
 

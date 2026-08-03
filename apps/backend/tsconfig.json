@@ -4,15 +4,8 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "composite": true,
-    "paths": {
-      "@prowexa/shared-types": ["../../packages/shared-types/src/index.ts"]
-    }
+    "moduleResolution": "NodeNext"
   },
-  "include": ["src/**/*"],
-  "references": [
-    { "path": "../../packages/shared-types" }
-  ]
+  "include": ["src/**/*"]
 }
 
