@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Send, MessageSquare, Clock, UserCheck, StickyNote, FileCode2, Plus } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Send,
+  MessageSquare,
+  Clock,
+  UserCheck,
+  StickyNote,
+  FileCode2,
+  Plus,
+  Check,
+  CheckCheck,
+  AlertCircle,
+} from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
@@ -9,11 +21,15 @@ import { SendTemplateModal } from '../components/inbox/SendTemplateModal';
 export const Inbox: React.FC = () => {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const contactIdParam = searchParams.get('contactId');
+  const conversationIdParam = searchParams.get('conversationId');
+
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(conversationIdParam);
   const [filterTab, setFilterTab] = useState<'all' | 'mine'>('all');
   const [activeTab, setActiveTab] = useState<'messages' | 'notes'>('messages');
-  
+
   const [messageText, setMessageText] = useState('');
   const [noteText, setNoteText] = useState('');
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -29,17 +45,36 @@ export const Inbox: React.FC = () => {
 
   // Fetch active conversations list
   const { data: convData, isLoading: loadingConvs } = useQuery({
-    queryKey: ['conversations', filterTab, user?.id],
+    queryKey: ['conversations', filterTab, user?.id, contactIdParam],
     queryFn: async () => {
       const params: any = {};
       if (filterTab === 'mine' && user?.id) {
         params.assignedAgentId = user.id;
+      }
+      if (contactIdParam) {
+        params.contactId = contactIdParam;
       }
       const res = await apiClient.get('/inbox/conversations', { params });
       return res.data.data.conversations;
     },
     refetchInterval: 3000,
   });
+
+  // Auto-select conversation based on URL parameters (e.g. redirected from Campaign Analytics)
+  useEffect(() => {
+    if (conversationIdParam) {
+      setActiveConversationId(conversationIdParam);
+    } else if (contactIdParam && convData && convData.length > 0) {
+      const matched = convData.find((c: any) => c.contactId === contactIdParam || c.contact?.id === contactIdParam);
+      if (matched) {
+        setActiveConversationId(matched.id);
+      } else if (!activeConversationId) {
+        setActiveConversationId(convData[0].id);
+      }
+    } else if (!activeConversationId && convData && convData.length > 0) {
+      setActiveConversationId(convData[0].id);
+    }
+  }, [contactIdParam, conversationIdParam, convData, activeConversationId]);
 
   // Fetch messages for selected conversation
   const { data: msgData, isLoading: loadingMsgs } = useQuery({
@@ -206,11 +241,24 @@ export const Inbox: React.FC = () => {
                     <h4 className="font-semibold text-sm text-white truncate">
                       {chat.contact?.firstName ? `${chat.contact.firstName} ${chat.contact.lastName || ''}` : chat.contact?.phoneNumber}
                     </h4>
+                    {chat.lastMessageAt && (
+                      <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
+                        {new Date(chat.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-slate-400 truncate mt-0.5">{chat.lastMessageSnippet || 'No messages yet'}</p>
+                  
+                  <div className="flex justify-between items-center mt-1">
+                    <p className="text-xs text-slate-400 truncate flex-1 pr-2">{chat.lastMessageSnippet || 'No messages yet'}</p>
+                    {chat.unreadCount > 0 && (
+                      <span className="bg-emerald-500 text-slate-950 font-extrabold text-[11px] px-2 py-0.5 rounded-full shrink-0 shadow-md animate-pulse">
+                        {chat.unreadCount}
+                      </span>
+                    )}
+                  </div>
                   
                   {chat.assignedAgent && (
-                    <div className="mt-1.5 flex items-center text-[10px] text-slate-400">
+                    <div className="mt-1 flex items-center text-[10px] text-slate-400">
                       <UserCheck className="w-3 h-3 mr-1 text-emerald-400" />
                       <span>{chat.assignedAgent.fullName}</span>
                     </div>
@@ -224,48 +272,41 @@ export const Inbox: React.FC = () => {
 
       {/* Right Column: Active Conversation */}
       <div className="flex-1 flex flex-col bg-slate-950">
-        {activeConversationId ? (
+        {activeConversationId && currentConversation ? (
           <>
             {/* Conversation Header */}
-            <div className="h-16 px-6 border-b border-slate-800 bg-slate-900/60 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-white">
-                  {currentConversation?.contact?.firstName
-                    ? `${currentConversation.contact.firstName} ${currentConversation.contact.lastName || ''}`
-                    : currentConversation?.contact?.phoneNumber}
-                </h3>
-                <p className="text-xs text-slate-400">{currentConversation?.contact?.phoneNumber}</p>
+            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-emerald-400">
+                  {currentConversation.contact?.firstName?.[0] || currentConversation.contact?.phoneNumber?.[1] || '?'}
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">
+                    {currentConversation.contact?.firstName ? `${currentConversation.contact.firstName} ${currentConversation.contact.lastName || ''}` : currentConversation.contact?.phoneNumber}
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">{currentConversation.contact?.phoneNumber}</span>
+                </div>
               </div>
 
-              {/* Assignment & Actions */}
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <select
-                    value={currentConversation?.assignedAgentId || ''}
-                    onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                    className="bg-transparent text-slate-200 focus:outline-none text-xs font-medium cursor-pointer"
-                  >
-                    <option value="" className="bg-slate-900">Unassigned</option>
-                    {teamMembers?.map((m: any) => (
-                      <option key={m.user.id} value={m.user.id} className="bg-slate-900">
-                        {m.user.fullName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={() => setIsTemplateModalOpen(true)}
-                  className="bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center transition-all"
+              {/* Agent Assignment Selector */}
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-slate-400">Assigned Agent:</span>
+                <select
+                  value={currentConversation.assignedAgentId || ''}
+                  onChange={(e) => assignMutation.mutate(e.target.value || null)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
                 >
-                  <FileCode2 className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
-                  Send Template
-                </button>
+                  <option value="">Unassigned</option>
+                  {teamMembers?.map((member: any) => (
+                    <option key={member.user.id} value={member.user.id}>
+                      {member.user.fullName}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {/* 24h Window Banner Warning */}
+            {/* 24-Hour Customer Service Window Warning Banner */}
             {isWindowExpired && (
               <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-300">
                 <div className="flex items-center space-x-2">
@@ -345,9 +386,28 @@ export const Inbox: React.FC = () => {
                           ) : (
                             <p className="whitespace-pre-line">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
                           )}
-                          <span className="text-[10px] opacity-75 mt-1 block text-right">
-                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <div className="flex items-center justify-end space-x-1.5 mt-1 text-[10px] opacity-90">
+                            <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {msg.direction === 'OUTBOUND' && (
+                              <span>
+                                {msg.status === 'ACCEPTED' ? (
+                                  <Clock className="w-3 h-3 text-slate-300" />
+                                ) : msg.status === 'SENT' ? (
+                                  <Check className="w-3.5 h-3.5 text-slate-200" />
+                                ) : msg.status === 'DELIVERED' ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-slate-200" />
+                                ) : msg.status === 'READ' || msg.status === 'REPLIED' ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-sky-300 drop-shadow-sm font-bold" />
+                                ) : msg.status === 'FAILED' ? (
+                                  <span title={msg.errorMessage || 'Meta dispatch error'}>
+                                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 cursor-help" />
+                                  </span>
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-slate-200" />
+                                )}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))

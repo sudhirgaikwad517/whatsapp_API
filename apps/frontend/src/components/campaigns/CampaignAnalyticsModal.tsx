@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   BarChart3,
@@ -28,6 +29,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
   campaignId,
   onClose,
 }) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -230,28 +232,41 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Timestamps</th>
                   <th className="py-3 px-4">Meta Error Details</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-slate-300">
                 {isRecipientsLoading ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-slate-500">
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
                       Loading recipients data...
                     </td>
                   </tr>
                 ) : recipientsData?.recipients?.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-slate-500">
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
                       No contact records found in "{activeTab}" tab.
                     </td>
                   </tr>
                 ) : (
                   recipientsData?.recipients?.map((rec: any) => (
-                    <tr key={rec.id} className="hover:bg-slate-900/50 transition-all">
-                      <td className="py-3.5 px-4 font-semibold text-white">
+                    <tr key={rec.id} className="hover:bg-slate-900/50 transition-all group">
+                      <td
+                        onClick={() => {
+                          onClose();
+                          navigate(`/inbox?contactId=${rec.contactId}`);
+                        }}
+                        className="py-3.5 px-4 font-semibold text-white cursor-pointer hover:text-emerald-400 transition-colors"
+                      >
                         {rec.nameSnapshot || rec.contact?.firstName || 'Customer'}
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-400">
+                      <td
+                        onClick={() => {
+                          onClose();
+                          navigate(`/inbox?contactId=${rec.contactId}`);
+                        }}
+                        className="py-3.5 px-4 font-mono text-slate-400 cursor-pointer hover:text-emerald-400 transition-colors"
+                      >
                         {rec.phoneNumberSnapshot || rec.contact?.phoneNumber}
                       </td>
                       <td className="py-3.5 px-4">
@@ -294,6 +309,18 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                         ) : (
                           <span className="text-slate-600">—</span>
                         )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => {
+                            onClose();
+                            navigate(`/inbox?contactId=${rec.contactId}`);
+                          }}
+                          className="inline-flex items-center space-x-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-emerald-500/20 shadow-sm"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>Open Chat</span>
+                        </button>
                       </td>
                     </tr>
                   ))

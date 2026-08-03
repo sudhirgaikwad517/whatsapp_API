@@ -7,10 +7,11 @@ export async function getConversations(req: AuthenticatedRequest, res: Response,
     const orgId = req.user!.organizationId;
     const status = req.query.status as string;
     const assignedAgentId = req.query.assignedAgentId as string;
+    const contactId = req.query.contactId as string;
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 30;
 
-    const data = await InboxService.listConversations(orgId, { status, assignedAgentId, page, limit });
+    const data = await InboxService.listConversations(orgId, { status, assignedAgentId, contactId, page, limit });
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

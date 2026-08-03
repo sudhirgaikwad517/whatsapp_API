@@ -150,13 +150,14 @@ export const webhookWorker = new Worker(
             },
           });
 
-          // Update conversation snippet
+          // Update conversation snippet and increment unread message counter
           const lastSnippet = extractedText ? extractedText.slice(0, 100) : `[${msg.type}]`;
           await prisma.conversation.update({
             where: { id: conversation.id },
             data: {
               lastMessageSnippet: lastSnippet,
               lastMessageAt: new Date(),
+              unreadCount: { increment: 1 },
             },
           });
 

@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 
 export async function listConversations(
   organizationId: string,
-  options: { status?: string; assignedAgentId?: string; page?: number; limit?: number }
+  options: { status?: string; assignedAgentId?: string; contactId?: string; page?: number; limit?: number }
 ) {
   const page = options.page || 1;
   const limit = options.limit || 30;
@@ -14,6 +14,28 @@ export async function listConversations(
   const activeAccount = await prisma.whatsappAccount.findFirst({
     where: { organizationId, deletedAt: null },
   });
+
+  if (options.contactId && activeAccount) {
+    try {
+      await prisma.conversation.upsert({
+        where: {
+          whatsappAccountId_contactId: {
+            whatsappAccountId: activeAccount.id,
+            contactId: options.contactId,
+          },
+        },
+        update: {},
+        create: {
+          organizationId,
+          whatsappAccountId: activeAccount.id,
+          contactId: options.contactId,
+          status: 'OPEN',
+        },
+      });
+    } catch {
+      // Ignore conflict
+    }
+  }
 
   const where: any = { organizationId };
   if (activeAccount) {
