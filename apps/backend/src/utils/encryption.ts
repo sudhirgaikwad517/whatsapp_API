@@ -3,11 +3,16 @@ import { env } from '../config/env.js';
 
 const ALGORITHM = 'aes-256-gcm';
 
+function getKeyBuffer(): Buffer {
+  const hex = (env.ENCRYPTION_KEY || '').padEnd(64, '0').slice(0, 64);
+  return Buffer.from(hex, 'hex');
+}
+
 /**
  * Encrypt sensitive plain text string (e.g. Meta Permanent Access Token)
  */
 export function encryptToken(text: string): string {
-  const key = Buffer.from(env.ENCRYPTION_KEY, 'hex');
+  const key = getKeyBuffer();
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -26,7 +31,7 @@ export function decryptToken(cipherText: string): string {
     throw new Error('Invalid cipher format for token decryption');
   }
   const [ivHex, authTagHex, encryptedText] = parts;
-  const key = Buffer.from(env.ENCRYPTION_KEY, 'hex');
+  const key = getKeyBuffer();
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
