@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prowexa_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prowexa_secure_pass_123}
+      POSTGRES_DB: ${POSTGRES_DB:-prowexa_whatsapp}
+    ports:
+      - "5433:5432"
+    volumes:
+      - prowexa_pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: prowexa_redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - prowexa_redisdata:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: prowexa_backend
+    restart: always
+    ports:
+      - "5050:5050"
+    environment:
+      PORT: 5050
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-prowexa_secure_pass_123}@postgres:5432/${POSTGRES_DB:-prowexa_whatsapp}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-prowexa_production_jwt_secret_987654321}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-prowexa_production_refresh_secret_123456789}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-12345678901234567890123456789012}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-prowexa_whatsapp_webhook_secret_123}
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: prowexa_frontend
+    restart: always
+    ports:
+      - "8085:80"
+    depends_on:
+      - backend
+
+volumes:
+  prowexa_pgdata:
+  prowexa_redisdata:

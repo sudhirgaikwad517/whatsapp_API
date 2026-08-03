@@ -1,0 +1,42 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package manifests and root configuration
+COPY package*.json ./
+COPY apps/backend/package*.json ./apps/backend/
+COPY packages/shared-types/package*.json ./packages/shared-types/
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code and Prisma schema
+COPY packages/shared-types ./packages/shared-types
+COPY apps/backend ./apps/backend
+
+# Generate Prisma Client
+RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
+
+# Build TypeScript code
+RUN npm run build --workspace=@prowexa/shared-types
+RUN npm run build --workspace=@prowexa/backend
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Copy package files and node_modules
+COPY package*.json ./
+COPY apps/backend/package*.json ./apps/backend/
+COPY packages/shared-types/package*.json ./packages/shared-types/
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
+COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
+COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
+
+EXPOSE 5050
+
+CMD ["node", "apps/backend/dist/server.js"]

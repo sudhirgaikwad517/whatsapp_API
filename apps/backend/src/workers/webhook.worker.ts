@@ -1,0 +1,282 @@
+import { Worker, Job } from 'bullmq';
+import { createRedisConnection } from '../config/redis.js';
+import { prisma } from '../config/database.js';
+import { redis } from '../config/redis.js';
+import { logger } from '../utils/logger.js';
+import { mediaQueue } from '../queues/index.js';
+import { emitToOrganization } from '../socket/inbox.gateway.js';
+import type { MetaWebhookEntry } from '@prowexa/shared-types';
+
+const DEDUP_TTL_SECONDS = 86400; // 24 hours
+
+/**
+ * BullMQ Worker: Processes all incoming Meta webhook events.
+ * Runs as a SEPARATE process from the HTTP server to avoid resource contention.
+ * Handles: inbound messages, delivery status updates, template status updates.
+ */
+export const webhookWorker = new Worker(
+  'webhook-processing',
+  async (job: Job) => {
+    const entry = job.data as MetaWebhookEntry;
+    logger.debug({ jobId: job.id }, 'Processing webhook entry');
+
+    for (const change of entry.changes) {
+      if (change.field !== 'messages') continue;
+
+      const { value } = change;
+      const phoneNumberId = value.metadata.phone_number_id;
+
+      // Resolve the WhatsApp account for this phone number (with fallback to first active account)
+      let waAccount = await prisma.whatsappAccount.findUnique({
+        where: { phoneNumberId },
+      });
+
+      if (!waAccount) {
+        waAccount = await prisma.whatsappAccount.findFirst({
+          where: { status: 'CONNECTED', deletedAt: null },
+        });
+      }
+
+      if (!waAccount) {
+        logger.warn({ phoneNumberId }, 'Received webhook for unknown phoneNumberId — skipping.');
+        continue;
+      }
+
+      // ── Process Inbound Messages ───────────────────────────────────────────
+      if (value.messages && value.messages.length > 0) {
+        for (const msg of value.messages) {
+          // Deduplication check using Redis atomic SETNX
+          const dedupKey = `dedup:wamid:${msg.id}`;
+          const isNew = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+          if (!isNew) {
+            logger.debug({ wamid: msg.id }, 'Duplicate webhook event — skipping.');
+            continue;
+          }
+
+          const rawPhone = msg.from;
+          const formattedPhone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
+          const senderName = value.contacts?.find((c: { wa_id: string; profile: { name: string } }) => c.wa_id === msg.from)?.profile?.name;
+
+          // Find or create contact (support both +E164 and raw digit formats)
+          let contact = await prisma.contact.findFirst({
+            where: {
+              organizationId: waAccount.organizationId,
+              phoneNumber: { in: [formattedPhone, rawPhone] },
+            },
+          });
+
+          if (!contact) {
+            contact = await prisma.contact.create({
+              data: {
+                organizationId: waAccount.organizationId,
+                phoneNumber: formattedPhone,
+                firstName: senderName,
+              },
+            });
+          } else if (senderName && !contact.firstName) {
+            contact = await prisma.contact.update({
+              where: { id: contact.id },
+              data: { firstName: senderName },
+            });
+          }
+
+          // Upsert conversation (24-hour window)
+          const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const conversation = await prisma.conversation.upsert({
+            where: {
+              whatsappAccountId_contactId: {
+                whatsappAccountId: waAccount.id,
+                contactId: contact.id,
+              },
+            },
+            update: {
+              unreadCount: { increment: 1 },
+              windowExpiresAt,
+              status: 'OPEN',
+            },
+            create: {
+              organizationId: waAccount.organizationId,
+              whatsappAccountId: waAccount.id,
+              contactId: contact.id,
+              unreadCount: 1,
+              windowExpiresAt,
+            },
+          });
+
+          // Build content payload
+          const content: Record<string, any> = {};
+          if (msg.type === 'text' && msg.text) content.text = msg.text.body;
+          if (msg.type === 'image' && msg.image) content.mediaId = msg.image.id;
+          if (msg.type === 'audio' && msg.audio) content.mediaId = msg.audio.id;
+          if (msg.type === 'video' && msg.video) content.mediaId = msg.video.id;
+          if (msg.type === 'document' && msg.document) {
+            content.mediaId = msg.document.id;
+            content.filename = msg.document.filename;
+          }
+          if (msg.type === 'location' && msg.location) content.location = msg.location;
+
+          // Save message to database
+          const savedMessage = await prisma.message.create({
+            data: {
+              organizationId: waAccount.organizationId,
+              conversationId: conversation.id,
+              wamid: msg.id,
+              direction: 'INBOUND',
+              type: msg.type.toUpperCase() as any,
+              content,
+              status: 'DELIVERED',
+            },
+          });
+
+          // Update conversation snippet
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: {
+              lastMessageSnippet: msg.type === 'text' ? msg.text?.body?.slice(0, 100) : `[${msg.type}]`,
+              lastMessageAt: new Date(),
+            },
+          });
+
+          // Queue media download if needed
+          if (['image', 'audio', 'video', 'document'].includes(msg.type) && content.mediaId) {
+            await mediaQueue.add('download-media', {
+              messageId: savedMessage.id,
+              mediaId: content.mediaId,
+              accessToken: waAccount.encryptedAccessToken,
+              organizationId: waAccount.organizationId,
+            });
+          }
+
+          logger.info(
+            { wamid: msg.id, conversationId: conversation.id, type: msg.type },
+            'Inbound message processed and saved.'
+          );
+
+          // Realtime Broadcast new message to live agents via Socket.IO
+          emitToOrganization(waAccount.organizationId, 'new_message', {
+            conversationId: conversation.id,
+            message: savedMessage,
+          });
+
+          // ── Automated Multi-Tenant Keyword Auto-Responder Engine ────────────────────────
+          if (msg.type === 'text' && msg.text?.body) {
+            const textBody = msg.text.body.trim();
+
+            // Import intelligent keyword matching engine
+            const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
+            let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+
+            // Default Dynamic Fallback if no custom rule matched
+            if (!autoReplyText) {
+              const org = await prisma.organization.findUnique({
+                where: { id: waAccount.organizationId },
+                select: { name: true },
+              });
+              const orgName = org?.name || 'our business';
+
+              if (/^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
+                autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
+              }
+            }
+
+            if (autoReplyText) {
+              const orgId = waAccount.organizationId;
+              const convId = conversation.id;
+              const replyText = autoReplyText;
+              setTimeout(async () => {
+                try {
+                  const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
+                  await sendOutboundTextMessage(orgId, convId, replyText);
+                } catch (err) {
+                  logger.error({ err }, 'Auto-responder dispatch failed');
+                }
+              }, 1000);
+            }
+          }
+        }
+      }
+
+      // ── Process Delivery Status Updates ───────────────────────────────────
+      if (value.statuses && value.statuses.length > 0) {
+        for (const status of value.statuses) {
+          const dedupKey = `dedup:status:${status.id}:${status.status}`;
+          const isNew = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+          if (!isNew) continue;
+
+          const statusMap: Record<string, string> = {
+            sent: 'SENT',
+            delivered: 'DELIVERED',
+            read: 'READ',
+            failed: 'FAILED',
+          };
+
+          const updateData: Record<string, any> = {
+            status: statusMap[status.status] ?? 'SENT',
+          };
+
+          if (status.status === 'sent') updateData.sentAt = new Date();
+          if (status.status === 'delivered') updateData.deliveredAt = new Date();
+          if (status.status === 'read') updateData.readAt = new Date();
+          if (status.status === 'failed' && status.errors?.[0]) {
+            updateData.errorCode = String(status.errors[0].code);
+            updateData.errorMessage = status.errors[0].title;
+          }
+
+          await prisma.message.updateMany({
+            where: { wamid: status.id },
+            data: updateData,
+          });
+
+          // Also update campaign recipient and campaign counters if applicable
+          const recipient = await prisma.campaignRecipient.findFirst({
+            where: { wamid: status.id },
+            select: { campaignId: true },
+          });
+
+          if (recipient) {
+            await prisma.campaignRecipient.updateMany({
+              where: { wamid: status.id },
+              data: { status: statusMap[status.status] as any },
+            });
+
+            if (status.status === 'delivered') {
+              await prisma.campaign.update({
+                where: { id: recipient.campaignId },
+                data: { deliveredCount: { increment: 1 } },
+              });
+            } else if (status.status === 'read') {
+              await prisma.campaign.update({
+                where: { id: recipient.campaignId },
+                data: { readCount: { increment: 1 } },
+              });
+            }
+          }
+
+          // Broadcast status change to live agents
+          emitToOrganization(waAccount.organizationId, 'message_status_update', {
+            wamid: status.id,
+            status: statusMap[status.status],
+          });
+
+          logger.debug({ wamid: status.id, status: status.status }, 'Message status updated.');
+        }
+      }
+    }
+  },
+  {
+    connection: createRedisConnection(),
+    concurrency: 50,
+    limiter: {
+      max: 200,
+      duration: 1000, // Max 200 webhook jobs per second
+    },
+  }
+);
+
+webhookWorker.on('completed', (job) => {
+  logger.debug({ jobId: job.id }, 'Webhook job completed.');
+});
+
+webhookWorker.on('failed', (job, err) => {
+  logger.error({ jobId: job?.id, err }, 'Webhook job FAILED.');
+});

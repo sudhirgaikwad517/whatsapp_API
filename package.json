@@ -1,0 +1,43 @@
+{
+  "name": "prowexa-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise Multi-Tenant WhatsApp Business Platform (SaaS)",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "simulate:webhook": "npx tsx apps/backend/scripts/simulate-webhook.ts",
+    "prisma:generate": "npx prisma generate --schema=apps/backend/prisma/schema.prisma",
+    "prisma:migrate": "npx prisma migrate dev --schema=apps/backend/prisma/schema.prisma",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "prisma": {
+    "seed": "npx tsx apps/backend/prisma/seed.ts"
+  },
+  "keywords": [
+    "whatsapp",
+    "wati-clone",
+    "multi-tenant",
+    "saas",
+    "prisma",
+    "express",
+    "react",
+    "meta-cloud-api"
+  ],
+  "author": "Prowexa Team",
+  "license": "MIT",
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "prisma@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true
+  }
+}
