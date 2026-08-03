@@ -301,10 +301,42 @@ export const webhookWorker = new Worker(
           });
 
           // Also update campaign recipient and campaign counters if applicable
-          const recipient = await prisma.campaignRecipient.findFirst({
+          let recipient = await prisma.campaignRecipient.findFirst({
             where: { wamid: status.id },
-            select: { id: true, campaignId: true, contactId: true },
+            select: { id: true, campaignId: true, contactId: true, status: true },
           });
+
+          // Fallback: If not found by WAMID (race condition), match by recipient phone number & WABA
+          if (!recipient && status.recipient_id) {
+            const rawPhone = String(status.recipient_id);
+            const formattedPhone = rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`;
+
+            const matchedContact = await prisma.contact.findFirst({
+              where: {
+                organizationId: waAccount.organizationId,
+                phoneNumber: { in: [formattedPhone, rawPhone] },
+              },
+            });
+
+            if (matchedContact) {
+              recipient = await prisma.campaignRecipient.findFirst({
+                where: {
+                  contactId: matchedContact.id,
+                  campaign: { organizationId: waAccount.organizationId },
+                },
+                orderBy: { updatedAt: 'desc' },
+                select: { id: true, campaignId: true, contactId: true, status: true },
+              });
+
+              if (recipient) {
+                // Link WAMID to recipient for future status updates
+                await prisma.campaignRecipient.update({
+                  where: { id: recipient.id },
+                  data: { wamid: status.id },
+                });
+              }
+            }
+          }
 
           if (recipient) {
             const recipientUpdateData: Record<string, any> = {
@@ -319,12 +351,14 @@ export const webhookWorker = new Worker(
               recipientUpdateData.errorMessage = status.errors[0].title || 'Meta API Error';
             }
 
-            await prisma.campaignRecipient.updateMany({
-              where: { wamid: status.id },
+            await prisma.campaignRecipient.update({
+              where: { id: recipient.id },
               data: recipientUpdateData,
             });
 
-            if (status.status === 'delivered') {
+            const prevStatus = String(recipient.status);
+
+            if (status.status === 'delivered' && prevStatus !== 'DELIVERED' && prevStatus !== 'READ' && prevStatus !== 'REPLIED') {
               await prisma.campaign.update({
                 where: { id: recipient.campaignId },
                 data: { deliveredCount: { increment: 1 } },
@@ -339,10 +373,14 @@ export const webhookWorker = new Worker(
                   metadata: { campaignId: recipient.campaignId, wamid: status.id },
                 },
               });
-            } else if (status.status === 'read') {
+            } else if (status.status === 'read' && prevStatus !== 'READ' && prevStatus !== 'REPLIED') {
+              const campUpdate: any = { readCount: { increment: 1 } };
+              if (prevStatus !== 'DELIVERED') {
+                campUpdate.deliveredCount = { increment: 1 };
+              }
               await prisma.campaign.update({
                 where: { id: recipient.campaignId },
-                data: { readCount: { increment: 1 } },
+                data: campUpdate,
               });
               await prisma.contactTimeline.create({
                 data: {
@@ -354,7 +392,7 @@ export const webhookWorker = new Worker(
                   metadata: { campaignId: recipient.campaignId, wamid: status.id },
                 },
               });
-            } else if (status.status === 'failed') {
+            } else if (status.status === 'failed' && prevStatus !== 'FAILED') {
               await prisma.campaign.update({
                 where: { id: recipient.campaignId },
                 data: { failedCount: { increment: 1 } },
