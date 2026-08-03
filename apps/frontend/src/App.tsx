@@ -11,6 +11,7 @@ import { Inbox } from './pages/Inbox';
 import { Campaigns } from './pages/Campaigns';
 import { Contacts } from './pages/Contacts';
 import { Templates } from './pages/Templates';
+import { AutoResponder } from './pages/AutoResponder';
 import { Analytics } from './pages/Analytics';
 import { Wallet } from './pages/Wallet';
 import { Team } from './pages/Team';
@@ -67,6 +68,7 @@ export const App: React.FC = () => {
             <Route path="campaigns" element={<Campaigns />} />
             <Route path="contacts" element={<Contacts />} />
             <Route path="templates" element={<Templates />} />
+            <Route path="auto-reply" element={<AutoResponder />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="team" element={<Team />} />
             <Route path="analytics" element={<Analytics />} />

@@ -6,6 +6,7 @@ import {
   Megaphone,
   Users,
   FileCode2,
+  Bot,
   BarChart3,
   Wallet,
   Users2,
@@ -24,10 +25,11 @@ export const Sidebar: React.FC = () => {
     { to: '/campaigns', label: 'Campaigns', icon: Megaphone },
     { to: '/contacts', label: 'Contacts CRM', icon: Users },
     { to: '/templates', label: 'Meta Templates', icon: FileCode2 },
-    {to: '/wallet', label: 'Wallet & Billing', icon: Wallet},
-    {to: '/team', label: 'Team & Agents', icon: Users2},
-    {to: '/analytics', label: 'Analytics', icon: BarChart3},
-    {to: '/settings', label: 'Organization Settings', icon: Settings},
+    { to: '/auto-reply', label: 'Auto Reply Bot', icon: Bot },
+    { to: '/wallet', label: 'Wallet & Billing', icon: Wallet },
+    { to: '/team', label: 'Team & Agents', icon: Users2 },
+    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { to: '/settings', label: 'Organization Settings', icon: Settings },
   ];
 
   return (
