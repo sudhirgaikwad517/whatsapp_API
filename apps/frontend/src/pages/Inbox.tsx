@@ -14,6 +14,9 @@ import {
   AlertCircle,
   ArrowLeft,
   User,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -45,22 +48,32 @@ export const Inbox: React.FC = () => {
     },
   });
 
-  // Fetch active conversations list (up to 100 active conversations)
-  const { data: convData, isLoading: loadingConvs } = useQuery({
-    queryKey: ['conversations', filterTab, user?.id, contactIdParam],
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+
+  // Fetch active conversations list with pagination & search
+  const { data: convDataResponse, isLoading: loadingConvs } = useQuery({
+    queryKey: ['conversations', filterTab, user?.id, contactIdParam, page, search],
     queryFn: async () => {
-      const params: any = { limit: 100 };
+      const params: any = { page, limit: 50 };
       if (filterTab === 'mine' && user?.id) {
         params.assignedAgentId = user.id;
       }
       if (contactIdParam) {
         params.contactId = contactIdParam;
       }
+      if (search.trim()) {
+        params.search = search.trim();
+      }
       const res = await apiClient.get('/inbox/conversations', { params });
-      return res.data.data.conversations;
+      return res.data.data;
     },
     refetchInterval: 3000,
   });
+
+  const convData = convDataResponse?.conversations || [];
+  const totalConvs = convDataResponse?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalConvs / 50));
 
   // Auto-select conversation ONLY if URL parameter contactId/conversationId is passed (e.g. redirected from Campaign Analytics)
   useEffect(() => {
@@ -195,10 +208,28 @@ export const Inbox: React.FC = () => {
             </span>
           </div>
 
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search contacts by name or phone..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+            />
+          </div>
+
           {/* Filter Tabs */}
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
             <button
-              onClick={() => setFilterTab('all')}
+              onClick={() => {
+                setFilterTab('all');
+                setPage(1);
+              }}
               className={`flex-1 py-1.5 rounded-lg transition-all ${
                 filterTab === 'all' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
               }`}
@@ -206,7 +237,10 @@ export const Inbox: React.FC = () => {
               All Chats
             </button>
             <button
-              onClick={() => setFilterTab('mine')}
+              onClick={() => {
+                setFilterTab('mine');
+                setPage(1);
+              }}
               className={`flex-1 py-1.5 rounded-lg transition-all ${
                 filterTab === 'mine' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
               }`}
@@ -276,6 +310,31 @@ export const Inbox: React.FC = () => {
               </button>
             ))
           )}
+        </div>
+
+        {/* Sidebar Pagination Footer */}
+        <div className="p-3 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between text-xs text-slate-400 shrink-0">
+          <span className="text-[11px] font-medium text-slate-400">
+            Page <strong className="text-white">{page}</strong> of <strong className="text-white">{totalPages}</strong> ({totalConvs})
+          </span>
+          <div className="flex items-center space-x-1">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:hover:bg-slate-800 border border-slate-700 transition-all cursor-pointer"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 disabled:hover:bg-slate-800 border border-slate-700 transition-all cursor-pointer"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

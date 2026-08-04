@@ -5,10 +5,10 @@ import { env } from '../config/env.js';
 
 export async function listConversations(
   organizationId: string,
-  options: { status?: string; assignedAgentId?: string; contactId?: string; page?: number; limit?: number }
+  options: { status?: string; assignedAgentId?: string; contactId?: string; search?: string; page?: number; limit?: number }
 ) {
   const page = options.page || 1;
-  const limit = options.limit || 100;
+  const limit = options.limit || 50;
   const skip = (page - 1) * limit;
 
   const activeAccount = await prisma.whatsappAccount.findFirst({
@@ -37,12 +37,56 @@ export async function listConversations(
     }
   }
 
+  if (activeAccount) {
+    try {
+      const existingConvContacts = await prisma.conversation.findMany({
+        where: { whatsappAccountId: activeAccount.id },
+        select: { contactId: true },
+      });
+      const existingIds = new Set(existingConvContacts.map((c) => c.contactId));
+
+      const unlinkedContacts = await prisma.contact.findMany({
+        where: {
+          organizationId,
+          id: { notIn: Array.from(existingIds) },
+        },
+        select: { id: true },
+        take: 200,
+      });
+
+      if (unlinkedContacts.length > 0) {
+        await prisma.conversation.createMany({
+          data: unlinkedContacts.map((c) => ({
+            organizationId,
+            whatsappAccountId: activeAccount.id,
+            contactId: c.id,
+            status: 'OPEN',
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch {
+      // Ignore background sync errors
+    }
+  }
+
   const where: any = { organizationId };
   if (activeAccount) {
     where.whatsappAccountId = activeAccount.id;
   }
   if (options.status) where.status = options.status;
   if (options.assignedAgentId) where.assignedAgentId = options.assignedAgentId;
+
+  if (options.search && options.search.trim()) {
+    const s = options.search.trim();
+    where.contact = {
+      OR: [
+        { firstName: { contains: s, mode: 'insensitive' } },
+        { lastName: { contains: s, mode: 'insensitive' } },
+        { phoneNumber: { contains: s } },
+      ],
+    };
+  }
 
   const [total, conversations] = await Promise.all([
     prisma.conversation.count({ where }),
