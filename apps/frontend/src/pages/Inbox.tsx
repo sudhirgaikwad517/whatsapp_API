@@ -197,10 +197,10 @@ export const Inbox: React.FC = () => {
   const isWindowExpired = currentConversation?.windowExpiresAt && new Date(currentConversation.windowExpiresAt) < new Date();
 
   return (
-    <div className="flex h-full bg-slate-950 text-slate-100 overflow-hidden relative">
+    <div className="flex h-[calc(100dvh-3.5rem)] lg:h-full bg-slate-950 text-slate-100 overflow-hidden relative">
       {/* Left Column: Conversations List */}
-      <div className={`w-full md:w-80 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-4 border-b border-slate-800 space-y-3">
+      <div className={`w-full md:w-80 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 h-full overflow-hidden ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-4 border-b border-slate-800 space-y-3 shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-lg text-white">Live Inbox</h2>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -251,7 +251,7 @@ export const Inbox: React.FC = () => {
         </div>
 
         {/* Chat List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50 min-h-0">
           {loadingConvs ? (
             <div className="p-6 text-center text-xs text-slate-500">Loading chats...</div>
           ) : convData?.length === 0 ? (
@@ -313,7 +313,7 @@ export const Inbox: React.FC = () => {
         </div>
 
         {/* Sidebar Pagination Footer */}
-        <div className="p-3 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between text-xs text-slate-400 shrink-0">
+        <div className="p-3 border-t border-slate-800 bg-slate-900 flex items-center justify-between text-xs text-slate-400 shrink-0 sticky bottom-0 z-20 shadow-xl">
           <span className="text-[11px] font-medium text-slate-400">
             Page <strong className="text-white">{page}</strong> of <strong className="text-white">{totalPages}</strong> ({totalConvs})
           </span>

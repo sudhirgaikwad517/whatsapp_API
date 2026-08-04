@@ -47,7 +47,7 @@ export const Layout: React.FC = () => {
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-slate-950">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950">
         {/* Mobile Header Bar */}
         <header className="lg:hidden h-14 bg-slate-900/90 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 sticky top-0 z-30 backdrop-blur-md">
           <div className="flex items-center space-x-3">
