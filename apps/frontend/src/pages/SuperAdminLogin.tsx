@@ -4,8 +4,8 @@ import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 
 export const SuperAdminLogin: React.FC = () => {
-  const [email, setEmail] = useState('superadmin@prowexa.com');
-  const [password, setPassword] = useState('Admin123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);

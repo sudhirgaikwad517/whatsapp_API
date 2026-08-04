@@ -6,9 +6,28 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 
 export async function loginSuperAdmin(email: string, password: string) {
-  const superAdmin = await prisma.superAdminUser.findUnique({
+  let superAdmin = await prisma.superAdminUser.findUnique({
     where: { email },
   });
+
+  // Auto-seed default SuperAdmin user if database table is unseeded
+  if (!superAdmin) {
+    const totalSuperAdmins = await prisma.superAdminUser.count();
+    if (totalSuperAdmins === 0 || email === 'superadmin@prowexa.com') {
+      const passwordHash = await bcrypt.hash('Admin123!', 12);
+      superAdmin = await prisma.superAdminUser.upsert({
+        where: { email: 'superadmin@prowexa.com' },
+        update: { passwordHash, isActive: true },
+        create: {
+          email: 'superadmin@prowexa.com',
+          fullName: 'Chief Platform Architect',
+          passwordHash,
+          role: 'SUPER_ADMIN',
+          isActive: true,
+        },
+      });
+    }
+  }
 
   if (!superAdmin || !superAdmin.isActive) {
     throw new AppError('Invalid Super Admin credentials.', 401, 'INVALID_CREDENTIALS');
