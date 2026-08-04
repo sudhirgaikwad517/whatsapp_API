@@ -66,6 +66,12 @@ export async function listConversations(
 export async function getConversationMessages(conversationId: string, organizationId: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId },
+    include: {
+      contact: true,
+      assignedAgent: {
+        select: { id: true, fullName: true, email: true },
+      },
+    },
   });
 
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');

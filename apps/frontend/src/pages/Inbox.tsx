@@ -180,7 +180,7 @@ export const Inbox: React.FC = () => {
     noteMutation.mutate();
   };
 
-  const currentConversation = msgData?.conversation;
+  const currentConversation = msgData?.conversation || convData?.find((c: any) => c.id === activeConversationId);
   const isWindowExpired = currentConversation?.windowExpiresAt && new Date(currentConversation.windowExpiresAt) < new Date();
 
   return (
