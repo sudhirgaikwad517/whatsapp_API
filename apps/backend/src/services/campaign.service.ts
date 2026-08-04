@@ -286,7 +286,7 @@ export async function getCampaignRecipients(
 
   const tab = (options.tab || 'ALL').toUpperCase();
   const page = Math.max(1, options.page || 1);
-  const limit = Math.min(100, Math.max(1, options.limit || 50));
+  const limit = Math.min(50000, Math.max(1, options.limit || 50));
   const skip = (page - 1) * limit;
 
   const where: any = { campaignId };

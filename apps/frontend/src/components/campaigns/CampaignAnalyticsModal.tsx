@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  Download,
 } from 'lucide-react';
 import { apiClient } from '../../services/api.client';
 
@@ -33,6 +34,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   // Fetch campaign analytics summary
   const { data: analytics, isLoading: isAnalyticsLoading } = useQuery({
@@ -76,6 +78,70 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
     { id: 'FAILED', label: 'Failed', count: analytics?.failedCount || 0, color: 'text-rose-400' },
     { id: 'PENDING', label: 'Pending', count: analytics?.pendingCount || 0, color: 'text-slate-400' },
   ];
+
+  const handleExportExcel = async () => {
+    if (!campaignId || isExporting) return;
+    try {
+      setIsExporting(true);
+      const res = await apiClient.get(`/campaigns/${campaignId}/recipients`, {
+        params: {
+          tab: activeTab,
+          search: searchQuery,
+          page: 1,
+          limit: 10000,
+        },
+      });
+
+      const exportRecipients = res.data?.data?.recipients || [];
+      if (exportRecipients.length === 0) {
+        alert('No records available to export for this tab.');
+        return;
+      }
+
+      const headers = ['Contact Name', 'Phone Number', 'Status', 'Sent At', 'Delivered At', 'Read At', 'Replied At', 'Error Details'];
+
+      const rows = exportRecipients.map((rec: any) => {
+        const name = rec.nameSnapshot || (rec.contact ? `${rec.contact.firstName || ''} ${rec.contact.lastName || ''}`.trim() : 'Customer');
+        const phone = rec.phoneNumberSnapshot || rec.contact?.phoneNumber || '';
+        const status = rec.repliedAt ? 'REPLIED' : rec.status;
+        const sentAt = rec.sentAt ? new Date(rec.sentAt).toLocaleString() : '';
+        const deliveredAt = rec.deliveredAt ? new Date(rec.deliveredAt).toLocaleString() : '';
+        const readAt = rec.readAt ? new Date(rec.readAt).toLocaleString() : '';
+        const repliedAt = rec.repliedAt ? new Date(rec.repliedAt).toLocaleString() : '';
+        const errorMsg = rec.status === 'FAILED' ? `[Code ${rec.errorCode || 'ERR'}] ${rec.errorMessage || ''}` : '';
+
+        return [
+          `"${name.replace(/"/g, '""')}"`,
+          `"${phone}"`,
+          `"${status}"`,
+          `"${sentAt}"`,
+          `"${deliveredAt}"`,
+          `"${readAt}"`,
+          `"${repliedAt}"`,
+          `"${errorMsg.replace(/"/g, '""')}"`,
+        ].join(',');
+      });
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const cleanCampaignName = (analytics?.name || 'Campaign').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      link.href = url;
+      link.setAttribute('download', `${cleanCampaignName}_${activeTab}_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export campaign recipients:', err);
+      alert('Failed to export data. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -176,8 +242,8 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
 
         {/* ── 2. Campaign Status Tabs ───────────────────────────────────────── */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 overflow-x-auto">
-            <div className="flex space-x-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 gap-3 pb-2 sm:pb-0">
+            <div className="flex space-x-1 overflow-x-auto pb-1 sm:pb-0">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -187,7 +253,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                       setActiveTab(tab.id);
                       setPage(1);
                     }}
-                    className={`px-4 py-2.5 text-xs font-bold flex items-center space-x-2 border-b-2 transition-all whitespace-nowrap ${
+                    className={`px-3.5 py-2.5 text-xs font-bold flex items-center space-x-1.5 border-b-2 transition-all whitespace-nowrap ${
                       isActive
                         ? 'border-emerald-500 text-white bg-slate-800/40'
                         : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -206,19 +272,31 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
               })}
             </div>
 
-            {/* Search Input */}
-            <div className="relative mb-2">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search contact or phone..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 w-52"
-              />
+            {/* Search Input & Export Button */}
+            <div className="flex items-center space-x-2 shrink-0 pb-2 sm:pb-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search contact or phone..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 w-44 sm:w-52"
+                />
+              </div>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                title={`Export ${activeTab} contacts to Excel/CSV`}
+                className="inline-flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-md transition-all disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
+              </button>
             </div>
           </div>
 
