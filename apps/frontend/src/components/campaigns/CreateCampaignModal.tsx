@@ -19,9 +19,10 @@ function cleanAndFormatFirstName(rawName?: string): string | undefined {
   if (!rawName || !rawName.trim()) return undefined;
   const cleanStr = rawName.trim().replace(/^["']+|["']+$|["']/g, '');
   if (!cleanStr) return undefined;
-  const firstWord = cleanStr.split(/[\s,_]+/)[0];
-  if (!firstWord) return undefined;
-  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  return cleanStr
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
 }
 
 export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen, onClose }) => {

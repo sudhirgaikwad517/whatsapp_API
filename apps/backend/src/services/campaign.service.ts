@@ -22,15 +22,23 @@ export interface CreateCampaignInput {
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-export function formatFirstName(rawName?: string | null): string {
-  if (!rawName || !rawName.trim()) return 'Valued Customer';
-  const cleanStr = rawName.trim().replace(/^["']+|["']+$|["']/g, '');
-  if (!cleanStr) return 'Valued Customer';
-  
-  const firstWord = cleanStr.split(/[\s,_]+/)[0];
-  if (!firstWord) return 'Valued Customer';
-  
-  return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+export function formatTitleCase(str?: string | null): string {
+  if (!str || !str.trim()) return '';
+  const cleanStr = str.trim().replace(/^["']+|["']+$|["']/g, '');
+  if (!cleanStr) return '';
+  return cleanStr
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+export function parseFullName(rawName?: string | null): { firstName: string; lastName?: string } {
+  if (!rawName || !rawName.trim()) return { firstName: 'Customer' };
+  const formatted = formatTitleCase(rawName);
+  const parts = formatted.split(' ');
+  const firstName = parts[0] || 'Customer';
+  const lastName = parts.slice(1).join(' ');
+  return { firstName, lastName: lastName || undefined };
 }
 
 export async function createCampaign(organizationId: string, input: CreateCampaignInput) {
@@ -69,7 +77,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   let targetContacts: Array<{ id: string; phoneNumber: string; firstName?: string | null }> = [];
 
   if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
-    // ── Option B: CSV Upload Specific Audience (Deduplicated & Formatted) ──────
+    // ── Option B: CSV Upload Specific Audience (Full Name in CRM, First Name in Campaign) ──
     const processedPhones = new Set<string>();
 
     for (const rawContact of input.csvContacts) {
@@ -78,7 +86,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       if (processedPhones.has(formattedPhone)) continue; // Skip duplicate inside CSV file
       processedPhones.add(formattedPhone);
 
-      const cleanedFirstName = formatFirstName(rawContact.firstName);
+      const { firstName, lastName } = parseFullName(rawContact.firstName);
 
       // Find existing contact in CRM (Deduplication against existing database)
       let contact = await prisma.contact.findUnique({
@@ -91,22 +99,26 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       });
 
       if (!contact) {
-        // Create new contact if not present in database
+        // Create new contact with full name in CRM
         contact = await prisma.contact.create({
           data: {
             organizationId,
             phoneNumber: formattedPhone,
-            firstName: cleanedFirstName,
+            firstName,
+            lastName: lastName || null,
             email: rawContact.email || null,
             isOptedIn: true,
           },
         });
       } else {
-        // Contact already exists — reuse existing contact without creating duplicate
-        if (cleanedFirstName && cleanedFirstName !== 'Valued Customer') {
+        // Contact already exists — update full name in CRM if missing or incomplete
+        if (firstName && firstName !== 'Customer') {
           contact = await prisma.contact.update({
             where: { id: contact.id },
-            data: { firstName: cleanedFirstName },
+            data: {
+              firstName,
+              ...(lastName ? { lastName } : {}),
+            },
           });
         }
       }
@@ -115,7 +127,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         targetContacts.push({
           id: contact.id,
           phoneNumber: contact.phoneNumber,
-          firstName: contact.firstName || cleanedFirstName,
+          firstName: contact.firstName || firstName,
         });
       }
     }
@@ -149,7 +161,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         create: targetContacts.map((c) => ({
           contactId: c.id,
           phoneNumberSnapshot: c.phoneNumber,
-          nameSnapshot: c.firstName || 'Customer',
+          nameSnapshot: c.firstName ? c.firstName.split(' ')[0] : 'Customer',
           status: 'ACCEPTED',
         })),
       },

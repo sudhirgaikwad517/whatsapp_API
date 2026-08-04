@@ -9,6 +9,7 @@ import { ContactTimelineModal } from '../components/contacts/ContactTimelineModa
 export const Contacts: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
+  const [page, setPage] = useState(1);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedTimelineId, setSelectedTimelineId] = useState<string | null>(null);
@@ -24,11 +25,11 @@ export const Contacts: React.FC = () => {
     },
   });
 
-  // Fetch contacts
+  // Fetch contacts (50 per page)
   const { data, isLoading } = useQuery({
-    queryKey: ['contacts', search, selectedTag],
+    queryKey: ['contacts', search, selectedTag, page],
     queryFn: async () => {
-      const params: any = {};
+      const params: any = { page, limit: 50 };
       if (search) params.search = search;
       if (selectedTag) params.tagId = selectedTag;
       const res = await apiClient.get('/contacts', { params });
@@ -92,7 +93,10 @@ export const Contacts: React.FC = () => {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search by name, phone number or email..."
             className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
           />
@@ -103,7 +107,10 @@ export const Contacts: React.FC = () => {
           <Tag className="w-4 h-4 text-slate-400" />
           <select
             value={selectedTag}
-            onChange={(e) => setSelectedTag(e.target.value)}
+            onChange={(e) => {
+              setSelectedTag(e.target.value);
+              setPage(1);
+            }}
             className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
           >
             <option value="">All Tags</option>
@@ -214,6 +221,36 @@ export const Contacts: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 50-per-page Pagination Controls */}
+      {data?.pagination && data.pagination.totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between bg-slate-900 border border-slate-800 px-6 py-4 rounded-2xl gap-3">
+          <span className="text-xs text-slate-400 font-medium">
+            Showing Page <strong className="text-white">{data.pagination.page}</strong> of{' '}
+            <strong className="text-white">{data.pagination.totalPages}</strong> ({data.pagination.total} Total CRM Contacts)
+          </span>
+
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-xs font-mono text-emerald-400 font-bold px-3 py-1 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+              {page} / {data.pagination.totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))}
+              disabled={page >= data.pagination.totalPages}
+              className="px-4 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 
