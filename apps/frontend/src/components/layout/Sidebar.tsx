@@ -16,7 +16,11 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isMobile?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
   const logout = useAuthStore((state) => state.logout);
 
   const navItems = [
@@ -33,17 +37,19 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen select-none">
+    <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none ${isMobile ? 'w-full' : 'w-64 h-screen'}`}>
       {/* Brand Header */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-800 space-x-3">
-        <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <MessageSquare className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+      {!isMobile && (
+        <div className="h-16 flex items-center px-6 border-b border-slate-800 space-x-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <MessageSquare className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+          </div>
+          <div>
+            <h1 className="font-bold text-lg tracking-tight text-white">Prowexa</h1>
+            <p className="text-[10px] uppercase tracking-widest font-semibold text-emerald-400">WhatsApp Engine</p>
+          </div>
         </div>
-        <div>
-          <h1 className="font-bold text-lg tracking-tight text-white">Prowexa</h1>
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-emerald-400">WhatsApp Engine</p>
-        </div>
-      </div>
+      )}
 
       {/* Navigation Links */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

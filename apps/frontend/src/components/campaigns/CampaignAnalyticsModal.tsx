@@ -223,7 +223,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
           </div>
 
           {/* Recipient Table */}
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-x-auto shadow-lg">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
@@ -300,9 +300,9 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                         {rec.repliedAt && <div className="text-amber-400">Replied: {new Date(rec.repliedAt).toLocaleTimeString()}</div>}
                         {!rec.sentAt && !rec.deliveredAt && <div>Created: {new Date(rec.updatedAt).toLocaleTimeString()}</div>}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 max-w-xs">
                         {rec.status === 'FAILED' ? (
-                          <div className="text-rose-400 bg-rose-500/10 border border-rose-500/20 p-1.5 rounded-lg text-[11px]">
+                          <div className="text-rose-400 bg-rose-500/10 border border-rose-500/20 p-1.5 rounded-lg text-[11px] break-words">
                             <span className="font-bold">Code {rec.errorCode || 'ERR'}:</span>{' '}
                             {rec.errorMessage || 'Meta dispatch error'}
                           </div>
@@ -310,17 +310,19 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
                           <span className="text-slate-600">—</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => {
-                            onClose();
-                            navigate(`/inbox?contactId=${rec.contactId}`);
-                          }}
-                          className="inline-flex items-center space-x-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-emerald-500/20 shadow-sm"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          <span>Open Chat</span>
-                        </button>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end">
+                          <button
+                            onClick={() => {
+                              onClose();
+                              navigate(`/inbox?contactId=${rec.contactId}`);
+                            }}
+                            className="inline-flex items-center space-x-1.5 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-slate-950 px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-emerald-500/20 shadow-sm"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Open Chat</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

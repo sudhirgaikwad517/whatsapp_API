@@ -22,7 +22,7 @@ export const Dashboard: React.FC = () => {
   ];
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Dashboard Analytics</h1>
         <p className="text-sm text-slate-400 mt-1">Realtime Meta WhatsApp Cloud API Delivery Performance</p>

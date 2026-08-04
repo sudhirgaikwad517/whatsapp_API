@@ -12,6 +12,7 @@ import {
   Check,
   CheckCheck,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -184,9 +185,9 @@ export const Inbox: React.FC = () => {
   const isWindowExpired = currentConversation?.windowExpiresAt && new Date(currentConversation.windowExpiresAt) < new Date();
 
   return (
-    <div className="flex h-[calc(100vh)] bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex h-full bg-slate-950 text-slate-100 overflow-hidden relative">
       {/* Left Column: Conversations List */}
-      <div className="w-80 bg-slate-900 border-r border-slate-800 flex flex-col">
+      <div className={`w-full md:w-80 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 ${activeConversationId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-slate-800 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-lg text-white">Live Inbox</h2>
@@ -272,20 +273,27 @@ export const Inbox: React.FC = () => {
       </div>
 
       {/* Right Column: Active Conversation */}
-      <div className="flex-1 flex flex-col bg-slate-950">
+      <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
         {activeConversationId && currentConversation ? (
           <>
             {/* Conversation Header */}
             <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-emerald-400">
+              <div className="flex items-center space-x-3 min-w-0">
+                <button
+                  onClick={() => setActiveConversationId(null)}
+                  className="md:hidden p-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 hover:text-white shrink-0"
+                  title="Back to chat list"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-emerald-400 shrink-0">
                   {currentConversation.contact?.firstName?.[0] || currentConversation.contact?.phoneNumber?.[1] || '?'}
                 </div>
-                <div>
-                  <h3 className="font-bold text-white text-base">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-white text-sm sm:text-base truncate">
                     {currentConversation.contact?.firstName ? `${currentConversation.contact.firstName} ${currentConversation.contact.lastName || ''}` : currentConversation.contact?.phoneNumber}
                   </h3>
-                  <span className="text-xs text-slate-400 font-mono">{currentConversation.contact?.phoneNumber}</span>
+                  <span className="text-xs text-slate-400 font-mono truncate block">{currentConversation.contact?.phoneNumber}</span>
                 </div>
               </div>
 
