@@ -269,7 +269,7 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto shadow-xl">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">

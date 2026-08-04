@@ -70,7 +70,7 @@ export const Settings: React.FC = () => {
   });
 
   return (
-    <div className="p-8 space-y-8 w-full">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full min-w-0">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Organization & Meta Setup</h1>
         <p className="text-sm text-slate-400 mt-1">Official WhatsApp Business Cloud API Integration</p>
@@ -91,9 +91,9 @@ export const Settings: React.FC = () => {
 
       {/* Account Status Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
@@ -105,7 +105,7 @@ export const Settings: React.FC = () => {
           <button
             onClick={() => syncTemplatesMutation.mutate()}
             disabled={syncTemplatesMutation.isPending}
-            className="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold px-3.5 py-2 rounded-xl text-xs border border-slate-700 flex items-center transition-all disabled:opacity-50"
+            className="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold px-3.5 py-2 rounded-xl text-xs border border-slate-700 flex items-center transition-all disabled:opacity-50"
           >
             <RefreshCw className="w-3.5 h-3.5 mr-2" />
             {syncTemplatesMutation.isPending ? 'Syncing...' : 'Sync Meta Templates'}
@@ -138,11 +138,11 @@ export const Settings: React.FC = () => {
 
       {/* Meta Embedded Signup Card */}
       <div className="bg-gradient-to-r from-blue-900/40 via-slate-900 to-indigo-900/40 border border-blue-500/30 rounded-2xl p-6 space-y-4 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <h3 className="font-bold text-white text-lg flex items-center">
-              <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white mr-3">f</span>
-              Meta Embedded Signup (1-Click Client Onboarding)
+              <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white mr-3 shrink-0">f</span>
+              <span className="truncate sm:whitespace-normal">Meta Embedded Signup (1-Click Client Onboarding)</span>
             </h3>
             <p className="text-xs text-slate-300 mt-1">
               Connect your Meta WhatsApp Business Account automatically in 10 seconds without manually copying IDs!
@@ -167,7 +167,7 @@ export const Settings: React.FC = () => {
                 `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=${width}, height=${height}, top=${top}, left=${left}`
               );
             }}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-3 rounded-xl flex items-center shadow-lg shadow-blue-500/30 text-sm transition-all cursor-pointer whitespace-nowrap"
+            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 text-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
             <span className="w-5 h-5 rounded bg-white text-blue-600 flex items-center justify-center font-extrabold text-xs mr-2">f</span>
             Connect with Facebook
@@ -236,7 +236,7 @@ export const Settings: React.FC = () => {
               type="submit"
               onClick={() => connectMutation.mutate()}
               disabled={connectMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 text-sm cursor-pointer"
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 text-sm cursor-pointer"
             >
               {connectMutation.isPending ? 'Saving Meta Credentials...' : 'Save Meta Credentials'}
             </button>
@@ -246,11 +246,11 @@ export const Settings: React.FC = () => {
 
       {/* Custom Keyword Chatbot & Auto-Responder Rules Section */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold text-white flex items-center text-base">
-              <Bot className="w-5 h-5 mr-2.5 text-emerald-400" />
-              Automated Keyword Chatbot & Auto-Responder Rules
+              <Bot className="w-5 h-5 mr-2.5 text-emerald-400 shrink-0" />
+              <span>Automated Keyword Chatbot & Auto-Responder Rules</span>
             </h3>
             <p className="text-xs text-slate-400 mt-1">
               Configure custom triggers (e.g. "hi", "hiii", "hello", "price") and automated reply messages for your customers!
@@ -279,14 +279,14 @@ export const Settings: React.FC = () => {
                 alert('❌ Failed to add rule: ' + (err.response?.data?.error?.message || err.message));
               });
             }}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+            className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center transition-all cursor-pointer shadow-lg shadow-emerald-500/20 shrink-0"
           >
             <Plus className="w-4 h-4 mr-1.5" />
             Add Keyword Rule
           </button>
         </div>
 
-        <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">

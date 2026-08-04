@@ -46,22 +46,22 @@ export const Wallet: React.FC = () => {
   const ledgers = walletData?.ledgers || [];
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center">
-            <WalletIcon className="w-7 h-7 mr-3 text-emerald-400" />
-            FinTech Wallet & Double-Entry Ledger
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center">
+            <WalletIcon className="w-6 h-6 sm:w-7 sm:h-7 mr-3 text-emerald-400 shrink-0" />
+            <span>FinTech Wallet & Double-Entry Ledger</span>
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             2-Phase Lock Reservation Engine & Immutable Financial Ledger
           </p>
         </div>
 
         <button
           onClick={() => setIsRechargeOpen(true)}
-          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all cursor-pointer"
+          className="w-full sm:w-auto justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all cursor-pointer shrink-0"
         >
           <PlusCircle className="w-4 h-4 mr-2 stroke-[3]" />
           Top-Up Wallet
@@ -108,7 +108,7 @@ export const Wallet: React.FC = () => {
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-white tracking-tight">Immutable Wallet Ledger Transactions</h3>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto shadow-xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
