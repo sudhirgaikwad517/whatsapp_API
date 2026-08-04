@@ -13,6 +13,7 @@ import {
   CheckCheck,
   AlertCircle,
   ArrowLeft,
+  User,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -233,13 +234,21 @@ export const Inbox: React.FC = () => {
                   activeConversationId === chat.id ? 'bg-slate-800 border-l-4 border-emerald-500' : ''
                 }`}
               >
-                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-emerald-400 shrink-0">
-                  {chat.contact?.firstName?.[0] || chat.contact?.phoneNumber?.[1] || '?'}
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center font-bold text-emerald-400 shrink-0 text-sm uppercase shadow-sm">
+                  {chat.contact?.firstName?.[0] ? (
+                    chat.contact.firstName[0].toUpperCase()
+                  ) : chat.contact?.phoneNumber ? (
+                    chat.contact.phoneNumber.replace(/\D/g, '').slice(-2)
+                  ) : (
+                    <User className="w-4 h-4 text-emerald-400" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex justify-between items-baseline">
                     <h4 className="font-semibold text-sm text-white truncate">
-                      {chat.contact?.firstName ? `${chat.contact.firstName} ${chat.contact.lastName || ''}` : chat.contact?.phoneNumber}
+                      {chat.contact?.firstName
+                        ? `${chat.contact.firstName} ${chat.contact.lastName || ''}`.trim()
+                        : chat.contact?.phoneNumber || 'WhatsApp Contact'}
                     </h4>
                     {chat.lastMessageAt && (
                       <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
@@ -284,12 +293,20 @@ export const Inbox: React.FC = () => {
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-emerald-400 shrink-0">
-                  {currentConversation.contact?.firstName?.[0] || currentConversation.contact?.phoneNumber?.[1] || '?'}
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center font-bold text-emerald-400 shrink-0 text-sm uppercase shadow-sm">
+                  {currentConversation.contact?.firstName?.[0] ? (
+                    currentConversation.contact.firstName[0].toUpperCase()
+                  ) : currentConversation.contact?.phoneNumber ? (
+                    currentConversation.contact.phoneNumber.replace(/\D/g, '').slice(-2)
+                  ) : (
+                    <User className="w-4 h-4 text-emerald-400" />
+                  )}
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-white text-sm sm:text-base truncate">
-                    {currentConversation.contact?.firstName ? `${currentConversation.contact.firstName} ${currentConversation.contact.lastName || ''}` : currentConversation.contact?.phoneNumber}
+                    {currentConversation.contact?.firstName
+                      ? `${currentConversation.contact.firstName} ${currentConversation.contact.lastName || ''}`.trim()
+                      : currentConversation.contact?.phoneNumber || 'WhatsApp Contact'}
                   </h3>
                   <span className="text-xs text-slate-400 font-mono truncate block">{currentConversation.contact?.phoneNumber}</span>
                 </div>
