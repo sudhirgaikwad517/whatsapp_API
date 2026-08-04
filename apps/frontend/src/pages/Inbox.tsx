@@ -45,11 +45,11 @@ export const Inbox: React.FC = () => {
     },
   });
 
-  // Fetch active conversations list
+  // Fetch active conversations list (up to 100 active conversations)
   const { data: convData, isLoading: loadingConvs } = useQuery({
     queryKey: ['conversations', filterTab, user?.id, contactIdParam],
     queryFn: async () => {
-      const params: any = {};
+      const params: any = { limit: 100 };
       if (filterTab === 'mine' && user?.id) {
         params.assignedAgentId = user.id;
       }
@@ -313,12 +313,12 @@ export const Inbox: React.FC = () => {
               </div>
 
               {/* Agent Assignment Selector */}
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-400">Assigned Agent:</span>
+              <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                <span className="text-xs text-slate-400 hidden sm:inline">Assigned Agent:</span>
                 <select
                   value={currentConversation.assignedAgentId || ''}
                   onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium max-w-[110px] sm:max-w-none truncate"
                 >
                   <option value="">Unassigned</option>
                   {teamMembers?.map((member: any) => (

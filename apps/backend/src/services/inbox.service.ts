@@ -8,7 +8,7 @@ export async function listConversations(
   options: { status?: string; assignedAgentId?: string; contactId?: string; page?: number; limit?: number }
 ) {
   const page = options.page || 1;
-  const limit = options.limit || 30;
+  const limit = options.limit || 100;
   const skip = (page - 1) * limit;
 
   const activeAccount = await prisma.whatsappAccount.findFirst({
