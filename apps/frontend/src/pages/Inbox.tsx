@@ -339,11 +339,11 @@ export const Inbox: React.FC = () => {
       </div>
 
       {/* Right Column: Active Conversation */}
-      <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-slate-950 min-w-0 h-full overflow-hidden ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
         {activeConversationId && currentConversation ? (
           <>
             {/* Conversation Header */}
-            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+            <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3 min-w-0">
                 <button
                   onClick={() => setActiveConversationId(null)}
@@ -391,24 +391,22 @@ export const Inbox: React.FC = () => {
 
             {/* 24-Hour Customer Service Window Warning Banner */}
             {isWindowExpired && (
-              <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-300">
+              <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-300 shrink-0">
                 <div className="flex items-center space-x-2">
-                  <Clock className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span>
-                    <strong>24-Hour Service Window Expired:</strong> Customer has not messaged in 24 hours. You must use an approved Meta Template to reply.
-                  </span>
+                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>24-Hour Customer Service Window Expired. Free-form messaging disabled.</span>
                 </div>
                 <button
                   onClick={() => setIsTemplateModalOpen(true)}
-                  className="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs hover:bg-amber-400 transition-all shrink-0 ml-4"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all shrink-0 ml-3"
                 >
-                  Select Template
+                  Send Template
                 </button>
               </div>
             )}
 
-            {/* Sub-tabs Bar (Messages vs Internal Notes) */}
-            <div className="border-b border-slate-800 bg-slate-900/40 px-6 flex space-x-6 text-xs font-semibold">
+            {/* Tabs Bar */}
+            <div className="px-6 bg-slate-900/50 border-b border-slate-800 flex space-x-6 shrink-0">
               <button
                 onClick={() => setActiveTab('messages')}
                 className={`py-3 flex items-center space-x-2 border-b-2 transition-all ${
@@ -434,151 +432,153 @@ export const Inbox: React.FC = () => {
               </button>
             </div>
 
-            {/* Content Body */}
-            {activeTab === 'messages' ? (
-              <>
-                {/* Messages Feed */}
-                <div className="flex-1 p-6 overflow-y-auto space-y-4">
-                  {loadingMsgs ? (
-                    <div className="text-center text-xs text-slate-500">Loading thread history...</div>
-                  ) : (
-                    msgData?.messages?.map((msg: any) => (
-                      <div
-                        key={msg.id}
-                        className={`flex ${msg.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
-                      >
+            {/* Content Body Container */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+              {activeTab === 'messages' ? (
+                <>
+                  {/* Messages Feed */}
+                  <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
+                    {loadingMsgs ? (
+                      <div className="text-center text-xs text-slate-500">Loading thread history...</div>
+                    ) : (
+                      msgData?.messages?.map((msg: any) => (
                         <div
-                          className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-md ${
-                            msg.direction === 'OUTBOUND'
-                              ? 'bg-emerald-600 text-white rounded-br-none'
-                              : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700'
-                          }`}
+                          key={msg.id}
+                          className={`flex ${msg.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
                         >
-                          {msg.content?.headerMediaUrl && (
-                            <img src={msg.content.headerMediaUrl} alt="Header" className="rounded-lg max-h-48 w-full object-cover mb-2 border border-emerald-400/30" />
-                          )}
-                          {msg.type === 'IMAGE' && msg.content?.mediaUrl ? (
-                            <div className="space-y-1">
-                              <img src={msg.content.mediaUrl} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-emerald-400/30" />
-                              {msg.content.caption && <p className="text-xs mt-1">{msg.content.caption}</p>}
-                            </div>
-                          ) : msg.type === 'DOCUMENT' && msg.content?.mediaUrl ? (
-                            <a href={msg.content.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center space-x-2 text-xs underline font-mono">
-                              📎 <span>{msg.content.filename || 'Download Document'}</span>
-                            </a>
-                          ) : (
-                            <p className="whitespace-pre-line">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
-                          )}
-                          <div className="flex items-center justify-end space-x-1.5 mt-1 text-[10px] opacity-90">
-                            <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            {msg.direction === 'OUTBOUND' && (
-                              <span>
-                                {msg.status === 'ACCEPTED' ? (
-                                  <Clock className="w-3 h-3 text-slate-300" />
-                                ) : msg.status === 'SENT' ? (
-                                  <Check className="w-3.5 h-3.5 text-slate-200" />
-                                ) : msg.status === 'DELIVERED' ? (
-                                  <CheckCheck className="w-3.5 h-3.5 text-slate-200" />
-                                ) : msg.status === 'READ' || msg.status === 'REPLIED' ? (
-                                  <CheckCheck className="w-3.5 h-3.5 text-sky-300 drop-shadow-sm font-bold" />
-                                ) : msg.status === 'FAILED' ? (
-                                  <span title={msg.errorMessage || 'Meta dispatch error'}>
-                                    <AlertCircle className="w-3.5 h-3.5 text-rose-400 cursor-help" />
-                                  </span>
-                                ) : (
-                                  <Check className="w-3.5 h-3.5 text-slate-200" />
-                                )}
-                              </span>
+                          <div
+                            className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-md ${
+                              msg.direction === 'OUTBOUND'
+                                ? 'bg-emerald-600 text-white rounded-br-none'
+                                : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700'
+                            }`}
+                          >
+                            {msg.content?.headerMediaUrl && (
+                              <img src={msg.content.headerMediaUrl} alt="Header" className="rounded-lg max-h-48 w-full object-cover mb-2 border border-emerald-400/30" />
                             )}
+                            {msg.type === 'IMAGE' && msg.content?.mediaUrl ? (
+                              <div className="space-y-1">
+                                <img src={msg.content.mediaUrl} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-emerald-400/30" />
+                                {msg.content.caption && <p className="text-xs mt-1">{msg.content.caption}</p>}
+                              </div>
+                            ) : msg.type === 'DOCUMENT' && msg.content?.mediaUrl ? (
+                              <a href={msg.content.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center space-x-2 text-xs underline font-mono">
+                                📎 <span>{msg.content.filename || 'Download Document'}</span>
+                              </a>
+                            ) : (
+                              <p className="whitespace-pre-line">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
+                            )}
+                            <div className="flex items-center justify-end space-x-1.5 mt-1 text-[10px] opacity-90">
+                              <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              {msg.direction === 'OUTBOUND' && (
+                                <span>
+                                  {msg.status === 'ACCEPTED' ? (
+                                    <Clock className="w-3 h-3 text-slate-300" />
+                                  ) : msg.status === 'SENT' ? (
+                                    <Check className="w-3.5 h-3.5 text-slate-200" />
+                                  ) : msg.status === 'DELIVERED' ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-slate-200" />
+                                  ) : msg.status === 'READ' || msg.status === 'REPLIED' ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-300 drop-shadow-sm font-bold" />
+                                  ) : msg.status === 'FAILED' ? (
+                                    <span title={msg.errorMessage || 'Meta dispatch error'}>
+                                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 cursor-help" />
+                                    </span>
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5 text-slate-200" />
+                                  )}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                      ))
+                    )}
+                  </div>
 
-                {/* Input Bar */}
-                <form onSubmit={handleSendMessage} className="p-4 bg-slate-900 border-t border-slate-800 flex items-center space-x-3">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const url = prompt('Enter Image / Document URL to attach:');
-                      if (!url) return;
-                      try {
-                        await apiClient.post(`/inbox/conversations/${activeConversationId}/media`, {
-                          type: 'IMAGE',
-                          mediaUrl: url,
-                          filename: 'Attachment.jpg',
-                        });
-                        queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
-                        queryClient.invalidateQueries({ queryKey: ['conversations'] });
-                      } catch (err: any) {
-                        alert(`Failed to attach media: ${err.message}`);
-                      }
-                    }}
-                    className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
-                    title="Attach Image / Document"
-                  >
-                    📎
-                  </button>
+                  {/* Static Fixed Bottom Input Bar */}
+                  <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 flex items-center space-x-2 sm:space-x-3 sticky bottom-0 z-20 shrink-0 backdrop-blur-md">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const url = prompt('Enter Image / Document URL to attach:');
+                        if (!url) return;
+                        try {
+                          await apiClient.post(`/inbox/conversations/${activeConversationId}/media`, {
+                            type: 'IMAGE',
+                            mediaUrl: url,
+                            filename: 'Attachment.jpg',
+                          });
+                          queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+                          queryClient.invalidateQueries({ queryKey: ['conversations'] });
+                        } catch (err: any) {
+                          alert(`Failed to attach media: ${err.message}`);
+                        }
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+                      title="Attach Image / Document"
+                    >
+                      📎
+                    </button>
 
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    placeholder="Type your reply..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sendMutation.isPending || !messageText.trim()}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-2.5 rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
-                </form>
-              </>
-            ) : (
-              <>
-                {/* Internal Notes Feed */}
-                <div className="flex-1 p-6 overflow-y-auto space-y-3">
-                  {loadingNotes ? (
-                    <div className="text-center text-xs text-slate-500">Loading team notes...</div>
-                  ) : notesData?.length === 0 ? (
-                    <div className="text-center text-xs text-slate-500 py-12">No internal notes for this conversation yet.</div>
-                  ) : (
-                    notesData?.map((note: any) => (
-                      <div key={note.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-emerald-400">{note.author?.fullName || 'Agent'}</span>
-                          <span className="text-slate-500 text-[10px]">{new Date(note.createdAt).toLocaleString()}</span>
+                    <input
+                      type="text"
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      placeholder="Type your reply..."
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sendMutation.isPending || !messageText.trim()}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-2.5 rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      <Send className="w-5 h-5" />
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  {/* Internal Notes Feed */}
+                  <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-3">
+                    {loadingNotes ? (
+                      <div className="text-center text-xs text-slate-500">Loading team notes...</div>
+                    ) : notesData?.length === 0 ? (
+                      <div className="text-center text-xs text-slate-500 py-12">No internal notes for this conversation yet.</div>
+                    ) : (
+                      notesData?.map((note: any) => (
+                        <div key={note.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-1">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-semibold text-emerald-400">{note.author?.fullName || 'Agent'}</span>
+                            <span className="text-slate-500 text-[10px]">{new Date(note.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="text-xs text-slate-200 leading-relaxed">{note.content}</p>
                         </div>
-                        <p className="text-xs text-slate-200 leading-relaxed">{note.content}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
+                      ))
+                    )}
+                  </div>
 
-                {/* Add Note Input Bar */}
-                <form onSubmit={handleAddNote} className="p-4 bg-slate-900 border-t border-slate-800 flex items-center space-x-3">
-                  <input
-                    type="text"
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    placeholder="Add a private internal note for your team..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
-                  />
-                  <button
-                    type="submit"
-                    disabled={noteMutation.isPending || !noteText.trim()}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all text-xs flex items-center"
-                  >
-                    <Plus className="w-4 h-4 mr-1 stroke-[3]" />
-                    Add Note
-                  </button>
-                </form>
-              </>
-            )}
+                  {/* Add Note Input Bar */}
+                  <form onSubmit={handleAddNote} className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 flex items-center space-x-2 sm:space-x-3 sticky bottom-0 z-20 shrink-0 backdrop-blur-md">
+                    <input
+                      type="text"
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Add a private internal note for your team..."
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+                    />
+                    <button
+                      type="submit"
+                      disabled={noteMutation.isPending || !noteText.trim()}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all text-xs flex items-center shrink-0"
+                    >
+                      <Plus className="w-4 h-4 mr-1 stroke-[3]" />
+                      Add Note
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
 
             {/* Template Modal */}
             <SendTemplateModal
