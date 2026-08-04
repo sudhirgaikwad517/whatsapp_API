@@ -61,7 +61,7 @@ export const Inbox: React.FC = () => {
     refetchInterval: 3000,
   });
 
-  // Auto-select conversation based on URL parameters (only on initial load or URL change)
+  // Auto-select conversation ONLY if URL parameter contactId/conversationId is passed (e.g. redirected from Campaign Analytics)
   useEffect(() => {
     if (conversationIdParam) {
       setActiveConversationId(conversationIdParam);
@@ -70,8 +70,6 @@ export const Inbox: React.FC = () => {
       if (matched) {
         setActiveConversationId(matched.id);
       }
-    } else if (!activeConversationId && convData && convData.length > 0) {
-      setActiveConversationId(convData[0].id);
     }
   }, [contactIdParam, conversationIdParam, convData?.length]);
 
@@ -514,9 +512,16 @@ export const Inbox: React.FC = () => {
             />
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 space-y-3">
-            <MessageSquare className="w-12 h-12 stroke-1" />
-            <p className="text-sm">Select a conversation from the sidebar to view thread</p>
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950 space-y-4">
+            <div className="w-16 h-16 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shadow-xl">
+              <MessageSquare className="w-8 h-8 stroke-[1.5]" />
+            </div>
+            <div className="max-w-sm space-y-1">
+              <h3 className="font-bold text-white text-base">Select a Conversation</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Click on any contact from the list on the left to view message history and send customer replies.
+              </p>
+            </div>
           </div>
         )}
       </div>
