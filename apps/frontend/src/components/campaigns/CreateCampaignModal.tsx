@@ -13,6 +13,7 @@ interface CsvParsedContact {
   firstName?: string;
   lastName?: string;
   email?: string;
+  customAttributes?: Record<string, string>;
 }
 
 function cleanAndFormatFirstName(rawName?: string): string | undefined {
@@ -34,13 +35,43 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [audienceSource, setAudienceSource] = useState<'CRM' | 'CSV'>('CRM');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [csvContacts, setCsvContacts] = useState<CsvParsedContact[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvFileName, setCsvFileName] = useState<string>('');
   const [isBatchEnabled, setIsBatchEnabled] = useState<boolean>(true);
   const [batchSize, setBatchSize] = useState<number>(50);
   const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
+  const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
+  const [mediaCompressStats, setMediaCompressStats] = useState<string | null>(null);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [error, setError] = useState('');
 
   const queryClient = useQueryClient();
+
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingMedia(true);
+    setMediaCompressStats(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await apiClient.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const { url, originalSize, compressedSize, compressionRatioPercent } = res.data.data;
+      setHeaderMediaUrl(url);
+      setMediaCompressStats(
+        `⚡ Sharp.js Compressed: ${(originalSize / 1024).toFixed(0)} KB ➔ ${(compressedSize / 1024).toFixed(0)} KB (${compressionRatioPercent}% space saved)`
+      );
+    } catch (err: any) {
+      alert(`Media Upload Error: ${err.message}`);
+    } finally {
+      setIsUploadingMedia(false);
+    }
+  };
 
   // Fetch approved Meta templates
   const { data: templates } = useQuery({
@@ -62,6 +93,15 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
     enabled: isOpen,
   });
 
+  // Extract variables like {{1}}, {{2}} from selected template body
+  const selectedTemplate = templates?.find((t: any) => t.id === templateId);
+  const bodyComp = (selectedTemplate?.components as any[])?.find((c) => c.type === 'BODY' || c.type === 'body');
+  const bodyText = bodyComp?.text || '';
+  const rawVars: string[] = Array.from(
+    new Set((bodyText.match(/\{\{(\d+)\}\}/g) || []).map((v: string) => v.replace(/[\{\}]/g, '')))
+  );
+  const templateVars: string[] = rawVars.sort((a: string, b: string) => Number(a) - Number(b));
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -75,7 +115,10 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
         if (lines.length === 0) throw new Error('Uploaded CSV file is empty.');
 
-        const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/["']/g, ''));
+        const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/["']/g, ''));
+        const headers = rawHeaders.map((h) => h.toLowerCase());
+        setCsvHeaders(rawHeaders);
+
         const phoneIdx = headers.findIndex((h) =>
           ['phone', 'phonenumber', 'mobile', 'number', 'contact'].some((k) => h.includes(k))
         );
@@ -96,10 +139,19 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
 
           const rawName = nameIdx !== -1 ? cols[nameIdx] : undefined;
 
+          // Parse all columns into customAttributes for dynamic variable mapping
+          const customAttrs: Record<string, string> = {};
+          rawHeaders.forEach((headerName, idx) => {
+            if (cols[idx] !== undefined) {
+              customAttrs[headerName] = cols[idx];
+            }
+          });
+
           parsedList.push({
             phoneNumber: phone,
             firstName: cleanAndFormatFirstName(rawName),
             email: emailIdx !== -1 ? cols[emailIdx] : undefined,
+            customAttributes: customAttrs,
           });
         }
 
@@ -112,6 +164,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       } catch (err: any) {
         setError(err.message || 'Failed to parse CSV file.');
         setCsvContacts([]);
+        setCsvHeaders([]);
       }
     };
 
@@ -131,6 +184,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         isBatchEnabled,
         batchSize,
         batchIntervalMinutes,
+        variableMapping,
       });
       return res.data.data;
     },
@@ -144,10 +198,12 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setAudienceSource('CRM');
       setSelectedTagIds([]);
       setCsvContacts([]);
+      setCsvHeaders([]);
       setCsvFileName('');
       setIsBatchEnabled(true);
       setBatchSize(50);
       setBatchIntervalMinutes(20);
+      setVariableMapping({});
       setError('');
       onClose();
     },
@@ -228,17 +284,85 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
             )}
           </div>
 
+          {/* ── Dynamic Template Variable Column Mapper ────────────────── */}
+          {templateVars.length > 0 && (
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-inner">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center">
+                  <FileSpreadsheet className="w-4 h-4 mr-1.5" />
+                  Dynamic Variable Column Mapper (&#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;)
+                </span>
+                <span className="text-[10px] text-slate-500">{templateVars.length} variable(s) detected</span>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                Map template placeholders to CSV column headers or CRM attributes for personalized messaging.
+              </p>
+
+              <div className="space-y-2 pt-1">
+                {templateVars.map((vNum: string) => (
+                  <div key={vNum} className="flex items-center space-x-3 bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs">
+                    <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 shrink-0">
+                      {`{{${vNum}}}`}
+                    </span>
+                    <span className="text-slate-400 font-semibold shrink-0">➔</span>
+                    <select
+                      value={variableMapping[vNum] || ''}
+                      onChange={(e) => setVariableMapping({ ...variableMapping, [vNum]: e.target.value })}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="">-- Select Field / Column --</option>
+                      <optgroup label="Standard CRM Fields">
+                        <option value="firstName">First Name / Name</option>
+                        <option value="lastName">Last Name</option>
+                        <option value="phoneNumber">Phone Number</option>
+                        <option value="email">Email Address</option>
+                      </optgroup>
+
+                      {audienceSource === 'CSV' && csvHeaders.length > 0 && (
+                        <optgroup label="Uploaded CSV Columns">
+                          {csvHeaders.map((header) => (
+                            <option key={header} value={header}>
+                              CSV Column: "{header}"
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-              Header Image / Media URL (Optional)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Header Image / Media (Optional)
+              </label>
+              <label className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center">
+                <span>⚡ Upload & Compress (WebP)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleMediaUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <input
               type="url"
-              placeholder="https://your-domain.com/banner.jpg"
+              placeholder="https://your-domain.com/banner.jpg or click Upload above"
               value={headerMediaUrl}
               onChange={(e) => setHeaderMediaUrl(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
             />
+            {isUploadingMedia && (
+              <p className="text-[10px] text-purple-400 mt-1 animate-pulse">Compressing image with Sharp.js (WebP Optimizer)...</p>
+            )}
+            {mediaCompressStats && (
+              <p className="text-[10px] text-emerald-400 mt-1 font-mono">{mediaCompressStats}</p>
+            )}
           </div>
 
           {/* ── Dispatch Timing Options (Now vs Schedule for Later) ───────── */}

@@ -175,14 +175,19 @@ export async function sendOutboundTextMessage(
     },
   });
 
-  // Update conversation last snippet & 24h window expiry
+  // Update conversation last snippet, 24h window expiry, and first response time (FRT)
   const extendedWindow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await prisma.conversation.update({
+  const frtMs = (!(conversation as any).firstResponseTimeMs && conversation.createdAt)
+    ? Math.max(0, Date.now() - new Date(conversation.createdAt).getTime())
+    : undefined;
+
+  await (prisma as any).conversation.update({
     where: { id: conversationId },
     data: {
       lastMessageSnippet: text.slice(0, 100),
       lastMessageAt: new Date(),
       windowExpiresAt: extendedWindow,
+      ...(frtMs !== undefined ? { firstResponseTimeMs: frtMs } : {}),
     },
   });
 
@@ -200,6 +205,26 @@ export async function assignConversation(organizationId: string, conversationId:
     where: { id: conversationId },
     data: { assignedAgentId: agentId },
     include: { assignedAgent: { select: { id: true, fullName: true, email: true } } },
+  });
+
+  return updated;
+}
+
+export async function updateConversationStatus(organizationId: string, conversationId: string, status: string) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, organizationId },
+  });
+
+  if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
+
+  const isResolved = status === 'CLOSED' || status === 'RESOLVED';
+
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      status,
+      ...(isResolved ? { resolvedAt: new Date() } : {}),
+    },
   });
 
   return updated;

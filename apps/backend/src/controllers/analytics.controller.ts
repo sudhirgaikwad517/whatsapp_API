@@ -11,3 +11,13 @@ export async function getOverview(req: AuthenticatedRequest, res: Response, next
     next(err);
   }
 }
+
+export async function getSlaAnalytics(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const data = await AnalyticsService.getSlaAndAgentAnalytics(orgId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

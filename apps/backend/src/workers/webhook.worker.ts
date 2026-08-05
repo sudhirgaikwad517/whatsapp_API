@@ -87,6 +87,39 @@ export const webhookWorker = new Worker(
 
           // Upsert conversation (24-hour window)
           const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          // Check existing conversation & assign via Round-Robin if unassigned
+          const existingConv = await prisma.conversation.findUnique({
+            where: {
+              whatsappAccountId_contactId: {
+                whatsappAccountId: waAccount.id,
+                contactId: contact.id,
+              },
+            },
+          });
+
+          let assignedAgentId = existingConv?.assignedAgentId;
+          if (!existingConv || !assignedAgentId) {
+            const members = await prisma.organizationMember.findMany({
+              where: {
+                organizationId: waAccount.organizationId,
+                role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
+              },
+              select: { userId: true },
+            });
+            if (members.length > 0) {
+              const openCounts = await Promise.all(
+                members.map(async (m) => ({
+                  id: m.userId,
+                  count: await prisma.conversation.count({
+                    where: { organizationId: waAccount.organizationId, assignedAgentId: m.userId, status: 'OPEN' },
+                  }),
+                }))
+              );
+              openCounts.sort((a, b) => a.count - b.count);
+              assignedAgentId = openCounts[0]?.id || null;
+            }
+          }
+
           const conversation = await prisma.conversation.upsert({
             where: {
               whatsappAccountId_contactId: {
@@ -97,11 +130,13 @@ export const webhookWorker = new Worker(
             update: {
               windowExpiresAt,
               status: 'OPEN',
+              ...(assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {
               organizationId: waAccount.organizationId,
               whatsappAccountId: waAccount.id,
               contactId: contact.id,
+              assignedAgentId,
               unreadCount: 0,
               windowExpiresAt,
             },
@@ -181,41 +216,93 @@ export const webhookWorker = new Worker(
             message: savedMessage,
           });
 
-          // ── Automated Multi-Tenant Keyword Auto-Responder Engine ────────────────────────
+          // ── Automated Multi-Tenant Keyword Auto-Responder & Flow Engine ────────────────────────
           if (extractedText) {
             const textBody = extractedText.trim();
+            const cleanTextLower = textBody.toLowerCase();
 
-            // Import intelligent keyword matching engine
-            const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
-            let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+            // 0. Autonomous Commerce Engine (Auto-Product & Auto-Payment Bot)
+            const matchedProduct = await (prisma as any).productCatalog.findFirst({
+              where: {
+                organizationId: waAccount.organizationId,
+                isActive: true,
+                OR: [
+                  { title: { contains: cleanTextLower, mode: 'insensitive' } },
+                  { description: { contains: cleanTextLower, mode: 'insensitive' } },
+                  { sku: { equals: cleanTextLower, mode: 'insensitive' } },
+                ],
+              },
+            });
 
-            // Default Dynamic Fallback if no custom rule matched
-            if (!autoReplyText) {
-              const org = await prisma.organization.findUnique({
-                where: { id: waAccount.organizationId },
-                select: { name: true },
-              });
-              const orgName = org?.name || 'our business';
-
-              if (/^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
-                autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
-              }
-            }
-
-            if (autoReplyText) {
-              const orgId = waAccount.organizationId;
-              const convId = conversation.id;
-              const replyText = autoReplyText;
+            if (matchedProduct && cleanTextLower.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower)) {
+              const { createRazorpayInChatPaymentLink } = await import('../services/in-chat-payment.service.js');
               setTimeout(async () => {
                 try {
-                  const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
-                  await sendOutboundTextMessage(orgId, convId, replyText);
+                  await createRazorpayInChatPaymentLink(
+                    waAccount.organizationId,
+                    conversation.id,
+                    Number(matchedProduct.priceInINR),
+                    `Order for ${matchedProduct.title}`
+                  );
                 } catch (err) {
-                  logger.error({ err }, 'Auto-responder dispatch failed');
+                  logger.error({ err }, 'Autonomous Commerce Payment Link dispatch failed');
                 }
               }, 1000);
+            } else {
+              // 1. Check Visual Chatbot Flow Engine
+              const { evaluateInboundFlow } = await import('../services/flow.service.js');
+              const matchedFlow = await evaluateInboundFlow(waAccount.organizationId, textBody);
+
+            if (matchedFlow) {
+              const nodes = (matchedFlow.definition as any)?.nodes || [];
+              const replyNode = nodes.find((n: any) => n.id !== '1' && n.data?.label);
+              let flowReplyText = replyNode ? (replyNode.data.label as string) : null;
+              if (flowReplyText) {
+                // Clean node type prefix e.g. "💬 Send Message: "
+                flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
+                setTimeout(async () => {
+                  try {
+                    const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
+                    await sendOutboundTextMessage(waAccount.organizationId, conversation.id, flowReplyText!);
+                  } catch (err) {
+                    logger.error({ err }, 'Chatbot Flow dispatch failed');
+                  }
+                }, 1000);
+              }
+            } else {
+              // 2. Keyword Auto-Responder Engine
+              const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
+              let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+
+              // Default Dynamic Fallback if no custom rule matched
+              if (!autoReplyText) {
+                const org = await prisma.organization.findUnique({
+                  where: { id: waAccount.organizationId },
+                  select: { name: true },
+                });
+                const orgName = org?.name || 'our business';
+
+                if (/^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
+                  autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
+                }
+              }
+
+              if (autoReplyText) {
+                const orgId = waAccount.organizationId;
+                const convId = conversation.id;
+                const replyText = autoReplyText;
+                setTimeout(async () => {
+                  try {
+                    const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
+                    await sendOutboundTextMessage(orgId, convId, replyText);
+                  } catch (err) {
+                    logger.error({ err }, 'Auto-responder dispatch failed');
+                  }
+                }, 1000);
+              }
             }
           }
+        }
           // Track Campaign Reply Attribution
           try {
             const recentRecipient = await prisma.campaignRecipient.findFirst({

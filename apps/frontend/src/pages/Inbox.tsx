@@ -18,6 +18,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Tag,
+  Sparkles,
+  CreditCard,
+  ShoppingBag,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -40,6 +43,57 @@ export const Inbox: React.FC = () => {
   const [noteText, setNoteText] = useState('');
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDesc, setPaymentDesc] = useState('');
+  const [isRequestingPayment, setIsRequestingPayment] = useState(false);
+
+  const { data: catalogProducts } = useQuery({
+    queryKey: ['products-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/catalog');
+      return res.data.data;
+    },
+  });
+
+  const handleRequestPayment = async () => {
+    if (!activeConversationId || !paymentAmount) return;
+    setIsRequestingPayment(true);
+    try {
+      await apiClient.post('/catalog/payment-link', {
+        conversationId: activeConversationId,
+        amount: Number(paymentAmount),
+        description: paymentDesc || 'WhatsApp Order Payment',
+      });
+      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setIsPaymentModalOpen(false);
+      setPaymentAmount('');
+      setPaymentDesc('');
+      alert('💳 Razorpay Payment Link dispatched to WhatsApp chat!');
+    } catch (err: any) {
+      alert(`Payment Request Error: ${err.message}`);
+    } finally {
+      setIsRequestingPayment(false);
+    }
+  };
+
+  const handleSendCatalogProduct = async (product: any) => {
+    if (!activeConversationId) return;
+    try {
+      const msgText = `🛍️ *${product.title}*\n\n📌 ${product.description || ''}\n💰 *Price:* ₹${Number(product.priceInINR).toFixed(2)}${product.imageUrl ? `\n\n📸 Image: ${product.imageUrl}` : ''}`;
+      await apiClient.post(`/inbox/conversations/${activeConversationId}/messages`, {
+        text: msgText,
+      });
+      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setIsCatalogModalOpen(false);
+    } catch (err: any) {
+      alert(`Send Product Error: ${err.message}`);
+    }
+  };
 
   // Fetch Canned Responses
   const { data: cannedResponses } = useQuery({
@@ -217,6 +271,23 @@ export const Inbox: React.FC = () => {
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     sendMutation.mutate();
+  };
+
+  const handleAiSuggestReply = async () => {
+    if (!activeConversationId) return;
+    setIsAiSuggesting(true);
+    try {
+      const res = await apiClient.post('/ai/suggest-reply', {
+        conversationId: activeConversationId,
+      });
+      if (res.data?.data?.suggestedText) {
+        setMessageText(res.data.data.suggestedText);
+      }
+    } catch (err: any) {
+      alert(`AI Suggestion Error: ${err.message}`);
+    } finally {
+      setIsAiSuggesting(false);
+    }
   };
 
   const handleAddNote = (e: React.FormEvent) => {
@@ -591,6 +662,37 @@ export const Inbox: React.FC = () => {
 
                     <button
                       type="button"
+                      onClick={() => setIsPaymentModalOpen(true)}
+                      className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer shrink-0"
+                      title="Request Razorpay Payment Link in WhatsApp Chat"
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="hidden sm:inline">Pay Link</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsCatalogModalOpen(true)}
+                      className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-blue-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer shrink-0"
+                      title="Send Product Catalog Item"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="hidden sm:inline">Catalog</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAiSuggestReply}
+                      disabled={isAiSuggesting}
+                      className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 text-purple-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                      title="Gemini AI Smart Copilot Suggestion"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                      <span className="hidden sm:inline">{isAiSuggesting ? 'AI Thinking...' : 'AI Copilot'}</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={async () => {
                         const url = prompt('Enter Image / Document URL to attach:');
                         if (!url) return;
@@ -692,6 +794,113 @@ export const Inbox: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Razorpay Payment Link Modal ── */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base flex items-center">
+                <CreditCard className="w-5 h-5 mr-2 text-emerald-400" />
+                <span>Request Razorpay Payment Link</span>
+              </h3>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-white text-xs">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Amount in INR (₹) *
+                </label>
+                <input
+                  type="number"
+                  placeholder="500.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Order / Item Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 5L Desi Ghee Order"
+                  value={paymentDesc}
+                  onChange={(e) => setPaymentDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                onClick={() => setIsPaymentModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs hover:bg-slate-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestPayment}
+                disabled={isRequestingPayment || !paymentAmount}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isRequestingPayment ? 'Generating Link...' : 'Dispatch Payment Card'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Product Catalog Picker Modal ── */}
+      {isCatalogModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white text-base flex items-center">
+                <ShoppingBag className="w-5 h-5 mr-2 text-blue-400" />
+                <span>Select Product to Send</span>
+              </h3>
+              <button onClick={() => setIsCatalogModalOpen(false)} className="text-slate-400 hover:text-white text-xs">
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {!catalogProducts || catalogProducts.length === 0 ? (
+                <p className="text-center text-xs text-slate-500 py-6">No products in catalog. Add products in Product Catalog page first!</p>
+              ) : (
+                catalogProducts.map((product: any) => (
+                  <div
+                    key={product.id}
+                    onClick={() => handleSendCatalogProduct(product)}
+                    className="p-3 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl flex items-center justify-between transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 text-xs">
+                          🛍️
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-bold text-white text-xs">{product.title}</h4>
+                        <p className="text-[10px] text-slate-400 truncate max-w-xs">{product.description || 'No description'}</p>
+                      </div>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-400 text-xs shrink-0">₹{Number(product.priceInINR).toFixed(2)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

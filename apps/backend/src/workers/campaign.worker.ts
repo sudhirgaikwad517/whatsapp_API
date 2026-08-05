@@ -24,10 +24,15 @@ export const campaignWorker = new Worker(
     logger.info({ jobId: job.id, campaignId: data.campaignId, phone: data.phoneNumber }, 'Processing campaign broadcast job');
 
     try {
-      // Fetch template definition to check for variables
+      // Fetch template definition & campaign to check for variables
       const tpl = await prisma.template.findFirst({
         where: { organizationId: data.organizationId, name: data.templateName },
       });
+
+      const campaign = await (prisma as any).campaign.findUnique({
+        where: { id: data.campaignId },
+      });
+      const variableMapping = (campaign?.variableMapping as Record<string, string>) || {};
 
       const contact = await prisma.contact.findUnique({ where: { id: data.contactId } });
       const recipientName = contact?.firstName || 'Customer';
@@ -36,16 +41,6 @@ export const campaignWorker = new Worker(
         name: data.templateName,
         language: { code: data.templateLanguage || 'en_US' },
       };
-
-      interface CampaignMessageJobData {
-        campaignId: string;
-        organizationId: string;
-        contactId: string;
-        phoneNumber: string;
-        templateName: string;
-        templateLanguage: string;
-        headerMediaUrl?: string;
-      }
 
       const componentsList: any[] = [];
 
@@ -65,25 +60,51 @@ export const campaignWorker = new Worker(
       // Render Full Message Body Text for Live Inbox
       let renderedBodyText = '';
       const bodyComp = (tpl?.components as any[])?.find((c) => c.type === 'BODY' || c.type === 'body');
+      
+      const resolveVal = (vNumStr: string): string => {
+        const targetCol = variableMapping[vNumStr];
+        if (!targetCol) {
+          if (vNumStr === '1') return recipientName;
+          return `Valued Customer`;
+        }
+        if (targetCol === 'firstName') return contact?.firstName || 'Customer';
+        if (targetCol === 'lastName') return contact?.lastName || '';
+        if (targetCol === 'phoneNumber') return contact?.phoneNumber || '';
+        if (targetCol === 'email') return contact?.email || '';
+
+        const customAttrs = (contact?.customAttributes as any) || {};
+        if (customAttrs[targetCol] !== undefined && customAttrs[targetCol] !== '') {
+          return String(customAttrs[targetCol]);
+        }
+        const lowerKey = targetCol.toLowerCase();
+        for (const k of Object.keys(customAttrs)) {
+          if (k.toLowerCase() === lowerKey && customAttrs[k] !== undefined && customAttrs[k] !== '') {
+            return String(customAttrs[k]);
+          }
+        }
+        return `Valued Customer`;
+      };
+
       if (bodyComp?.text) {
-        renderedBodyText = bodyComp.text
-          .replace(/\{\{1\}\}/g, recipientName)
-          .replace(/\{\{2\}\}/g, 'Shrishti Dairy Farm')
-          .replace(/\{\{3\}\}/g, 'Pure A2 Milk');
+        renderedBodyText = bodyComp.text.replace(/\{\{(\d+)\}\}/g, (_: string, num: string) => {
+          return resolveVal(num);
+        });
       } else {
         renderedBodyText = `Template: ${data.templateName}`;
       }
 
-      // Auto-populate body parameters matching the EXACT unique count of placeholders (e.g. {{1}}, {{2}})
+      // Auto-populate Meta Graph API body parameters matching placeholders (e.g. {{1}}, {{2}})
       if (tpl?.components && Array.isArray(tpl.components)) {
         if (bodyComp?.text) {
-          const uniqueMatches = Array.from(new Set(bodyComp.text.match(/\{\{(\d+)\}\}/g) || []));
+          const matches = bodyComp.text.match(/\{\{(\d+)\}\}/g) || [];
+          const uniqueMatches = Array.from(new Set(matches.map((v: string) => v.replace(/[\{\}]/g, '')))).sort((a: any, b: any) => Number(a) - Number(b));
+          
           if (uniqueMatches.length > 0) {
-            const params = uniqueMatches.map((_: any, idx: number) => {
-              if (idx === 0) return { type: 'text', text: recipientName };
-              if (idx === 1) return { type: 'text', text: 'Shrishti Dairy Farm' };
-              return { type: 'text', text: 'Valued Customer' };
+            const params = uniqueMatches.map((vNumStr: any) => {
+              const textVal = resolveVal(String(vNumStr));
+              return { type: 'text', text: textVal };
             });
+
             componentsList.push({
               type: 'body',
               parameters: params,

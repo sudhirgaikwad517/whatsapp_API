@@ -7,7 +7,9 @@ export const Team: React.FC = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('Prowexa123!');
   const [role, setRole] = useState<'MANAGER' | 'AGENT'>('AGENT');
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; pass: string; name: string; role: string } | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -25,18 +27,25 @@ export const Team: React.FC = () => {
         fullName: fullName.trim(),
         email: email.trim(),
         role,
+        password: password.trim(),
       });
       return res.data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
-      alert(`🎉 Success! Team member "${fullName}" invited successfully.`);
+      setCreatedCredentials({
+        name: fullName.trim(),
+        email: email.trim(),
+        pass: password.trim(),
+        role,
+      });
       setIsInviteOpen(false);
       setFullName('');
       setEmail('');
+      setPassword('Prowexa123!');
     },
     onError: (err: any) => {
-      alert(`❌ Invite Failed: ${err?.response?.data?.error?.message || err.message}`);
+      alert(`❌ Failed to create member: ${err?.response?.data?.error?.message || err.message}`);
     },
   });
 
@@ -202,6 +211,22 @@ export const Team: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Initial Login Password
+                </label>
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Prowexa123!"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  The agent will use this password to log in at /login.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Assign System Role
                 </label>
                 <select
@@ -219,9 +244,58 @@ export const Team: React.FC = () => {
                 disabled={inviteMutation.isPending || !fullName || !email}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center cursor-pointer disabled:opacity-50"
               >
-                {inviteMutation.isPending ? 'Sending Invite...' : 'Send Team Invitation'}
+                {inviteMutation.isPending ? 'Creating Account...' : 'Create Team Account'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Created Agent Credentials Dialog ────────────────────────── */}
+      {createdCredentials && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center">
+                <CheckCircle2 className="w-5 h-5 mr-2 text-emerald-400" />
+                Team Account Credentials Created
+              </h3>
+              <button
+                onClick={() => setCreatedCredentials(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              Account created for <strong className="text-white">{createdCredentials.name}</strong> ({createdCredentials.role}). Share these credentials with your team member:
+            </p>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 font-mono text-xs text-slate-300">
+              <div>
+                <span className="text-slate-500 block uppercase text-[10px]">Login Page URL</span>
+                <span className="text-emerald-400 select-all font-semibold">http://localhost:5173/login</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block uppercase text-[10px]">Email Address</span>
+                <span className="text-white select-all font-semibold">{createdCredentials.email}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block uppercase text-[10px]">Password</span>
+                <span className="text-sky-400 select-all font-bold">{createdCredentials.pass}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`Prowexa Login Credentials:\nURL: http://localhost:5173/login\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.pass}`);
+                alert('📋 Login details copied to clipboard!');
+              }}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer border border-slate-700"
+            >
+              Copy Credentials to Clipboard
+            </button>
           </div>
         </div>
       )}

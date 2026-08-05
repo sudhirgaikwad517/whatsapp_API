@@ -8,6 +8,7 @@ export interface CsvContactItem {
   firstName?: string;
   lastName?: string;
   email?: string;
+  customAttributes?: Record<string, string>;
 }
 
 export interface CreateCampaignInput {
@@ -21,6 +22,7 @@ export interface CreateCampaignInput {
   isBatchEnabled?: boolean;
   batchSize?: number;
   batchIntervalMinutes?: number;
+  variableMapping?: Record<string, string>;
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -108,16 +110,18 @@ export async function createCampaign(organizationId: string, input: CreateCampai
             phoneNumber: formattedPhone,
             firstName,
             lastName,
+            email: rawContact.email,
+            customAttributes: rawContact.customAttributes || {},
             isOptedIn: true,
           },
         });
-      } else if (firstName && (!contact.firstName || contact.firstName === 'Customer')) {
-        // Update contact with clean full name if previous record was empty
+      } else {
+        // Update contact with customAttributes and name if available
         contact = await prisma.contact.update({
           where: { id: contact.id },
           data: {
-            firstName,
-            ...(lastName ? { lastName } : {}),
+            ...(firstName && (!contact.firstName || contact.firstName === 'Customer') ? { firstName, ...(lastName ? { lastName } : {}) } : {}),
+            ...(rawContact.customAttributes ? { customAttributes: { ...((contact.customAttributes as object) || {}), ...rawContact.customAttributes } } : {}),
           },
         });
       }
@@ -152,7 +156,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   const batchIntervalMinutes = Math.max(1, Number(input.batchIntervalMinutes) || 20);
 
   // Create campaign record with recipient snapshots
-  const campaign = await prisma.campaign.create({
+  const campaign = await (prisma as any).campaign.create({
     data: {
       organizationId,
       templateId: template.id,
@@ -163,6 +167,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       isBatchEnabled,
       batchSize,
       batchIntervalMinutes,
+      variableMapping: input.variableMapping || {},
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,

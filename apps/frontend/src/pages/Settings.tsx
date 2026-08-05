@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings as SettingsIcon, Link2, ShieldCheck, CheckCircle, RefreshCw, Bot, Plus, Trash2, Tag } from 'lucide-react';
+import { Settings as SettingsIcon, Link2, ShieldCheck, CheckCircle, RefreshCw, Bot, Plus, Trash2, Tag, CreditCard } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
 export const Settings: React.FC = () => {
@@ -8,9 +8,63 @@ export const Settings: React.FC = () => {
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
   const [accessToken, setAccessToken] = useState('');
+  const [aiKnowledgeBase, setAiKnowledgeBase] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [razorpayKeyId, setRazorpayKeyId] = useState('');
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
   const [msg, setMsg] = useState('');
 
   const queryClient = useQueryClient();
+
+  const { data: orgData } = useQuery({
+    queryKey: ['org-details'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organization');
+      return res.data.data;
+    },
+  });
+
+  React.useEffect(() => {
+    if (orgData) {
+      if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
+      if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
+      if (orgData.razorpayKeyId) setRazorpayKeyId(orgData.razorpayKeyId);
+    }
+  }, [orgData]);
+
+  const saveKbMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.patch('/organization', {
+        aiKnowledgeBase,
+        geminiApiKey,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-details'] });
+      alert('🤖 AI Knowledgebase & Gemini API Key saved successfully!');
+    },
+    onError: (err: any) => {
+      alert(`Failed to save AI settings: ${err.message}`);
+    },
+  });
+
+  const saveRazorpayMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.patch('/organization', {
+        razorpayKeyId,
+        razorpayKeySecret,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-details'] });
+      alert('💳 Razorpay API Credentials stored securely!');
+    },
+    onError: (err: any) => {
+      alert(`Failed to save Razorpay Credentials: ${err.message}`);
+    },
+  });
 
   // Fetch account health status
   const { data: healthData } = useQuery({
@@ -450,6 +504,113 @@ export const Settings: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── AI Smart Copilot Knowledgebase Configurator ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-white text-lg flex items-center">
+              <Bot className="w-5 h-5 mr-2 text-purple-400" />
+              <span>Gemini 1.5 AI Smart Copilot Knowledgebase & FAQ Context</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Provide business details, FAQs, pricing, and working hours to train your Gemini AI Live Inbox Assistant.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Custom Gemini 1.5 API Key (Optional)
+            </label>
+            <input
+              type="password"
+              value={geminiApiKey}
+              onChange={(e) => setGeminiApiKey(e.target.value)}
+              placeholder="AIzaSy..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">Leave blank to use default platform API key.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              AI Knowledgebase Context & FAQs
+            </label>
+            <textarea
+              rows={4}
+              value={aiKnowledgeBase}
+              onChange={(e) => setAiKnowledgeBase(e.target.value)}
+              placeholder="e.g. Shrishti Dairy Farm offers pure A2 Desi Cow Milk at ₹80/liter. Delivery timing: 6:00 AM - 9:00 AM daily. Customer support: 9:00 AM to 7:00 PM."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => saveKbMutation.mutate()}
+              disabled={saveKbMutation.isPending}
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg shadow-purple-500/20 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {saveKbMutation.isPending ? 'Saving Settings...' : 'Save AI Settings'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Razorpay Payment Gateway Credentials Configurator ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-white text-lg flex items-center">
+              <CreditCard className="w-5 h-5 mr-2 text-emerald-400" />
+              <span>Razorpay Payment Gateway API Credentials</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Configure your Razorpay Key ID and Secret to accept instant WhatsApp in-chat UPI payments directly into your bank account.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Razorpay Key ID
+            </label>
+            <input
+              type="text"
+              value={razorpayKeyId}
+              onChange={(e) => setRazorpayKeyId(e.target.value)}
+              placeholder="rzp_live_xxxxxxxxxxxx"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Razorpay Key Secret
+            </label>
+            <input
+              type="password"
+              value={razorpayKeySecret}
+              onChange={(e) => setRazorpayKeySecret(e.target.value)}
+              placeholder="••••••••••••••••••••"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={() => saveRazorpayMutation.mutate()}
+            disabled={saveRazorpayMutation.isPending}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {saveRazorpayMutation.isPending ? 'Saving Keys...' : 'Save Razorpay Credentials'}
+          </button>
         </div>
       </div>
     </div>

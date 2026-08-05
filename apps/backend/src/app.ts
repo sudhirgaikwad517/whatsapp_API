@@ -16,8 +16,13 @@ import inboxRoutes from './routes/inbox.routes.js';
 import campaignRoutes from './routes/campaign.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import billingRoutes from './routes/billing.routes.js';
+import path from 'path';
 import autoResponderRoutes from './routes/auto-responder.routes.js';
 import cannedResponseRoutes from './routes/canned-response.routes.js';
+import aiRoutes from './routes/ai.routes.js';
+import mediaRoutes from './routes/media.routes.js';
+import flowRoutes from './routes/flow.routes.js';
+import catalogRoutes from './routes/catalog.routes.js';
 import superAdminRoutes from './routes/superadmin.routes.js';
 
 export function createApp(): Application {
@@ -99,6 +104,9 @@ export function createApp(): Application {
     res.status(200).json({ status: 'ok', service: 'prowexa-whatsapp-api', timestamp: new Date().toISOString() });
   });
 
+  // ── Static Public Uploads Route ───────────────────────────────────────────
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
   // ── API Routes ────────────────────────────────────────────────────────────
   app.use('/api/v1/auth', authLimiter, authRoutes);
   app.use('/api/v1/webhooks', webhookRoutes);
@@ -111,6 +119,10 @@ export function createApp(): Application {
   app.use('/api/v1/billing', billingRoutes);
   app.use('/api/v1/auto-responder', autoResponderRoutes);
   app.use('/api/v1/canned-responses', cannedResponseRoutes);
+  app.use('/api/v1/ai', aiRoutes);
+  app.use('/api/v1/media', mediaRoutes);
+  app.use('/api/v1/flows', flowRoutes);
+  app.use('/api/v1/catalog', catalogRoutes);
   app.use('/api/v1/superadmin', superAdminRoutes);
 
 

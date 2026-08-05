@@ -23,12 +23,12 @@ export async function getOrganization(organizationId: string) {
 
 export async function updateOrganization(
   organizationId: string,
-  data: { name?: string; timezone?: string; logoUrl?: string }
+  data: { name?: string; timezone?: string; logoUrl?: string; aiKnowledgeBase?: string; geminiApiKey?: string; razorpayKeyId?: string; razorpayKeySecret?: string }
 ) {
-  const updated = await prisma.organization.update({
+  const updated = await (prisma as any).organization.update({
     where: { id: organizationId },
     data,
-    select: { id: true, name: true, slug: true, logoUrl: true, timezone: true },
+    select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, razorpayKeyId: true },
   });
   return updated;
 }
@@ -70,14 +70,16 @@ export async function removeMember(organizationId: string, targetUserId: string,
 
 export async function inviteMember(
   organizationId: string,
-  input: { email: string; fullName: string; role: 'MANAGER' | 'AGENT' }
+  input: { email: string; fullName: string; role: 'MANAGER' | 'AGENT'; password?: string }
 ) {
   const email = input.email.trim().toLowerCase();
 
   let user = await prisma.user.findUnique({ where: { email } });
 
+  const rawPassword = input.password && input.password.trim().length >= 6 ? input.password.trim() : 'Prowexa123!';
+
   if (!user) {
-    const passwordHash = await bcrypt.hash('Prowexa123!', 10);
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
     user = await prisma.user.create({
       data: {
         email,
@@ -85,6 +87,12 @@ export async function inviteMember(
         passwordHash,
         isEmailVerified: true,
       },
+    });
+  } else if (input.password && input.password.trim().length >= 6) {
+    const passwordHash = await bcrypt.hash(input.password.trim(), 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
     });
   }
 

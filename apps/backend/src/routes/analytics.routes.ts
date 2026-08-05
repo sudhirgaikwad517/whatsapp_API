@@ -15,4 +15,11 @@ router.use(tenantContext);
  */
 router.get('/overview', AnalyticsController.getOverview);
 
+/**
+ * @route   GET /api/v1/analytics/sla
+ * @desc    Get First Response Time (FRT), Resolution SLA & Agent Leaderboard metrics
+ * @access  Bearer
+ */
+router.get('/sla', AnalyticsController.getSlaAnalytics);
+
 export default router;

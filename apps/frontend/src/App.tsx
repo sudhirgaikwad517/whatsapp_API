@@ -17,6 +17,9 @@ import { Wallet } from './pages/Wallet';
 import { Team } from './pages/Team';
 import { SuperAdminDashboard } from './pages/SuperAdminDashboard';
 import { SuperAdminLogin } from './pages/SuperAdminLogin';
+import { Flows } from './pages/Flows';
+import { Catalog } from './pages/Catalog';
+import { Billing } from './pages/Billing';
 import { Settings } from './pages/Settings';
 
 const queryClient = new QueryClient({
@@ -69,6 +72,9 @@ export const App: React.FC = () => {
             <Route path="contacts" element={<Contacts />} />
             <Route path="templates" element={<Templates />} />
             <Route path="auto-reply" element={<AutoResponder />} />
+            <Route path="flows" element={<Flows />} />
+            <Route path="catalog" element={<Catalog />} />
+            <Route path="billing" element={<Billing />} />
             <Route path="wallet" element={<Wallet />} />
             <Route path="team" element={<Team />} />
             <Route path="analytics" element={<Analytics />} />

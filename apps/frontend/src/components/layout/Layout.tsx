@@ -66,7 +66,7 @@ export const Layout: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="flex-1 min-w-0 overflow-y-auto flex flex-col h-full">
           <Outlet />
         </div>
       </main>

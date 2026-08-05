@@ -263,3 +263,19 @@ class Decimal {
     return new Prisma.Decimal(a.toNumber() + b.toNumber());
   }
 }
+
+export function getPerMessageRate(category: string): number {
+  switch (category?.toUpperCase()) {
+    case 'MARKETING':
+      return 1.00; // Meta base ₹0.8631 + Prowexa profit margin
+    case 'UTILITY':
+      return 0.20; // Meta base ₹0.1150 + Prowexa profit margin
+    case 'AUTHENTICATION':
+      return 0.25; // Meta base ₹0.1150 + Prowexa profit margin
+    case 'AUTHENTICATION_INTL':
+      return 3.00; // Meta base ₹2.4971 + Prowexa profit margin
+    case 'SERVICE':
+    default:
+      return 0.00; // Free / 24h session
+  }
+}

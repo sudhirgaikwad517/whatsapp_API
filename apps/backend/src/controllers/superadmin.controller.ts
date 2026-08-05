@@ -52,3 +52,33 @@ export async function toggleSuspension(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+export async function updatePlanTier(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { organizationId, planTier } = req.body;
+    const data = await SuperAdminService.updateOrganizationPlanTier(organizationId, planTier);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function grantAiCredits(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { organizationId, creditsAmount } = req.body;
+    const data = await SuperAdminService.grantAiCreditsToOrganization(organizationId, Number(creditsAmount));
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function manualCreditWallet(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { organizationId, amount, description } = req.body;
+    const data = await SuperAdminService.creditWalletForOrganization(organizationId, Number(amount), description);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

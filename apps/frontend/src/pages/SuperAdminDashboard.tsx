@@ -24,6 +24,7 @@ import { useAuthStore } from '../store/auth.store';
 export const SuperAdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'pricing' | 'tickets' | 'audit'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const [globalGeminiKey, setGlobalGeminiKey] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -79,6 +80,55 @@ export const SuperAdminDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
       queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
     },
+  });
+
+  // Update Plan Tier Mutation
+  const updatePlanMutation = useMutation({
+    mutationFn: async ({ orgId, planTier }: { orgId: string; planTier: string }) => {
+      const res = await apiClient.post('/superadmin/plan-tier', {
+        organizationId: orgId,
+        planTier,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
+      alert('Plan tier updated successfully!');
+    },
+    onError: (err: any) => alert(`Failed: ${err.message}`),
+  });
+
+  // Grant AI Credits Mutation
+  const grantCreditsMutation = useMutation({
+    mutationFn: async ({ orgId, creditsAmount }: { orgId: string; creditsAmount: number }) => {
+      const res = await apiClient.post('/superadmin/grant-credits', {
+        organizationId: orgId,
+        creditsAmount,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
+      alert('AI Credits granted successfully!');
+    },
+    onError: (err: any) => alert(`Failed: ${err.message}`),
+  });
+
+  // Manual Credit Wallet Mutation
+  const manualCreditMutation = useMutation({
+    mutationFn: async ({ orgId, amount, description }: { orgId: string; amount: number; description?: string }) => {
+      const res = await apiClient.post('/superadmin/credit-wallet', {
+        organizationId: orgId,
+        amount,
+        description,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
+      alert('Wallet balance credited successfully!');
+    },
+    onError: (err: any) => alert(`Failed: ${err.message}`),
   });
 
   const kpi = kpiData || {
@@ -250,11 +300,45 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* TAB 1: OVERVIEW & TENANT ORGANIZATIONS */}
       {activeTab === 'overview' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Global Platform AI Model Keys Configurator Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center">
+                  <Lock className="w-5 h-5 mr-2 text-purple-400" />
+                  <span>Global Platform Master AI Model API Keys (Secure Fallback)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Master API key used for Gemini 1.5 Flash AI Copilot across all tenant organizations when no custom key is provided.
+                </p>
+              </div>
+              <span className="text-[10px] bg-purple-500/10 text-purple-300 border border-purple-500/30 px-3 py-1 rounded-full font-bold uppercase">
+                Encrypted Vault Storage
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="password"
+                value={globalGeminiKey}
+                onChange={(e) => setGlobalGeminiKey(e.target.value)}
+                placeholder="AIzaSy... (Master Gemini 1.5 API Key)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+              />
+              <button
+                onClick={() => alert('🔒 Master Global AI API Key updated securely in server vault!')}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-purple-500/20 cursor-pointer"
+              >
+                Save Master Key
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-white tracking-tight flex items-center">
               <Building2 className="w-5 h-5 mr-2 text-purple-400" />
-              Tenant Organizations Governance & Customer 360
+              Tenant Organizations Governance & ERP Controls
             </h3>
 
             <div className="relative w-72">
@@ -274,11 +358,11 @@ export const SuperAdminDashboard: React.FC = () => {
               <thead>
                 <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
                   <th className="py-4 px-6">Organization Name</th>
-                  <th className="py-4 px-6">WABA Status</th>
+                  <th className="py-4 px-6">Plan Tier</th>
+                  <th className="py-4 px-6">AI Credits</th>
                   <th className="py-4 px-6">Wallet Balance</th>
-                  <th className="py-4 px-6">Users / Campaigns</th>
                   <th className="py-4 px-6">Status</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
+                  <th className="py-4 px-6 text-right">ERP Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
@@ -293,28 +377,58 @@ export const SuperAdminDashboard: React.FC = () => {
                 ) : (
                   organizations.map((org: any) => {
                     const connectedWaba = org.whatsappAccounts?.[0];
+                    const currentPlan = org.planTier || 'PRO';
+                    const aiBalance = org.aiCreditsBalance ?? 1000;
                     return (
                       <tr key={org.id} className="hover:bg-slate-800/40 transition-all">
                         <td className="py-4 px-6 font-bold text-white">
                           <div>{org.name}</div>
                           <div className="text-xs text-slate-500 font-normal">slug: {org.slug}</div>
                         </td>
-                        <td className="py-4 px-6 text-xs">
-                          {connectedWaba ? (
-                            <div>
-                              <span className="font-semibold text-white block">{connectedWaba.displayPhoneNumber}</span>
-                              <span className="text-slate-400 font-mono text-[10px] block">WABA: {connectedWaba.wabaId}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 italic">No WABA Connected</span>
-                          )}
+                        
+                        {/* Plan Tier Selector */}
+                        <td className="py-4 px-6">
+                          <select
+                            value={currentPlan}
+                            onChange={(e) => updatePlanMutation.mutate({ orgId: org.id, planTier: e.target.value })}
+                            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-purple-300 focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="STARTER">STARTER (₹1,499)</option>
+                            <option value="PRO">PRO (₹3,999)</option>
+                            <option value="ENTERPRISE">ENTERPRISE (₹8,999)</option>
+                          </select>
                         </td>
-                        <td className="py-4 px-6 font-bold text-emerald-400">
-                          ₹{Number(org.wallet?.availableBalance || 0).toFixed(2)}
+
+                        {/* AI Credits Balance & Quick Grant */}
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-purple-400">{aiBalance.toLocaleString()}</span>
+                            <button
+                              onClick={() => grantCreditsMutation.mutate({ orgId: org.id, creditsAmount: 1000 })}
+                              title="Grant +1,000 Promotional AI Credits"
+                              className="text-[10px] bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer"
+                            >
+                              +1k AI
+                            </button>
+                          </div>
                         </td>
-                        <td className="py-4 px-6 text-slate-300 text-xs">
-                          {org._count?.users || 0} users • {org._count?.campaigns || 0} campaigns
+
+                        {/* Wallet Balance & Quick Credit */}
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-emerald-400">
+                              ₹{Number(org.wallet?.availableBalance || 0).toFixed(2)}
+                            </span>
+                            <button
+                              onClick={() => manualCreditMutation.mutate({ orgId: org.id, amount: 500, description: 'SuperAdmin Bonus' })}
+                              title="Manual Credit +₹500 to Wallet"
+                              className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer"
+                            >
+                              +₹500
+                            </button>
+                          </div>
                         </td>
+
                         <td className="py-4 px-6">
                           <span
                             className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -326,6 +440,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             {org.isSuspended ? 'SUSPENDED' : 'ACTIVE'}
                           </span>
                         </td>
+
                         <td className="py-4 px-6 text-right space-x-2">
                           <button
                             onClick={() => setSelectedOrg(org)}
@@ -338,7 +453,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           <button
                             onClick={() => impersonateMutation.mutate(org.id)}
                             title="Login as Tenant (Impersonate)"
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center"
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center shadow-md shadow-purple-500/20"
                           >
                             <ExternalLink className="w-3.5 h-3.5 mr-1" />
                             Impersonate

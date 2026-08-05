@@ -252,3 +252,63 @@ export async function toggleOrganizationSuspension(organizationId: string, isSus
 
   return updated;
 }
+
+export async function updateOrganizationPlanTier(organizationId: string, planTier: string) {
+  const updated = await (prisma as any).organization.update({
+    where: { id: organizationId },
+    data: { planTier },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      targetOrganizationId: organizationId,
+      action: 'UPDATE_PLAN_TIER',
+      resource: 'Organization',
+      details: { planTier },
+      ipAddress: '127.0.0.1',
+    },
+  });
+
+  return updated;
+}
+
+export async function grantAiCreditsToOrganization(organizationId: string, creditsAmount: number) {
+  const updated = await (prisma as any).organization.update({
+    where: { id: organizationId },
+    data: {
+      aiCreditsBalance: { increment: creditsAmount },
+    },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      targetOrganizationId: organizationId,
+      action: 'GRANT_AI_CREDITS',
+      resource: 'Organization',
+      details: { creditsAmount },
+      ipAddress: '127.0.0.1',
+    },
+  });
+
+  return updated;
+}
+
+export async function creditWalletForOrganization(organizationId: string, amountNumber: number, description?: string) {
+  const { rechargeWallet } = await import('./billing-wallet.service.js');
+  const referenceId = `SA_CREDIT_${Date.now()}`;
+  const desc = description || 'SuperAdmin Manual Wallet Credit';
+  
+  const wallet = await rechargeWallet(organizationId, amountNumber, referenceId, desc);
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      targetOrganizationId: organizationId,
+      action: 'MANUAL_WALLET_CREDIT',
+      resource: 'Wallet',
+      details: { amount: amountNumber, description: desc },
+      ipAddress: '127.0.0.1',
+    },
+  });
+
+  return wallet;
+}

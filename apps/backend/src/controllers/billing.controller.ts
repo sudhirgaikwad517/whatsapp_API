@@ -27,6 +27,42 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
   }
 }
 
+export async function getAiCredits(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const { getAiCreditsBalance } = await import('../services/credits.service.js');
+    const data = await getAiCreditsBalance(orgId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function topupAiCredits(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const { amount } = req.body;
+    const { addAiCredits } = await import('../services/credits.service.js');
+    
+    // Map ₹500 -> 1000 credits, ₹1500 -> 3500 credits, ₹3500 -> 10000 credits
+    let creditsToAdd = 1000;
+    if (Number(amount) >= 3500) creditsToAdd = 10000;
+    else if (Number(amount) >= 1500) creditsToAdd = 3500;
+
+    const newBalance = await addAiCredits(orgId, creditsToAdd);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        message: `${creditsToAdd} AI Credits added successfully`,
+        newBalance,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function rechargeWallet(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
@@ -44,6 +80,20 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
         wallet,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getLedgers(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const ledgers = await prisma.walletLedger.findMany({
+      where: { organizationId: orgId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.status(200).json({ success: true, data: ledgers });
   } catch (err) {
     next(err);
   }

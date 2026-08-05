@@ -14,6 +14,10 @@ router.use(tenantContext);
  * @access  Bearer
  */
 router.get('/wallet', BillingController.getWalletDetails);
+router.get('/credits', BillingController.getAiCredits);
+router.get('/ledger', BillingController.getLedgers);
+router.post('/topup-credits', BillingController.topupAiCredits);
+router.post('/recharge-wallet', BillingController.rechargeWallet);
 
 /**
  * @route   GET /api/v1/billing/invoices

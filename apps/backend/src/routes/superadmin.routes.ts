@@ -35,5 +35,8 @@ router.post('/impersonate', SuperAdminController.impersonateOrganization);
  * @desc    Toggle organization suspension state
  */
 router.post('/suspension', SuperAdminController.toggleSuspension);
+router.post('/plan-tier', SuperAdminController.updatePlanTier);
+router.post('/grant-credits', SuperAdminController.grantAiCredits);
+router.post('/credit-wallet', SuperAdminController.manualCreditWallet);
 
 export default router;
