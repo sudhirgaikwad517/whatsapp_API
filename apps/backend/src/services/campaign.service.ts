@@ -209,14 +209,9 @@ export async function createCampaign(organizationId: string, input: CreateCampai
 }
 
 export async function listCampaigns(organizationId: string) {
-  const activeWa = await prisma.whatsappAccount.findFirst({
-    where: { organizationId, deletedAt: null },
-  });
-
   const campaigns = await prisma.campaign.findMany({
     where: {
       organizationId,
-      ...(activeWa ? { template: { whatsappAccountId: activeWa.id } } : {}),
     },
     include: { template: { select: { id: true, name: true, category: true } } },
     orderBy: { createdAt: 'desc' },

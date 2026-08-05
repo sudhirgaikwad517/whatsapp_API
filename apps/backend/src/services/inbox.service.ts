@@ -71,9 +71,6 @@ export async function listConversations(
   }
 
   const where: any = { organizationId };
-  if (activeAccount) {
-    where.whatsappAccountId = activeAccount.id;
-  }
   if (options.status) where.status = options.status;
   if (options.assignedAgentId) where.assignedAgentId = options.assignedAgentId;
 
