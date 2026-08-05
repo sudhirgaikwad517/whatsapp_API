@@ -18,6 +18,9 @@ export interface CreateCampaignInput {
   audienceSource?: 'CRM' | 'CSV';
   tagIds?: string[];
   csvContacts?: CsvContactItem[];
+  isBatchEnabled?: boolean;
+  batchSize?: number;
+  batchIntervalMinutes?: number;
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -99,28 +102,24 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       });
 
       if (!contact) {
-        // Create new contact with full name in CRM
         contact = await prisma.contact.create({
           data: {
             organizationId,
             phoneNumber: formattedPhone,
             firstName,
-            lastName: lastName || null,
-            email: rawContact.email || null,
+            lastName,
             isOptedIn: true,
           },
         });
-      } else {
-        // Contact already exists — update full name in CRM if missing or incomplete
-        if (firstName && firstName !== 'Customer') {
-          contact = await prisma.contact.update({
-            where: { id: contact.id },
-            data: {
-              firstName,
-              ...(lastName ? { lastName } : {}),
-            },
-          });
-        }
+      } else if (firstName && (!contact.firstName || contact.firstName === 'Customer')) {
+        // Update contact with clean full name if previous record was empty
+        contact = await prisma.contact.update({
+          where: { id: contact.id },
+          data: {
+            firstName,
+            ...(lastName ? { lastName } : {}),
+          },
+        });
       }
 
       if (contact.isOptedIn !== false && !contact.deletedAt) {
@@ -148,6 +147,10 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     throw new AppError('No eligible opted-in contacts found for the selected campaign audience.', 400, 'NO_TARGET_CONTACTS');
   }
 
+  const isBatchEnabled = Boolean(input.isBatchEnabled);
+  const batchSize = Math.max(50, Number(input.batchSize) || 50);
+  const batchIntervalMinutes = Math.max(1, Number(input.batchIntervalMinutes) || 20);
+
   // Create campaign record with recipient snapshots
   const campaign = await prisma.campaign.create({
     data: {
@@ -157,6 +160,9 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       status: input.scheduledAt ? 'SCHEDULED' : 'PROCESSING',
       scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
       totalTarget: targetContacts.length,
+      isBatchEnabled,
+      batchSize,
+      batchIntervalMinutes,
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,
@@ -170,9 +176,15 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   });
 
   // Enqueue jobs to BullMQ marketing queue
-  const delay = input.scheduledAt ? Math.max(0, new Date(input.scheduledAt).getTime() - Date.now()) : 0;
+  const baseDelay = input.scheduledAt ? Math.max(0, new Date(input.scheduledAt).getTime() - Date.now()) : 0;
+  const batchIntervalMs = batchIntervalMinutes * 60 * 1000;
 
-  for (const contact of targetContacts) {
+  for (let i = 0; i < targetContacts.length; i++) {
+    const contact = targetContacts[i];
+    const batchIndex = isBatchEnabled ? Math.floor(i / batchSize) : 0;
+    const batchDelayMs = isBatchEnabled ? batchIndex * batchIntervalMs : 0;
+    const totalJobDelay = baseDelay + batchDelayMs;
+
     await marketingQueue.add(
       'send-campaign-message',
       {
@@ -184,7 +196,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         templateLanguage: template.language,
         headerMediaUrl: input.headerMediaUrl,
       },
-      { delay }
+      { delay: totalJobDelay }
     );
   }
 

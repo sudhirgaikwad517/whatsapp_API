@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock } from 'lucide-react';
+import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api.client';
 
@@ -35,6 +35,9 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [csvContacts, setCsvContacts] = useState<CsvParsedContact[]>([]);
   const [csvFileName, setCsvFileName] = useState<string>('');
+  const [isBatchEnabled, setIsBatchEnabled] = useState<boolean>(true);
+  const [batchSize, setBatchSize] = useState<number>(50);
+  const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
   const [error, setError] = useState('');
 
   const queryClient = useQueryClient();
@@ -125,6 +128,9 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         audienceSource,
         tagIds: audienceSource === 'CRM' ? selectedTagIds : undefined,
         csvContacts: audienceSource === 'CSV' ? csvContacts : undefined,
+        isBatchEnabled,
+        batchSize,
+        batchIntervalMinutes,
       });
       return res.data.data;
     },
@@ -139,6 +145,9 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setSelectedTagIds([]);
       setCsvContacts([]);
       setCsvFileName('');
+      setIsBatchEnabled(true);
+      setBatchSize(50);
+      setBatchIntervalMinutes(20);
       setError('');
       onClose();
     },
@@ -277,6 +286,105 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                   onChange={(e) => setScheduledAt(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
+              </div>
+            )}
+          </div>
+
+          {/* ── Smart Batch Drip Dispatch Settings ────────────────────────── */}
+          <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-inner">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  Smart Batch Drip Dispatch (स्मार्ट बैच शेड्यूलिंग)
+                </span>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isBatchEnabled}
+                  onChange={(e) => setIsBatchEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Splits total campaign audience into staggered batches to prevent Meta spam blocks & improve delivery rate.
+            </p>
+
+            {isBatchEnabled && (
+              <div className="pt-3 border-t border-slate-800/60 space-y-3.5 animate-fadeIn">
+                {/* Batch Size Picker */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-200 block">Batch Volume (Contacts / Batch)</span>
+                    <span className="text-[10px] text-slate-500">Minimum: 50 Contacts</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl p-1">
+                    <button
+                      type="button"
+                      onClick={() => setBatchSize((prev) => Math.max(50, prev - 10))}
+                      disabled={batchSize <= 50}
+                      className="w-7 h-7 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-12 text-center text-xs font-mono font-bold text-emerald-400">
+                      {batchSize}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBatchSize((prev) => prev + 10)}
+                      className="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Buffer Interval Picker */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-200 block">Buffer Time Interval (Delay Mins)</span>
+                    <span className="text-[10px] text-slate-500">Delay between each batch trigger</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-xl p-1">
+                    <button
+                      type="button"
+                      onClick={() => setBatchIntervalMinutes((prev) => Math.max(5, prev - 5))}
+                      disabled={batchIntervalMinutes <= 5}
+                      className="w-7 h-7 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-14 text-center text-xs font-mono font-bold text-emerald-400">
+                      {batchIntervalMinutes} m
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBatchIntervalMinutes((prev) => prev + 5)}
+                      className="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-white text-xs font-bold transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live Preview Summary */}
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl text-[11px] text-emerald-300 space-y-1">
+                  <div className="font-semibold flex items-center">
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 shrink-0 text-emerald-400" />
+                    <span>Smart Batch Live Schedule Preview</span>
+                  </div>
+                  <div className="text-slate-300">
+                    Messages will be dispatched in <span className="font-bold text-emerald-400">{batchSize} contact batches</span> with a <span className="font-bold text-emerald-400">{batchIntervalMinutes} min delay</span> buffer between each batch.
+                  </div>
+                </div>
               </div>
             )}
           </div>
