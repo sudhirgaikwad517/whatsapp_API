@@ -99,19 +99,23 @@ export const AutoResponder: React.FC = () => {
       </div>
 
       {/* Rules Table Section */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl space-y-4 p-6">
+        <h3 className="font-bold text-white text-base flex items-center">
+          <Bot className="w-5 h-5 mr-2 text-emerald-400" />
+          <span>Active Automated Keyword Chatbot Rules</span>
+        </h3>
         {isLoading ? (
-          <div className="p-12 text-center text-slate-500 text-xs">Loading auto-reply chatbot rules...</div>
+          <div className="p-8 text-center text-slate-500 text-xs">Loading auto-reply chatbot rules...</div>
         ) : !rules || rules.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <Bot className="w-12 h-12 text-slate-600 mx-auto" />
+          <div className="p-8 text-center space-y-3">
+            <Bot className="w-10 h-10 text-slate-600 mx-auto" />
             <p className="text-sm text-slate-400 font-semibold">No custom keyword rules created yet.</p>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
               Click "Add New Keyword Rule" to set up your first automated WhatsApp chatbot response!
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto border border-slate-800/80 rounded-xl">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
@@ -185,6 +189,53 @@ export const AutoResponder: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Canned Responses & Quick Replies Library Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <h3 className="font-bold text-white text-base flex items-center">
+              <Tag className="w-5 h-5 mr-2 text-emerald-400 shrink-0" />
+              <span>/ Quick Reply Snippets & Canned Responses Library</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Create pre-written reply snippets for support agents. In Live Inbox, type <code className="bg-slate-800 text-emerald-400 px-1.5 py-0.5 rounded font-mono text-[11px]">/</code> to instantly search & insert!
+            </p>
+          </div>
+
+          <button
+            onClick={() => {
+              const shortcutInput = prompt('Enter Slash Shortcut (e.g. pricing, bank, timing):');
+              if (!shortcutInput) return;
+              const title = prompt('Enter Short Title (e.g. Price List 2026):');
+              if (!title) return;
+              const message = prompt('Enter Response Message Body:');
+              if (!message) return;
+
+              const shortcut = shortcutInput.trim().toLowerCase().replace(/^\/+/, '');
+
+              apiClient.post('/canned-responses', {
+                shortcut,
+                title,
+                message,
+              }).then(() => {
+                alert('✅ Quick Reply Snippet Created Successfully!');
+                queryClient.invalidateQueries({ queryKey: ['canned-responses'] });
+              }).catch((err: any) => {
+                alert('❌ Failed to create quick reply: ' + (err.response?.data?.error?.message || err.message));
+              });
+            }}
+            className="w-full sm:w-auto justify-center bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center transition-all cursor-pointer shadow-lg shadow-purple-500/20 shrink-0"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Quick Reply Snippet
+          </button>
+        </div>
+
+        <div className="p-4 bg-slate-950/60 border border-slate-800/80 rounded-xl text-xs text-slate-400">
+          💡 <span className="font-semibold text-slate-200">Pro-Tip for Live Inbox Agents:</span> When chatting with customers in Live Inbox, simply type <code className="bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px]">/pricing</code> or <code className="bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded font-mono text-[11px]">/bank</code> to autocomplete these pre-written messages instantly!
+        </div>
       </div>
 
       {/* Create Rule Modal */}
