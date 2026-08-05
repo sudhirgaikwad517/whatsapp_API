@@ -100,7 +100,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
   let previewBodyText = bodyText;
   extractedVars.forEach((vNum) => {
     const val = sampleValues[vNum] || `[${vNum}]`;
-    previewBodyText = previewBodyText.replaceAll(`{{${vNum}}}`, val);
+    previewBodyText = previewBodyText.split(`{{${vNum}}}`).join(val);
   });
 
   if (!isOpen) return null;
