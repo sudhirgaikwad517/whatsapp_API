@@ -133,6 +133,7 @@ model Organization {
   supportTickets    SupportTicket[]
   superAdminAuditLogs SuperAdminAuditLog[]
   autoResponderRules AutoResponderRule[]
+  cannedResponses   CannedResponse[]
   auditLogs         AuditLog[]
   timelines         ContactTimeline[]
 
@@ -614,4 +615,19 @@ model AutoResponderRule {
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, isActive])
+}
+
+model CannedResponse {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  shortcut       String       @db.VarChar(50)
+  title          String       @db.VarChar(100)
+  message        String       @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, shortcut])
+  @@index([organizationId])
 }

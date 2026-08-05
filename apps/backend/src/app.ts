@@ -17,6 +17,7 @@ import campaignRoutes from './routes/campaign.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import autoResponderRoutes from './routes/auto-responder.routes.js';
+import cannedResponseRoutes from './routes/canned-response.routes.js';
 import superAdminRoutes from './routes/superadmin.routes.js';
 
 export function createApp(): Application {
@@ -109,6 +110,7 @@ export function createApp(): Application {
   app.use('/api/v1/analytics', analyticsRoutes);
   app.use('/api/v1/billing', billingRoutes);
   app.use('/api/v1/auto-responder', autoResponderRoutes);
+  app.use('/api/v1/canned-responses', cannedResponseRoutes);
   app.use('/api/v1/superadmin', superAdminRoutes);
 
 

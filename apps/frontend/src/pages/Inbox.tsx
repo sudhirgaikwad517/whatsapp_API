@@ -17,6 +17,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Tag,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -38,6 +39,36 @@ export const Inbox: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [noteText, setNoteText] = useState('');
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+
+  // Fetch Canned Responses
+  const { data: cannedResponses } = useQuery({
+    queryKey: ['canned-responses'],
+    queryFn: async () => {
+      const res = await apiClient.get('/canned-responses');
+      return res.data.data;
+    },
+  });
+
+  const isTypingSlash = messageText.includes('/');
+  const slashIndex = messageText.lastIndexOf('/');
+  const slashQuery = isTypingSlash ? messageText.slice(slashIndex + 1).toLowerCase() : '';
+
+  const filteredCannedResponses = (cannedResponses || []).filter((item: any) =>
+    item.shortcut.toLowerCase().includes(slashQuery) ||
+    item.title.toLowerCase().includes(slashQuery) ||
+    item.message.toLowerCase().includes(slashQuery)
+  );
+
+  const applyCannedResponse = (message: string) => {
+    if (slashIndex !== -1) {
+      const beforeSlash = messageText.slice(0, slashIndex);
+      setMessageText(beforeSlash + message);
+    } else {
+      setMessageText(message);
+    }
+    setShowQuickReplies(false);
+  };
 
   // Fetch team members for assignment dropdown
   const { data: teamMembers } = useQuery({
@@ -497,7 +528,67 @@ export const Inbox: React.FC = () => {
                   </div>
 
                   {/* Static Fixed Bottom Input Bar */}
-                  <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 flex items-center space-x-2 sm:space-x-3 sticky bottom-0 z-20 shrink-0 backdrop-blur-md">
+                  <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 flex items-center space-x-2 sm:space-x-3 sticky bottom-0 z-20 shrink-0 backdrop-blur-md relative">
+                    {/* Quick Reply Autocomplete Popup Menu */}
+                    {(showQuickReplies || (isTypingSlash && filteredCannedResponses.length > 0)) && (
+                      <div className="absolute bottom-full mb-2 left-3 right-3 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-30 animate-fadeIn">
+                        <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center">
+                            <Tag className="w-3.5 h-3.5 mr-1.5" />
+                            / Quick Reply Snippets Autocomplete
+                          </span>
+                          <span className="text-[10px] text-slate-500">Click snippet to insert</span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto divide-y divide-slate-800/60">
+                          {filteredCannedResponses.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-500">
+                              No matching quick replies found. Add snippets in Settings!
+                            </div>
+                          ) : (
+                            filteredCannedResponses.map((item: any) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => applyCannedResponse(item.message)}
+                                className="w-full text-left p-3 hover:bg-slate-800/80 transition-all flex items-start justify-between group cursor-pointer"
+                              >
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono text-xs font-bold text-emerald-400 group-hover:text-emerald-300">
+                                      /{item.shortcut}
+                                    </span>
+                                    <span className="text-xs font-semibold text-white">
+                                      {item.title}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                                    {item.message}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 shrink-0 ml-2">
+                                  Use
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickReplies(!showQuickReplies)}
+                      className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+                        showQuickReplies
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                      title="Insert Quick Reply / Snippet"
+                    >
+                      /
+                    </button>
+
                     <button
                       type="button"
                       onClick={async () => {
@@ -515,7 +606,7 @@ export const Inbox: React.FC = () => {
                           alert(`Failed to attach media: ${err.message}`);
                         }
                       }}
-                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer"
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs"
                       title="Attach Image / Document"
                     >
                       📎
@@ -525,7 +616,7 @@ export const Inbox: React.FC = () => {
                       type="text"
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
-                      placeholder="Type your reply..."
+                      placeholder="Type your reply or '/' for quick snippets..."
                       className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
                     />
                     <button

@@ -341,6 +341,98 @@ export const Settings: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Canned Responses & Quick Replies Library Section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-white flex items-center text-base">
+              <Tag className="w-5 h-5 mr-2.5 text-emerald-400 shrink-0" />
+              <span>/ Quick Reply Snippets & Canned Responses Library</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Create pre-written reply snippets for support agents. In Live Inbox, type <code className="bg-slate-800 text-emerald-400 px-1.5 py-0.5 rounded font-mono text-[11px]">/</code> to instantly search & insert!
+            </p>
+          </div>
+
+          <button
+            onClick={() => {
+              const shortcutInput = prompt('Enter Shortcut (e.g. pricing, bank, timing):');
+              if (!shortcutInput) return;
+              const title = prompt('Enter Short Title (e.g. Price List 2026):');
+              if (!title) return;
+              const message = prompt('Enter Response Message Body:');
+              if (!message) return;
+
+              const shortcut = shortcutInput.trim().toLowerCase().replace(/^\/+/, '');
+
+              apiClient.post('/canned-responses', {
+                shortcut,
+                title,
+                message,
+              }).then(() => {
+                alert('✅ Quick Reply Snippet Created Successfully!');
+                queryClient.invalidateQueries({ queryKey: ['canned-responses'] });
+              }).catch(err => {
+                alert('❌ Failed to create quick reply: ' + (err.response?.data?.error?.message || err.message));
+              });
+            }}
+            className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center transition-all cursor-pointer shadow-lg shadow-emerald-500/20 shrink-0"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Add Quick Reply Snippet
+          </button>
+        </div>
+
+        <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-900/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                <th className="py-3 px-4">Slash Shortcut</th>
+                <th className="py-3 px-4">Title</th>
+                <th className="py-3 px-4">Message Snippet Body</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 text-slate-200">
+              {!cannedResponses || cannedResponses.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center py-6 text-slate-500">
+                    No quick reply snippets created yet. Click "Add Quick Reply Snippet" to add your first `/` shortcut!
+                  </td>
+                </tr>
+              ) : (
+                cannedResponses.map((item: any) => (
+                  <tr key={item.id} className="hover:bg-slate-900/40 transition-all">
+                    <td className="py-3.5 px-4 font-mono font-bold text-emerald-400">
+                      /{item.shortcut}
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-white">
+                      {item.title}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-300 max-w-md whitespace-pre-line leading-relaxed">
+                      {item.message}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete quick reply /${item.shortcut}?`)) {
+                            deleteCannedMutation.mutate(item.id);
+                          }
+                        }}
+                        className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
+                        title="Delete Snippet"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };
