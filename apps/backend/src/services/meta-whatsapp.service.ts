@@ -248,8 +248,11 @@ export interface CreateTemplateInput {
   category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
   language?: string;
   bodyText: string;
+  sampleBodyValues?: string[];
+  footerText?: string;
   headerType?: 'NONE' | 'TEXT' | 'IMAGE';
   headerText?: string;
+  headerSampleValue?: string;
   buttons?: Array<{
     type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL';
     text: string;
@@ -279,11 +282,17 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
 
   // Header component
   if (input.headerType === 'TEXT' && input.headerText?.trim()) {
-    components.push({
+    const headerComp: any = {
       type: 'HEADER',
       format: 'TEXT',
       text: input.headerText.trim(),
-    });
+    };
+    if (input.headerText.includes('{{1}}') && input.headerSampleValue?.trim()) {
+      headerComp.example = {
+        header_text: [input.headerSampleValue.trim()],
+      };
+    }
+    components.push(headerComp);
   } else if (input.headerType === 'IMAGE') {
     components.push({
       type: 'HEADER',
@@ -292,10 +301,31 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
   }
 
   // Body component
-  components.push({
+  const bodyComp: any = {
     type: 'BODY',
     text: input.bodyText.trim(),
-  });
+  };
+
+  // Extract variables like {{1}}, {{2}} for Meta required sample values
+  const matches = input.bodyText.match(/\{\{(\d+)\}\}/g);
+  if (matches && matches.length > 0) {
+    const sampleValues = (input.sampleBodyValues && input.sampleBodyValues.length > 0)
+      ? input.sampleBodyValues
+      : matches.map((_, idx) => `Sample${idx + 1}`);
+
+    bodyComp.example = {
+      body_text: [sampleValues],
+    };
+  }
+  components.push(bodyComp);
+
+  // Footer component
+  if (input.footerText?.trim()) {
+    components.push({
+      type: 'FOOTER',
+      text: input.footerText.trim(),
+    });
+  }
 
   // Buttons component
   if (input.buttons && input.buttons.length > 0) {

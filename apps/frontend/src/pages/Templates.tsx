@@ -43,10 +43,10 @@ export const Templates: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 sm:ml-auto">
           <button
             onClick={() => setIsCreateOpen(true)}
-            className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-xs sm:text-sm transition-all cursor-pointer shrink-0"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 text-xs sm:text-sm transition-all cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-4 h-4 mr-2" />
             <span>Create Meta Template</span>
@@ -55,7 +55,7 @@ export const Templates: React.FC = () => {
           <button
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
-            className="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold px-4 py-2.5 rounded-xl flex items-center border border-slate-700 text-xs sm:text-sm transition-all disabled:opacity-50 shrink-0"
+            className="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold px-4 py-2.5 rounded-xl flex items-center justify-center border border-slate-700 text-xs sm:text-sm transition-all disabled:opacity-50 whitespace-nowrap"
           >
             <RefreshCw className={`w-4 h-4 mr-2 stroke-[2.5] ${syncMutation.isPending ? 'animate-spin' : ''}`} />
             {syncMutation.isPending ? 'Syncing...' : 'Sync Meta Templates'}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FileCode2, Plus, Trash2, CheckCircle2, Phone, ExternalLink, MessageSquare, Send } from 'lucide-react';
+import { X, FileCode2, Plus, Trash2, CheckCircle2, Phone, ExternalLink, MessageSquare, Send, HelpCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api.client';
 
@@ -21,15 +21,27 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
   const [language, setLanguage] = useState('en_US');
   const [headerType, setHeaderType] = useState<'NONE' | 'TEXT' | 'IMAGE'>('NONE');
   const [headerText, setHeaderText] = useState('');
-  const [bodyText, setBodyText] = useState('Hello {{1}}, thank you for choosing our business!');
+  const [bodyText, setBodyText] = useState('Hello {{1}}, welcome to {{2}}! Your order {{3}} is confirmed.');
+  const [footerText, setFooterText] = useState('Reply STOP to unsubscribe');
   const [buttons, setButtons] = useState<ButtonItem[]>([]);
+  const [sampleValues, setSampleValues] = useState<Record<string, string>>({
+    '1': 'Rahul',
+    '2': 'Prowexa',
+    '3': '#9824',
+  });
   const [error, setError] = useState('');
 
   const queryClient = useQueryClient();
 
+  // Extract variables like {{1}}, {{2}} from bodyText
+  const matches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+  const extractedVars = Array.from(new Set(matches.map((v) => v.replace(/[\{\}]/g, '')))).sort((a, b) => Number(a) - Number(b));
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      const sampleBodyValues = extractedVars.map((vNum) => sampleValues[vNum]?.trim() || `Sample_${vNum}`);
+
       const res = await apiClient.post('/whatsapp/templates/create', {
         name: cleanName,
         category,
@@ -37,17 +49,20 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
         headerType,
         headerText: headerType === 'TEXT' ? headerText : undefined,
         bodyText,
+        sampleBodyValues,
+        footerText: footerText.trim() ? footerText : undefined,
         buttons,
       });
       return res.data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates-list'] });
-      alert('🎉 Success! Template submitted to Meta for approval.');
+      alert('🎉 Success! Template submitted to Meta for review.');
       setName('');
       setHeaderType('NONE');
       setHeaderText('');
       setBodyText('Hello {{1}}, thank you for choosing our business!');
+      setFooterText('');
       setButtons([]);
       setError('');
       onClose();
@@ -56,6 +71,12 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
       setError(err.response?.data?.error?.message || 'Failed to submit template to Meta.');
     },
   });
+
+  const addVariableToBody = () => {
+    const nextNum = extractedVars.length > 0 ? Math.max(...extractedVars.map(Number)) + 1 : 1;
+    setBodyText((prev) => prev + ` {{${nextNum}}}`);
+    setSampleValues((prev) => ({ ...prev, [nextNum]: `Sample_${nextNum}` }));
+  };
 
   const addButton = (type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL') => {
     if (buttons.length >= 3) {
@@ -75,18 +96,25 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
     setButtons(buttons.filter((_, i) => i !== index));
   };
 
+  // Live render for phone card preview replacing variables with sample values
+  let previewBodyText = bodyText;
+  extractedVars.forEach((vNum) => {
+    const val = sampleValues[vNum] || `[${vNum}]`;
+    previewBodyText = previewBodyText.replaceAll(`{{${vNum}}}`, val);
+  });
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
           <div>
             <h3 className="text-lg font-bold text-white flex items-center">
               <FileCode2 className="w-5 h-5 mr-2 text-emerald-400" />
               Create & Submit Meta Approved Template
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Submit directly to Meta Cloud API without opening Facebook Portal</p>
+            <p className="text-xs text-slate-400 mt-0.5">Define category, variables sample values, header, footer & interactive buttons for Meta approval</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />
@@ -100,7 +128,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Form Controls */}
+          {/* Left Column: Template Config Controls */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -179,7 +207,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
               {headerType === 'TEXT' && (
                 <input
                   type="text"
-                  placeholder="Header Title e.g. Special Offer!"
+                  placeholder="Header Title e.g. Special Diwali Offer!"
                   value={headerText}
                   onChange={(e) => setHeaderText(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
@@ -188,9 +216,19 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                Template Message Body
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Message Body Text
+                </label>
+
+                <button
+                  type="button"
+                  onClick={addVariableToBody}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
+                >
+                  + Add Variable {'{{'}{extractedVars.length + 1}{'}}'}
+                </button>
+              </div>
               <textarea
                 required
                 rows={4}
@@ -199,9 +237,55 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
                 placeholder="Use {{1}}, {{2}} for dynamic variables..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-white focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
               />
-              <span className="text-[10px] text-slate-500 mt-1 block">Tip: Add parameters like {'{{1}}'}, {'{{2}}'} to personalize messages per customer.</span>
             </div>
 
+            {/* Meta Variable Sample Values Required for Review */}
+            {extractedVars.length > 0 && (
+              <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-400 flex items-center">
+                    <HelpCircle className="w-3.5 h-3.5 mr-1" />
+                    Meta Review Sample Values (Required by Meta)
+                  </span>
+                  <span className="text-[10px] text-slate-500">Provide example values for review</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {extractedVars.map((vNum) => (
+                    <div key={vNum} className="flex items-center space-x-2">
+                      <span className="font-mono text-xs font-bold text-emerald-400 w-10 shrink-0">
+                        {`{{${vNum}}}`}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder={`e.g. Sample value for {{${vNum}}}`}
+                        value={sampleValues[vNum] || ''}
+                        onChange={(e) => setSampleValues({ ...sampleValues, [vNum]: e.target.value })}
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:border-emerald-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Footer Text */}
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                Footer Text (Optional)
+              </label>
+              <input
+                type="text"
+                maxLength={60}
+                placeholder="e.g. Reply STOP to unsubscribe"
+                value={footerText}
+                onChange={(e) => setFooterText(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Action Buttons */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -335,8 +419,14 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
                 )}
 
                 <div className="text-slate-200 whitespace-pre-line leading-relaxed font-sans text-xs">
-                  {bodyText || 'Your template message body will render here.'}
+                  {previewBodyText || 'Your template message body will render here.'}
                 </div>
+
+                {footerText && (
+                  <div className="text-[10px] text-slate-400 italic">
+                    {footerText}
+                  </div>
+                )}
 
                 <div className="text-[9px] text-slate-500 text-right">
                   {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
