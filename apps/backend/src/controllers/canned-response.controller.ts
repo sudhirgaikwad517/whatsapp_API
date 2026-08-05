@@ -1,8 +1,8 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middlewares/auth.middleware.js';
+import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import * as cannedResponseService from '../services/canned-response.service.js';
 
-export async function listCannedResponses(req: AuthRequest, res: Response) {
+export async function listCannedResponses(req: AuthenticatedRequest, res: Response) {
   try {
     const list = await cannedResponseService.listCannedResponses(req.user!.organizationId);
     return res.status(200).json({ status: 'success', data: list });
@@ -14,7 +14,7 @@ export async function listCannedResponses(req: AuthRequest, res: Response) {
   }
 }
 
-export async function createCannedResponse(req: AuthRequest, res: Response) {
+export async function createCannedResponse(req: AuthenticatedRequest, res: Response) {
   try {
     const item = await cannedResponseService.createCannedResponse(req.user!.organizationId, req.body);
     return res.status(201).json({ status: 'success', data: item });
@@ -26,7 +26,7 @@ export async function createCannedResponse(req: AuthRequest, res: Response) {
   }
 }
 
-export async function deleteCannedResponse(req: AuthRequest, res: Response) {
+export async function deleteCannedResponse(req: AuthenticatedRequest, res: Response) {
   try {
     const result = await cannedResponseService.deleteCannedResponse(req.user!.organizationId, req.params.id);
     return res.status(200).json({ status: 'success', data: result });

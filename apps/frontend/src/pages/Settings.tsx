@@ -69,6 +69,25 @@ export const Settings: React.FC = () => {
     },
   });
 
+  // Fetch Canned Responses
+  const { data: cannedResponses } = useQuery({
+    queryKey: ['canned-responses'],
+    queryFn: async () => {
+      const res = await apiClient.get('/canned-responses');
+      return res.data.data;
+    },
+  });
+
+  // Delete Canned Response mutation
+  const deleteCannedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/canned-responses/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['canned-responses'] });
+    },
+  });
+
   return (
     <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 w-full min-w-0">
       <div>
