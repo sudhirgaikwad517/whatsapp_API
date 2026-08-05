@@ -65,7 +65,7 @@ export const Billing: React.FC = () => {
   const planTier = creditsData?.planTier ?? 'PRO';
 
   return (
-    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 bg-slate-950 text-slate-100 min-h-screen w-full max-w-full overflow-x-hidden">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 text-slate-100 w-full">
       {/* ── Page Header ── */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800/80 pb-6">
         <div>
