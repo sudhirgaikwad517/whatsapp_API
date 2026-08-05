@@ -65,3 +65,13 @@ export async function embeddedSignup(req: AuthenticatedRequest, res: Response, n
     next(err);
   }
 }
+
+export async function createTemplate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const result = await MetaService.createMetaTemplate(orgId, req.body);
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}

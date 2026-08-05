@@ -44,4 +44,11 @@ router.get('/templates', WhatsAppController.getTemplates);
  */
 router.post('/templates/sync', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), WhatsAppController.syncTemplates);
 
+/**
+ * @route   POST /api/v1/whatsapp/templates/create
+ * @desc    Submit new message template to Meta Graph API
+ * @access  Bearer (Manager, Business Owner)
+ */
+router.post('/templates/create', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), WhatsAppController.createTemplate);
+
 export default router;

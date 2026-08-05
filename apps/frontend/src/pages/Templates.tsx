@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileCode2, RefreshCw, CheckCircle2, MessageSquare, Tag } from 'lucide-react';
+import { FileCode2, RefreshCw, CheckCircle2, MessageSquare, Tag, Plus } from 'lucide-react';
 import { apiClient } from '../services/api.client';
+import { CreateTemplateModal } from '../components/templates/CreateTemplateModal';
 
 export const Templates: React.FC = () => {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: templates, isLoading } = useQuery({
@@ -29,21 +31,36 @@ export const Templates: React.FC = () => {
   });
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-8 space-y-6 w-full min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Meta Message Templates</h1>
-          <p className="text-sm text-slate-400 mt-1">Official Graph API Approved WhatsApp Templates & Visual Card Previews</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center">
+            <FileCode2 className="w-6 h-6 sm:w-7 sm:h-7 mr-3 text-emerald-400 shrink-0" />
+            <span>Meta Message Templates</span>
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+            Create, Submit & Manage Official Graph API Approved WhatsApp Templates (In-Dashboard Management)
+          </p>
         </div>
 
-        <button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 stroke-[2.5] ${syncMutation.isPending ? 'animate-spin' : ''}`} />
-          {syncMutation.isPending ? 'Syncing from Meta...' : 'Sync Meta Templates'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-xs sm:text-sm transition-all cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            <span>Create Meta Template</span>
+          </button>
+
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className="w-full sm:w-auto justify-center bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold px-4 py-2.5 rounded-xl flex items-center border border-slate-700 text-xs sm:text-sm transition-all disabled:opacity-50 shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 stroke-[2.5] ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+            {syncMutation.isPending ? 'Syncing...' : 'Sync Meta Templates'}
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -103,6 +120,8 @@ export const Templates: React.FC = () => {
           })}
         </div>
       )}
+
+      <CreateTemplateModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
     </div>
   );
 };

@@ -242,3 +242,118 @@ export async function processEmbeddedSignup(
 
   return account;
 }
+
+export interface CreateTemplateInput {
+  name: string;
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+  language?: string;
+  bodyText: string;
+  headerType?: 'NONE' | 'TEXT' | 'IMAGE';
+  headerText?: string;
+  buttons?: Array<{
+    type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL';
+    text: string;
+    phoneNumber?: string;
+    url?: string;
+  }>;
+}
+
+export async function createMetaTemplate(organizationId: string, input: CreateTemplateInput) {
+  const waAccount = await prisma.whatsappAccount.findFirst({
+    where: { organizationId, deletedAt: null },
+  });
+
+  if (!waAccount) {
+    throw new AppError('No WhatsApp account connected. Connect Meta WhatsApp account first in Settings.', 404, 'NO_WHATSAPP_ACCOUNT');
+  }
+
+  const cleanName = input.name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  if (!cleanName) {
+    throw new AppError('Template name is required.', 400, 'INVALID_NAME');
+  }
+  if (!input.bodyText?.trim()) {
+    throw new AppError('Template body text is required.', 400, 'INVALID_BODY');
+  }
+
+  const components: any[] = [];
+
+  // Header component
+  if (input.headerType === 'TEXT' && input.headerText?.trim()) {
+    components.push({
+      type: 'HEADER',
+      format: 'TEXT',
+      text: input.headerText.trim(),
+    });
+  } else if (input.headerType === 'IMAGE') {
+    components.push({
+      type: 'HEADER',
+      format: 'IMAGE',
+    });
+  }
+
+  // Body component
+  components.push({
+    type: 'BODY',
+    text: input.bodyText.trim(),
+  });
+
+  // Buttons component
+  if (input.buttons && input.buttons.length > 0) {
+    components.push({
+      type: 'BUTTONS',
+      buttons: input.buttons.map((b) => {
+        if (b.type === 'PHONE_NUMBER') {
+          return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber };
+        }
+        if (b.type === 'URL') {
+          return { type: 'URL', text: b.text, url: b.url };
+        }
+        return { type: 'QUICK_REPLY', text: b.text };
+      }),
+    });
+  }
+
+  const payload = {
+    name: cleanName,
+    category: input.category || 'MARKETING',
+    language: input.language || 'en_US',
+    components,
+  };
+
+  const decryptedToken = decryptToken(waAccount.encryptedAccessToken);
+  const url = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${waAccount.wabaId}/message_templates`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${decryptedToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseData = (await response.json()) as any;
+
+  if (!response.ok) {
+    logger.error({ responseData }, 'Failed to submit template to Meta Graph API');
+    throw new AppError(
+      responseData?.error?.message || 'Meta API rejected template creation request.',
+      response.status || 400,
+      'META_TEMPLATE_CREATE_ERROR'
+    );
+  }
+
+  const template = await prisma.template.create({
+    data: {
+      organizationId,
+      metaTemplateId: responseData.id || `tpl_${Date.now()}`,
+      name: cleanName,
+      category: payload.category,
+      language: payload.language,
+      status: responseData.status || 'PENDING',
+      components,
+    },
+  });
+
+  return template;
+}
