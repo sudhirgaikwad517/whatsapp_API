@@ -21,6 +21,7 @@
     "@google/genai": "^2.15.0",
     "@prisma/client": "^5.14.0",
     "@prowexa/shared-types": "file:../../packages/shared-types",
+    "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.7.14",
     "cors": "^2.8.5",
