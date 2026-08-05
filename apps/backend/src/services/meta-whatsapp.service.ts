@@ -346,6 +346,7 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
   const template = await prisma.template.create({
     data: {
       organizationId,
+      whatsappAccountId: waAccount.id,
       metaTemplateId: responseData.id || `tpl_${Date.now()}`,
       name: cleanName,
       category: payload.category,
