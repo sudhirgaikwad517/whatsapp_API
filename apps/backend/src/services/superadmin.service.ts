@@ -241,22 +241,57 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
 
   const orgsWithFinancials = await Promise.all(
     organizations.map(async (org) => {
+      const waAccount = org.whatsappAccounts?.[0];
       const [marketingSent, totalOutboundDelivered] = await Promise.all([
         prisma.campaignRecipient.count({ where: { campaign: { organizationId: org.id }, deliveredAt: { not: null } } }),
         prisma.message.count({ where: { organizationId: org.id, direction: 'OUTBOUND', status: 'DELIVERED' } }),
       ]);
 
       const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
-      const metaCost = Number((marketingSent * 0.78 + utilitySent * 0.15).toFixed(2));
-      const markupProfit = Number((marketingSent * 0.22 + utilitySent * 0.05).toFixed(2));
-      const grossBilled = Number((metaCost + markupProfit).toFixed(2));
+      
+      // Default to official Meta India Rate Card: Marketing ₹0.8628, Utility ₹0.1150
+      let metaCost = Number((marketingSent * 0.8628 + utilitySent * 0.1150).toFixed(2));
+      let clientBilled = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+
+      // Attempt live Meta Graph API telemetry fetch for this organization WABA
+      if (waAccount && waAccount.wabaId) {
+        try {
+          const { decryptToken } = await import('../utils/encryption.js');
+          const axios = (await import('axios')).default;
+          const fullAcc = await prisma.whatsappAccount.findUnique({ where: { id: waAccount.id } });
+          if (fullAcc?.encryptedAccessToken) {
+            const token = decryptToken(fullAcc.encryptedAccessToken);
+            const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
+            const endTime = Math.floor(Date.now() / 1000);
+            const res = await axios.get(
+              `https://graph.facebook.com/v20.0/${waAccount.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
+              { timeout: 3000 }
+            );
+            if (res.data?.analytics?.data) {
+              let apiMetaCostSum = 0;
+              res.data.analytics.data.forEach((item: any) => {
+                item.data_points?.forEach((dp: any) => {
+                  apiMetaCostSum += Number(dp.cost || 0);
+                });
+              });
+              if (apiMetaCostSum > 0) {
+                metaCost = Number(apiMetaCostSum.toFixed(2));
+              }
+            }
+          }
+        } catch {
+          // Gracefully keep official rate card calculation
+        }
+      }
+
+      const markupProfit = Number(Math.max(0, clientBilled - metaCost).toFixed(2));
 
       return {
         ...org,
         financialTelemetry: {
           metaCost,
           markupProfit,
-          grossBilled,
+          clientBilled,
           marketingSent,
           utilitySent,
         },

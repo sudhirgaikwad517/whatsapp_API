@@ -432,13 +432,16 @@ export const SuperAdminDashboard: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Per-Organization Meta Charges & Markup Profit */}
-                        <td className="py-4 px-6 text-xs">
+                        {/* Per-Organization Meta Charges, Client Billed & Markup Profit */}
+                        <td className="py-4 px-6 text-xs space-y-0.5">
                           <div>
-                            <span className="text-amber-400 font-bold">Meta Cost: ₹{metaCost.toFixed(2)}</span>
+                            <span className="text-blue-400 font-bold">Client Billed: ₹{(org.financialTelemetry?.clientBilled || 0).toFixed(2)}</span>
                           </div>
                           <div>
-                            <span className="text-emerald-400 font-bold">Markup Profit: ₹{markupProfit.toFixed(2)}</span>
+                            <span className="text-amber-400 font-semibold text-[11px]">Meta Cost: ₹{metaCost.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-emerald-400 font-bold text-[11px]">Net Profit: ₹{markupProfit.toFixed(2)}</span>
                           </div>
                         </td>
 
