@@ -370,7 +370,10 @@ export async function retryCampaign(organizationId: string, campaignId: string) 
     include: {
       template: true,
       recipients: {
-        where: { status: { in: ['ACCEPTED', 'FAILED'] } },
+        where: {
+          status: 'ACCEPTED',
+          sentAt: null,
+        },
         include: { contact: { select: { id: true, phoneNumber: true } } },
       },
     },
@@ -379,7 +382,7 @@ export async function retryCampaign(organizationId: string, campaignId: string) 
   if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
 
   if (!campaign.recipients.length) {
-    throw new AppError('No unsent or failed recipients to retry for this campaign.', 400, 'NO_RECIPIENTS_TO_RETRY');
+    throw new AppError('No unsent or pending recipients to resume for this campaign.', 400, 'NO_RECIPIENTS_TO_RETRY');
   }
 
   // Update status to PROCESSING
@@ -388,7 +391,7 @@ export async function retryCampaign(organizationId: string, campaignId: string) 
     data: { status: 'PROCESSING' },
   });
 
-  // Re-enqueue jobs to BullMQ for unsent/failed recipients
+  // Re-enqueue jobs to BullMQ for unsent recipients only
   for (const rec of campaign.recipients) {
     await marketingQueue.add(
       'send-campaign-message',
@@ -407,7 +410,7 @@ export async function retryCampaign(organizationId: string, campaignId: string) 
     );
   }
 
-  return { success: true, retriedCount: campaign.recipients.length, message: `Re-queued ${campaign.recipients.length} messages for dispatch.` };
+  return { success: true, retriedCount: campaign.recipients.length, message: `Resumed dispatch for ${campaign.recipients.length} pending messages.` };
 }
 
 export async function deleteCampaign(organizationId: string, campaignId: string) {

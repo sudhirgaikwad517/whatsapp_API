@@ -145,15 +145,15 @@ export const Campaigns: React.FC = () => {
                           <BarChart3 className="w-3.5 h-3.5 mr-1.5" />
                           Analytics
                         </button>
-                        {camp.sentCount < camp.totalTarget && (
+                        {(camp.status === 'PAUSED' || camp.status === 'PROCESSING') && (
                           <button
                             onClick={(e) => handleRetryCampaign(camp.id, camp.name, e)}
                             disabled={retryingId === camp.id}
-                            title="Retry/Resume Unsent Campaign Messages"
+                            title="Resume Pending Unsent Messages"
                             className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-semibold flex items-center transition-all disabled:opacity-50"
                           >
                             <RotateCw className={`w-3.5 h-3.5 mr-1.5 ${retryingId === camp.id ? 'animate-spin' : ''}`} />
-                            Retry
+                            Resume
                           </button>
                         )}
                         <button
