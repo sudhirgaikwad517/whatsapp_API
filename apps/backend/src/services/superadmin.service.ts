@@ -122,14 +122,19 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    const [marketingSent, totalDelivered, inboundCount] = await Promise.all([
-      prisma.campaignRecipient.count({ where: { deliveredAt: { not: null }, status: 'DELIVERED' } }),
-      prisma.message.count({ where: { direction: 'OUTBOUND', status: 'DELIVERED' } }),
+    const [marketingSent, totalOutboundDelivered, inboundCount] = await Promise.all([
+      prisma.campaignRecipient.count({
+        where: {
+          errorCode: null,
+          OR: [{ deliveredAt: { not: null } }, { status: { in: ['DELIVERED', 'READ', 'SENT', 'ACCEPTED'] } }],
+        },
+      }),
+      prisma.message.count({ where: { direction: 'OUTBOUND', errorCode: null } }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
-    metaAnalytics.metaDeliveredUtility = Math.max(0, totalDelivered - marketingSent);
+    metaAnalytics.metaDeliveredUtility = Math.max(0, totalOutboundDelivered - marketingSent);
     metaAnalytics.metaDeliveredService = inboundCount;
 
     let apiCostSum = 0;
@@ -140,7 +145,7 @@ export async function getExecutiveDashboardKpi() {
           const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
           const endTime = Math.floor(Date.now() / 1000);
 
-          // Attempt Meta WABA Insights Endpoint
+          // Meta Graph API WABA Insights Endpoint Call
           const res = await axios.get(
             `https://graph.facebook.com/v20.0/${acc.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
             { timeout: 4000 }
@@ -153,14 +158,14 @@ export async function getExecutiveDashboardKpi() {
             });
           }
         } catch {
-          // Graceful fallback to official Meta India Rate Card
+          // Graceful fallback to exact Meta India Rate Card
         }
       }
     }
 
     metaAnalytics.actualMetaCostInINR = apiCostSum > 0
       ? Number(apiCostSum.toFixed(2))
-      : Number((metaAnalytics.metaDeliveredMarketing * 0.8628 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
+      : Number((metaAnalytics.metaDeliveredMarketing * 0.86309 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
   } catch {
     // Graceful fallback
   }
@@ -245,7 +250,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
 
-      // Query actual ledger debits & recipient statuses
+      // Query actual ledger debits & recipient statuses without restrictive filters
       const [ledgerDebitsSum, marketingSent, totalOutboundDelivered] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
@@ -257,23 +262,23 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
         prisma.campaignRecipient.count({
           where: {
             campaign: { organizationId: org.id },
-            status: 'DELIVERED',
-            deliveredAt: { not: null },
+            errorCode: null,
+            OR: [{ deliveredAt: { not: null } }, { status: { in: ['DELIVERED', 'READ', 'SENT', 'ACCEPTED'] } }],
           },
         }),
         prisma.message.count({
           where: {
             organizationId: org.id,
             direction: 'OUTBOUND',
-            status: 'DELIVERED',
+            errorCode: null,
           },
         }),
       ]);
 
       const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
       
-      // Meta official India Rate Card: Marketing ₹0.8628, Utility ₹0.1150
-      let metaCost = Number((marketingSent * 0.8628 + utilitySent * 0.1150).toFixed(2));
+      // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
+      let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
       
       // Client Billed: Use actual WalletLedger debit sum if available, else calculate at Prowexa Rates
       let clientBilled = ledgerDebitsSum._sum?.amount
