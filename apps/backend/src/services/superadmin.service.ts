@@ -112,7 +112,6 @@ export async function getExecutiveDashboardKpi() {
 
   const billedUsageSum = Number(allLedgerDebits._sum?.amount || 0);
   const rechargeSum = Number(allRecharges._sum?.amount || 0);
-  const totalWalletBalance = Number(walletsSum._sum.availableBalance || 0);
   const totalReservedBalance = Number(walletsSum._sum.reservedBalance || 0);
 
   // Fetch real-time Meta Graph API analytics & actual delivered charges
@@ -202,6 +201,11 @@ export async function getExecutiveDashboardKpi() {
     : Number((netRevenue * 0.8).toFixed(2));
 
   const platformProfit = Number((grossRevenue - metaPayable).toFixed(2));
+
+  // Fix: Calculate Dynamic Total Client Wallet Balance (Raw DB - Global Unbilled Charges)
+  const globalUnbilledCharges = Math.max(0, clientBilledCalculated - billedUsageSum);
+  const rawTotalWalletBalance = Number(walletsSum._sum.availableBalance || 0);
+  const totalWalletBalance = rawTotalWalletBalance - globalUnbilledCharges;
 
   return {
     kpi: {
