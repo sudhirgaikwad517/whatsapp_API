@@ -239,7 +239,32 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     }),
   ]);
 
-  return { organizations, total, page, limit };
+  const orgsWithFinancials = await Promise.all(
+    organizations.map(async (org) => {
+      const [marketingSent, totalOutboundDelivered] = await Promise.all([
+        prisma.campaignRecipient.count({ where: { campaign: { organizationId: org.id }, deliveredAt: { not: null } } }),
+        prisma.message.count({ where: { organizationId: org.id, direction: 'OUTBOUND', status: 'DELIVERED' } }),
+      ]);
+
+      const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
+      const metaCost = Number((marketingSent * 0.78 + utilitySent * 0.15).toFixed(2));
+      const markupProfit = Number((marketingSent * 0.22 + utilitySent * 0.05).toFixed(2));
+      const grossBilled = Number((metaCost + markupProfit).toFixed(2));
+
+      return {
+        ...org,
+        financialTelemetry: {
+          metaCost,
+          markupProfit,
+          grossBilled,
+          marketingSent,
+          utilitySent,
+        },
+      };
+    })
+  );
+
+  return { organizations: orgsWithFinancials, total, page, limit };
 }
 
 export async function impersonateTenant(organizationId: string, actorAdminId?: string, reason?: string) {

@@ -361,6 +361,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   <th className="py-4 px-6">Plan Tier</th>
                   <th className="py-4 px-6">AI Credits</th>
                   <th className="py-4 px-6">Wallet Balance</th>
+                  <th className="py-4 px-6">Meta Cost & Markup Profit</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 text-right">ERP Actions</th>
                 </tr>
@@ -368,17 +369,19 @@ export const SuperAdminDashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-500">Loading tenant ERP registry...</td>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">Loading tenant ERP registry...</td>
                   </tr>
                 ) : organizations.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-500">No organizations found.</td>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">No organizations found.</td>
                   </tr>
                 ) : (
                   organizations.map((org: any) => {
                     const connectedWaba = org.whatsappAccounts?.[0];
                     const currentPlan = org.planTier || 'PRO';
                     const aiBalance = org.aiCreditsBalance ?? 1000;
+                    const metaCost = org.financialTelemetry?.metaCost || 0;
+                    const markupProfit = org.financialTelemetry?.markupProfit || 0;
                     return (
                       <tr key={org.id} className="hover:bg-slate-800/40 transition-all">
                         <td className="py-4 px-6 font-bold text-white">
@@ -426,6 +429,16 @@ export const SuperAdminDashboard: React.FC = () => {
                             >
                               +₹500
                             </button>
+                          </div>
+                        </td>
+
+                        {/* Per-Organization Meta Charges & Markup Profit */}
+                        <td className="py-4 px-6 text-xs">
+                          <div>
+                            <span className="text-amber-400 font-bold">Meta Cost: ₹{metaCost.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-emerald-400 font-bold">Markup Profit: ₹{markupProfit.toFixed(2)}</span>
                           </div>
                         </td>
 
