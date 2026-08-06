@@ -123,7 +123,7 @@ export async function getExecutiveDashboardKpi() {
     });
 
     const [marketingSent, totalDelivered, inboundCount] = await Promise.all([
-      prisma.campaignRecipient.count({ where: { deliveredAt: { not: null } } }),
+      prisma.campaignRecipient.count({ where: { deliveredAt: { not: null }, status: 'DELIVERED' } }),
       prisma.message.count({ where: { direction: 'OUTBOUND', status: 'DELIVERED' } }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
@@ -139,9 +139,11 @@ export async function getExecutiveDashboardKpi() {
           const token = decryptToken(acc.encryptedAccessToken);
           const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
           const endTime = Math.floor(Date.now() / 1000);
+
+          // Attempt Meta WABA Insights Endpoint
           const res = await axios.get(
             `https://graph.facebook.com/v20.0/${acc.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
-            { timeout: 3000 }
+            { timeout: 4000 }
           );
           if (res.data?.analytics?.data) {
             res.data.analytics.data.forEach((item: any) => {
@@ -151,14 +153,14 @@ export async function getExecutiveDashboardKpi() {
             });
           }
         } catch {
-          // Fallback to exact Meta rate card
+          // Graceful fallback to official Meta India Rate Card
         }
       }
     }
 
     metaAnalytics.actualMetaCostInINR = apiCostSum > 0
       ? Number(apiCostSum.toFixed(2))
-      : Number((metaAnalytics.metaDeliveredMarketing * 0.78 + metaAnalytics.metaDeliveredUtility * 0.15).toFixed(2));
+      : Number((metaAnalytics.metaDeliveredMarketing * 0.8628 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
   } catch {
     // Graceful fallback
   }
@@ -242,16 +244,41 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
   const orgsWithFinancials = await Promise.all(
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
-      const [marketingSent, totalOutboundDelivered] = await Promise.all([
-        prisma.campaignRecipient.count({ where: { campaign: { organizationId: org.id }, deliveredAt: { not: null } } }),
-        prisma.message.count({ where: { organizationId: org.id, direction: 'OUTBOUND', status: 'DELIVERED' } }),
+
+      // Query actual ledger debits & recipient statuses
+      const [ledgerDebitsSum, marketingSent, totalOutboundDelivered] = await Promise.all([
+        prisma.walletLedger.aggregate({
+          _sum: { amount: true },
+          where: {
+            organizationId: org.id,
+            transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] },
+          },
+        }),
+        prisma.campaignRecipient.count({
+          where: {
+            campaign: { organizationId: org.id },
+            status: 'DELIVERED',
+            deliveredAt: { not: null },
+          },
+        }),
+        prisma.message.count({
+          where: {
+            organizationId: org.id,
+            direction: 'OUTBOUND',
+            status: 'DELIVERED',
+          },
+        }),
       ]);
 
       const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
       
-      // Default to official Meta India Rate Card: Marketing ₹0.8628, Utility ₹0.1150
+      // Meta official India Rate Card: Marketing ₹0.8628, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.8628 + utilitySent * 0.1150).toFixed(2));
-      let clientBilled = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+      
+      // Client Billed: Use actual WalletLedger debit sum if available, else calculate at Prowexa Rates
+      let clientBilled = ledgerDebitsSum._sum?.amount
+        ? Number(Number(ledgerDebitsSum._sum.amount).toFixed(2))
+        : Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
 
       // Attempt live Meta Graph API telemetry fetch for this organization WABA
       if (waAccount && waAccount.wabaId) {
@@ -265,7 +292,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             const endTime = Math.floor(Date.now() / 1000);
             const res = await axios.get(
               `https://graph.facebook.com/v20.0/${waAccount.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
-              { timeout: 3000 }
+              { timeout: 4000 }
             );
             if (res.data?.analytics?.data) {
               let apiMetaCostSum = 0;
