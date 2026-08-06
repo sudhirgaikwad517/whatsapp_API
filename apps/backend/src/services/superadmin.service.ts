@@ -349,8 +349,16 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
 
       const markupProfit = Number(Math.max(0, clientBilled - metaCost).toFixed(2));
 
+      const dbBalance = Number(org.wallet?.availableBalance || 0);
+      const unbilledCharges = clientBilled > ledgerDebits ? clientBilled - ledgerDebits : 0;
+      const netBalance = dbBalance - unbilledCharges;
+
       return {
         ...org,
+        wallet: org.wallet ? {
+          ...org.wallet,
+          availableBalance: netBalance,
+        } : null,
         financialTelemetry: {
           metaCost,
           markupProfit,

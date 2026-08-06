@@ -228,7 +228,63 @@ export async function rechargeWallet(
       });
     }
 
-    const openingBalance = wallet.availableBalance;
+    // 1. Calculate and auto-commit any pending unbilled charges BEFORE recharge
+    const exactTemplateCounts: any[] = await tx.$queryRaw`
+      SELECT 
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
+      FROM "Message" m
+      INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
+      WHERE m."organizationId" = ${organizationId}::uuid
+        AND m."direction" = 'OUTBOUND'
+        AND m."type" = 'TEMPLATE'
+        AND m."status" != 'FAILED'
+    `;
+
+    const campaignRecipients = await tx.campaignRecipient.count({
+      where: { campaign: { organizationId: organizationId }, status: { not: 'FAILED' } },
+    });
+
+    const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+    const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
+    const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+    
+    const ledgerDebitsSum = await tx.walletLedger.aggregate({
+      _sum: { amount: true },
+      where: { organizationId: organizationId, transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
+    });
+    const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
+    const unbilledCharges = calculatedCharges > ledgerDebits ? calculatedCharges - ledgerDebits : 0;
+
+    let currentBalance = wallet.availableBalance;
+
+    if (unbilledCharges > 0) {
+      const debitAmount = new Prisma.Decimal(unbilledCharges);
+      const newBalanceAfterDebit = Decimal.sub(currentBalance, debitAmount);
+      
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { availableBalance: { decrement: debitAmount } },
+      });
+
+      await tx.walletLedger.create({
+        data: {
+          walletId: wallet.id,
+          organizationId,
+          transactionType: 'DEBIT',
+          amount: debitAmount,
+          openingBalance: currentBalance,
+          closingBalance: newBalanceAfterDebit,
+          referenceId: `USAGE_${Date.now()}`,
+          description: 'Auto-debit of pending messaging usage charges',
+        },
+      });
+      
+      currentBalance = newBalanceAfterDebit;
+    }
+
+    // 2. Process the actual Recharge
+    const openingBalance = currentBalance;
     const closingBalance = Decimal.add(openingBalance, amount);
 
     const updatedWallet = await tx.wallet.update({
