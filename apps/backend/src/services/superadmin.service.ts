@@ -122,19 +122,21 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    const [marketingSent, totalOutboundDelivered, inboundCount] = await Promise.all([
+    const [marketingSent, utilitySent, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
           errorCode: null,
           OR: [{ deliveredAt: { not: null } }, { status: { in: ['DELIVERED', 'READ', 'SENT', 'ACCEPTED'] } }],
         },
       }),
-      prisma.message.count({ where: { direction: 'OUTBOUND', errorCode: null } }),
+      prisma.message.count({
+        where: { direction: 'OUTBOUND', type: 'TEMPLATE', errorCode: null },
+      }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
-    metaAnalytics.metaDeliveredUtility = Math.max(0, totalOutboundDelivered - marketingSent);
+    metaAnalytics.metaDeliveredUtility = utilitySent;
     metaAnalytics.metaDeliveredService = inboundCount;
 
     let apiCostSum = 0;
@@ -250,8 +252,8 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
 
-      // Query actual ledger debits & recipient statuses without restrictive filters
-      const [ledgerDebitsSum, marketingSent, totalOutboundDelivered] = await Promise.all([
+      // Query actual ledger debits & recipient statuses strictly separating Template Utility vs Free Chat Window
+      const [ledgerDebitsSum, marketingSent, utilitySent] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
@@ -270,13 +272,12 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
           where: {
             organizationId: org.id,
             direction: 'OUTBOUND',
+            type: 'TEMPLATE',
             errorCode: null,
           },
         }),
       ]);
 
-      const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
-      
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
       
@@ -545,12 +546,21 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
-  const [marketingSent, totalOutboundDelivered, inboundCount, ledgers, invoices] = await Promise.all([
+  const [marketingSent, utilitySent, inboundCount, ledgers, invoices] = await Promise.all([
     prisma.campaignRecipient.count({
-      where: { campaign: { organizationId: org.id }, status: 'DELIVERED', deliveredAt: { not: null } },
+      where: {
+        campaign: { organizationId: org.id },
+        errorCode: null,
+        OR: [{ deliveredAt: { not: null } }, { status: { in: ['DELIVERED', 'READ', 'SENT', 'ACCEPTED'] } }],
+      },
     }),
     prisma.message.count({
-      where: { organizationId: org.id, direction: 'OUTBOUND', status: 'DELIVERED' },
+      where: {
+        organizationId: org.id,
+        direction: 'OUTBOUND',
+        type: 'TEMPLATE',
+        errorCode: null,
+      },
     }),
     prisma.message.count({
       where: { organizationId: org.id, direction: 'INBOUND' },
@@ -567,8 +577,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     }),
   ]);
 
-  const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
-  const marketingMetaCost = Number((marketingSent * 0.8628).toFixed(2));
+  const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
 
@@ -592,7 +601,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     metaBreakdown: {
       marketing: {
         count: marketingSent,
-        metaRate: 0.8628,
+        metaRate: 0.86309,
         metaCost: marketingMetaCost,
         clientRate: 1.00,
         clientBilled: marketingClientBilled,
