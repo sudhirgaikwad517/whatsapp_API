@@ -68,8 +68,8 @@ export const Billing: React.FC = () => {
   });
 
   const walletRechargeMutation = useMutation({
-    mutationFn: async (amount: number) => {
-      const res = await apiClient.post('/billing/recharge-wallet', { amount });
+    mutationFn: async (payload: { amount: number; razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string; isMock?: boolean }) => {
+      const res = await apiClient.post('/billing/recharge-wallet', payload);
       return res.data.data;
     },
     onSuccess: () => {
@@ -79,6 +79,55 @@ export const Billing: React.FC = () => {
     },
     onError: (err: any) => {
       alert(`Recharge failed: ${err.message}`);
+    },
+  });
+
+  const createRazorpayOrderMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await apiClient.post('/billing/create-razorpay-order', { amount });
+      return res.data.data;
+    },
+    onSuccess: (data, amount) => {
+      if (data.isMock) {
+        // Fallback to mock flow if Razorpay keys are missing
+        walletRechargeMutation.mutate({
+          amount,
+          razorpay_order_id: data.id,
+          razorpay_payment_id: `mock_pay_${Date.now()}`,
+          isMock: true
+        });
+        return;
+      }
+
+      const options = {
+        key: data.key,
+        amount: data.amount,
+        currency: data.currency,
+        name: 'Prowexa SaaS Platform',
+        description: 'Wallet Recharge',
+        order_id: data.id,
+        handler: function (response: any) {
+          walletRechargeMutation.mutate({
+            amount,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            isMock: false
+          });
+        },
+        prefill: {
+          name: 'Prowexa Organization',
+        },
+        theme: {
+          color: '#10b981',
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    },
+    onError: (err: any) => {
+      alert(`Failed to initiate recharge: ${err.message}`);
     },
   });
 
@@ -160,11 +209,11 @@ export const Billing: React.FC = () => {
                 placeholder="Amount ₹"
               />
               <button
-                onClick={() => walletRechargeMutation.mutate(Number(rechargeAmount))}
-                disabled={walletRechargeMutation.isPending}
+                onClick={() => createRazorpayOrderMutation.mutate(Number(rechargeAmount))}
+                disabled={createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
               >
-                Recharge
+                {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Recharge'}
               </button>
             </div>
           </div>

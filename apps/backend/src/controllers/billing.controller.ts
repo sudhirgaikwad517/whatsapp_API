@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import * as BillingService from '../services/billing-wallet.service.js';
 import * as PaymentWebhookService from '../services/payment-webhook.service.js';
 import { prisma } from '../config/database.js';
+import { AppError } from '../middlewares/error-handler.middleware.js';
 
 export async function getWalletDetails(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -125,12 +126,83 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
   }
 }
 
+export async function createRazorpayOrder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { amount } = req.body;
+    if (!amount || amount <= 0) {
+      throw new AppError('Invalid amount', 400, 'INVALID_AMOUNT');
+    }
+
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      // Mock flow if keys are not set in .env
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: `order_mock_${Date.now()}`,
+          amount: amount * 100,
+          currency: 'INR',
+          isMock: true,
+        }
+      });
+    }
+
+    const axios = (await import('axios')).default;
+    const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    
+    const response = await axios.post(
+      'https://api.razorpay.com/v1/orders',
+      {
+        amount: Math.round(amount * 100),
+        currency: 'INR',
+        receipt: `rcpt_${Date.now()}`,
+      },
+      {
+        headers: {
+          Authorization: `Basic ${authHeader}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...response.data,
+        key: keyId,
+        isMock: false,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function rechargeWallet(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
-    const { amount, gateway } = req.body;
+    const { amount, gateway, razorpay_order_id, razorpay_payment_id, razorpay_signature, isMock } = req.body;
 
-    const referenceId = `PAY_${Date.now()}`;
+    if (!isMock && razorpay_order_id && razorpay_payment_id && razorpay_signature) {
+      const crypto = await import('crypto');
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      
+      if (keySecret) {
+        const body = razorpay_order_id + "|" + razorpay_payment_id;
+        const expectedSignature = crypto
+          .createHmac('sha256', keySecret)
+          .update(body.toString())
+          .digest('hex');
+          
+        if (expectedSignature !== razorpay_signature) {
+          throw new AppError('Invalid payment signature', 400, 'INVALID_SIGNATURE');
+        }
+      }
+    }
+
+    const referenceId = razorpay_payment_id || `PAY_${Date.now()}`;
     const description = `Wallet Recharge via ${gateway || 'RAZORPAY'}`;
 
     const wallet = await BillingService.rechargeWallet(orgId, Number(amount), referenceId, description);

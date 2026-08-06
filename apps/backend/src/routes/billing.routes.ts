@@ -17,6 +17,7 @@ router.get('/wallet', BillingController.getWalletDetails);
 router.get('/credits', BillingController.getAiCredits);
 router.get('/ledger', BillingController.getLedgers);
 router.post('/topup-credits', BillingController.topupAiCredits);
+router.post('/create-razorpay-order', BillingController.createRazorpayOrder);
 router.post('/recharge-wallet', BillingController.rechargeWallet);
 
 /**
