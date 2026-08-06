@@ -166,7 +166,11 @@ export async function createRazorpayOrder(req: AuthenticatedRequest, res: Respon
         isMock: false,
       },
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err.isAxiosError && err.response) {
+      console.error('Razorpay API Error:', err.response.data);
+      return next(new AppError(`Razorpay Error: ${err.response.data.error?.description || 'Failed to create order'}`, 400, 'RAZORPAY_API_ERROR'));
+    }
     next(err);
   }
 }
