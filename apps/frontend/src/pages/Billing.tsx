@@ -89,13 +89,7 @@ export const Billing: React.FC = () => {
     },
     onSuccess: (data, amount) => {
       if (data.isMock) {
-        // Fallback to mock flow if Razorpay keys are missing
-        walletRechargeMutation.mutate({
-          amount,
-          razorpay_order_id: data.id,
-          razorpay_payment_id: `mock_pay_${Date.now()}`,
-          isMock: true
-        });
+        alert('Razorpay Keys are missing on the server! Cannot process real payments. Please configure RAZORPAY_KEY_ID in your .env file.');
         return;
       }
 

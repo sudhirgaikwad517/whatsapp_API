@@ -12,12 +12,13 @@ export async function getDashboardOverview(organizationId: string) {
     prisma.contact.count({ where: { organizationId, deletedAt: null } }),
     prisma.conversation.count({ where: { organizationId } }),
     prisma.message.count({ where: { organizationId, direction: 'OUTBOUND' } }),
-    prisma.message.count({ where: { organizationId, status: 'DELIVERED' } }),
-    prisma.message.count({ where: { organizationId, status: 'READ' } }),
-    prisma.message.count({ where: { organizationId, status: 'FAILED' } }),
+    prisma.message.count({ where: { organizationId, direction: 'OUTBOUND', status: { in: ['DELIVERED', 'READ', 'REPLIED'] } } }),
+    prisma.message.count({ where: { organizationId, direction: 'OUTBOUND', status: { in: ['READ', 'REPLIED'] } } }),
+    prisma.message.count({ where: { organizationId, direction: 'OUTBOUND', status: 'FAILED' } }),
   ]);
 
   const deliveryRate = totalMessagesSent > 0 ? (totalMessagesDelivered / totalMessagesSent) * 100 : 0;
+  // A read message implies it was delivered, so we calculate read rate against delivered
   const readRate = totalMessagesDelivered > 0 ? (totalMessagesRead / totalMessagesDelivered) * 100 : 0;
 
   return {

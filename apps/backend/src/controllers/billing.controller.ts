@@ -137,16 +137,7 @@ export async function createRazorpayOrder(req: AuthenticatedRequest, res: Respon
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keyId || !keySecret) {
-      // Mock flow if keys are not set in .env
-      return res.status(200).json({
-        success: true,
-        data: {
-          id: `order_mock_${Date.now()}`,
-          amount: amount * 100,
-          currency: 'INR',
-          isMock: true,
-        }
-      });
+      throw new AppError('Razorpay credentials are not configured on the server. Please add RAZORPAY_KEY_ID to .env', 500, 'SERVER_MISCONFIGURATION');
     }
 
     const axios = (await import('axios')).default;
@@ -185,21 +176,29 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
     const orgId = req.user!.organizationId;
     const { amount, gateway, razorpay_order_id, razorpay_payment_id, razorpay_signature, isMock } = req.body;
 
-    if (!isMock && razorpay_order_id && razorpay_payment_id && razorpay_signature) {
-      const crypto = await import('crypto');
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (isMock) {
+      throw new AppError('Mock payments are strictly disabled in production. Please configure Razorpay keys.', 403, 'PAYMENT_MOCK_DISABLED');
+    }
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      throw new AppError('Incomplete payment details received from gateway.', 400, 'INVALID_PAYMENT_PAYLOAD');
+    }
+
+    const crypto = await import('crypto');
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    
+    if (!keySecret) {
+      throw new AppError('Razorpay secret key not configured on server.', 500, 'SERVER_MISCONFIGURATION');
+    }
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(body.toString())
+      .digest('hex');
       
-      if (keySecret) {
-        const body = razorpay_order_id + "|" + razorpay_payment_id;
-        const expectedSignature = crypto
-          .createHmac('sha256', keySecret)
-          .update(body.toString())
-          .digest('hex');
-          
-        if (expectedSignature !== razorpay_signature) {
-          throw new AppError('Invalid payment signature', 400, 'INVALID_SIGNATURE');
-        }
-      }
+    if (expectedSignature !== razorpay_signature) {
+      throw new AppError('Invalid payment signature. Payment rejected.', 400, 'INVALID_SIGNATURE');
     }
 
     const referenceId = razorpay_payment_id || `PAY_${Date.now()}`;
