@@ -524,3 +524,101 @@ export async function superAdminReplyTicket(ticketId: string, message: string, s
   return updatedTicket;
 }
 
+export async function getOrganizationFinancialDetails(organizationId: string) {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId, deletedAt: null },
+    include: {
+      wallet: true,
+      whatsappAccounts: {
+        where: { deletedAt: null },
+        select: { id: true, wabaId: true, displayPhoneNumber: true, status: true },
+      },
+    },
+  });
+
+  if (!org) {
+    throw new AppError('Organization not found', 404, 'NOT_FOUND');
+  }
+
+  const [marketingSent, totalOutboundDelivered, inboundCount, ledgers, invoices] = await Promise.all([
+    prisma.campaignRecipient.count({
+      where: { campaign: { organizationId: org.id }, status: 'DELIVERED', deliveredAt: { not: null } },
+    }),
+    prisma.message.count({
+      where: { organizationId: org.id, direction: 'OUTBOUND', status: 'DELIVERED' },
+    }),
+    prisma.message.count({
+      where: { organizationId: org.id, direction: 'INBOUND' },
+    }),
+    prisma.walletLedger.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    }),
+    prisma.invoice.findMany({
+      where: { organizationId: org.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+  ]);
+
+  const utilitySent = Math.max(0, totalOutboundDelivered - marketingSent);
+  const marketingMetaCost = Number((marketingSent * 0.8628).toFixed(2));
+  const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
+  const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
+
+  const marketingClientBilled = Number((marketingSent * 1.00).toFixed(2));
+  const utilityClientBilled = Number((utilitySent * 0.20).toFixed(2));
+  const totalClientBilled = Number((marketingClientBilled + utilityClientBilled).toFixed(2));
+
+  const netProfit = Number((totalClientBilled - totalMetaCost).toFixed(2));
+
+  return {
+    organization: {
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      planTier: org.planTier,
+      billingMode: org.billingMode,
+      createdAt: org.createdAt,
+      whatsappAccount: org.whatsappAccounts?.[0] || null,
+    },
+    wallet: org.wallet,
+    metaBreakdown: {
+      marketing: {
+        count: marketingSent,
+        metaRate: 0.8628,
+        metaCost: marketingMetaCost,
+        clientRate: 1.00,
+        clientBilled: marketingClientBilled,
+        profit: Number((marketingClientBilled - marketingMetaCost).toFixed(2)),
+      },
+      utility: {
+        count: utilitySent,
+        metaRate: 0.1150,
+        metaCost: utilityMetaCost,
+        clientRate: 0.20,
+        clientBilled: utilityClientBilled,
+        profit: Number((utilityClientBilled - utilityMetaCost).toFixed(2)),
+      },
+      service: {
+        count: inboundCount,
+        metaRate: 0.00,
+        metaCost: 0.00,
+        clientRate: 0.00,
+        clientBilled: 0.00,
+        profit: 0.00,
+      },
+      totals: {
+        totalMetaCost,
+        totalClientBilled,
+        netProfit,
+        paidMessagesCount: marketingSent + utilitySent,
+        freeServiceCount: inboundCount,
+      },
+    },
+    ledgers,
+    invoices,
+  };
+}
+

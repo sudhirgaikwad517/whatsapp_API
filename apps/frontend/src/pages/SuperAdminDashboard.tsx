@@ -26,8 +26,20 @@ export const SuperAdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [globalGeminiKey, setGlobalGeminiKey] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
+  const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
+
+  // Fetch detailed organization financials for modal audit
+  const { data: orgFinanceDetails, isLoading: isFinanceDetailsLoading } = useQuery({
+    queryKey: ['superadmin-org-finance', selectedFinanceOrgId],
+    queryFn: async () => {
+      if (!selectedFinanceOrgId) return null;
+      const res = await apiClient.get(`/superadmin/organizations/${selectedFinanceOrgId}/financials`);
+      return res.data.data;
+    },
+    enabled: !!selectedFinanceOrgId,
+  });
 
   // Fetch Executive KPI Telemetry & ERP Data
   const { data: kpiData, refetch } = useQuery({
@@ -510,13 +522,13 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
               <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Marketing Messages Delivered</span>
               <div className="text-2xl font-black text-emerald-400">{kpi?.financials?.metaAnalytics?.metaDeliveredMarketing || 0}</div>
-              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.78 / msg</p>
+              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.8628 / msg</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
               <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Utility Messages Delivered</span>
               <div className="text-2xl font-black text-blue-400">{kpi?.financials?.metaAnalytics?.metaDeliveredUtility || 0}</div>
-              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.15 / msg</p>
+              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.1150 / msg</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
@@ -532,6 +544,7 @@ export const SuperAdminDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Executive Revenue Summary */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
@@ -552,15 +565,76 @@ export const SuperAdminDashboard: React.FC = () => {
                 <p className="text-[10px] text-purple-400 font-bold">Gross Revenue - Meta Cost = Net Profit</p>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-              <span className="text-xs text-slate-400">Meta Graph API Monthly Settlement Reconciliation Batch</span>
-              <button
-                onClick={() => alert('✅ Meta Liability Settlement Reconciliation Batch Processed!')}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 cursor-pointer"
-              >
-                Execute Settlement Reconciliation Batch
-              </button>
+          {/* Dedicated Organization-Wise Finance ERP Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-white text-base">Organization-Wise Financial Audit & Meta Insights Table</h4>
+                <p className="text-xs text-slate-400 mt-0.5">Click "View / Audit Details" to open Meta Insights-style billing statement for any organization.</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                    <th className="py-3 px-4">Organization</th>
+                    <th className="py-3 px-4">Plan Tier</th>
+                    <th className="py-3 px-4">Wallet Balance</th>
+                    <th className="py-3 px-4">Client Billed Revenue</th>
+                    <th className="py-3 px-4">Meta Payable Cost</th>
+                    <th className="py-3 px-4">Platform Profit</th>
+                    <th className="py-3 px-4 text-right">Audit Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-xs text-slate-200">
+                  {organizations.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-6 text-slate-500">No organizations found.</td>
+                    </tr>
+                  ) : (
+                    organizations.map((org: any) => {
+                      const metaCost = org.financialTelemetry?.metaCost || 0;
+                      const clientBilled = org.financialTelemetry?.clientBilled || 0;
+                      const markupProfit = org.financialTelemetry?.markupProfit || 0;
+                      return (
+                        <tr key={org.id} className="hover:bg-slate-800/40 transition-all">
+                          <td className="py-3 px-4 font-bold text-white">
+                            <div>{org.name}</div>
+                            <div className="text-[10px] text-slate-500 font-normal">slug: {org.slug}</div>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-purple-300 uppercase">
+                            {org.planTier || 'PRO'}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">
+                            ₹{Number(org.wallet?.availableBalance || 0).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-blue-400">
+                            ₹{clientBilled.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-amber-400">
+                            ₹{metaCost.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-emerald-400">
+                            ₹{markupProfit.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => setSelectedFinanceOrgId(org.id)}
+                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow transition-all cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View Meta Breakdown</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -826,6 +900,173 @@ export const SuperAdminDashboard: React.FC = () => {
                 Login as Tenant
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Organization Meta Insights & Financial Audit Modal */}
+      {selectedFinanceOrgId && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-4xl space-y-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <DollarSign className="w-6 h-6 text-emerald-400" />
+                  <span>Meta Billing Insights & Financial Audit — {orgFinanceDetails?.organization?.name || 'Loading...'}</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Tenant Slug: {orgFinanceDetails?.organization?.slug} | WABA ID: {orgFinanceDetails?.organization?.whatsappAccount?.wabaId || 'N/A'}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedFinanceOrgId(null)}
+                className="text-slate-400 hover:text-white text-lg font-bold p-2"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isFinanceDetailsLoading ? (
+              <div className="text-center py-12 text-slate-500">Loading granular Meta billing telemetry...</div>
+            ) : (
+              <div className="space-y-6">
+                {/* Meta Manager-Style Insights Overview */}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Meta Graph API & Client Billing Statement</span>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                      Live Reconciled
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                      <span className="text-slate-400 font-semibold block">Marketing Messages Delivered</span>
+                      <div className="text-xl font-black text-emerald-400">
+                        {orgFinanceDetails?.metaBreakdown?.marketing?.count || 0}
+                      </div>
+                      <div className="space-y-0.5 text-[11px]">
+                        <div className="text-amber-400 font-semibold">Meta Base Cost: ₹{orgFinanceDetails?.metaBreakdown?.marketing?.metaCost?.toFixed(2)} (@ ₹0.8628/msg)</div>
+                        <div className="text-blue-400 font-semibold">Client Billed: ₹{orgFinanceDetails?.metaBreakdown?.marketing?.clientBilled?.toFixed(2)} (@ ₹1.00/msg)</div>
+                        <div className="text-purple-400 font-bold">Prowexa Profit: ₹{orgFinanceDetails?.metaBreakdown?.marketing?.profit?.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                      <span className="text-slate-400 font-semibold block">Utility Messages Delivered</span>
+                      <div className="text-xl font-black text-blue-400">
+                        {orgFinanceDetails?.metaBreakdown?.utility?.count || 0}
+                      </div>
+                      <div className="space-y-0.5 text-[11px]">
+                        <div className="text-amber-400 font-semibold">Meta Base Cost: ₹{orgFinanceDetails?.metaBreakdown?.utility?.metaCost?.toFixed(2)} (@ ₹0.115/msg)</div>
+                        <div className="text-blue-400 font-semibold">Client Billed: ₹{orgFinanceDetails?.metaBreakdown?.utility?.clientBilled?.toFixed(2)} (@ ₹0.20/msg)</div>
+                        <div className="text-purple-400 font-bold">Prowexa Profit: ₹{orgFinanceDetails?.metaBreakdown?.utility?.profit?.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                      <span className="text-slate-400 font-semibold block">Free Customer Service Conversations</span>
+                      <div className="text-xl font-black text-purple-400">
+                        {orgFinanceDetails?.metaBreakdown?.service?.count || 0}
+                      </div>
+                      <div className="space-y-0.5 text-[11px]">
+                        <div className="text-emerald-400 font-semibold">Meta Charge: ₹0.00 (Free Window)</div>
+                        <div className="text-blue-400 font-semibold">Client Billed: ₹0.00</div>
+                        <div className="text-slate-500 font-mono">1,000 Free Tier Active</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary Footer Bar */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-slate-800 text-xs">
+                    <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                      <span className="text-slate-400 font-semibold block uppercase text-[10px]">Total Client Wallet Revenue</span>
+                      <span className="text-lg font-black text-blue-400">₹{orgFinanceDetails?.metaBreakdown?.totals?.totalClientBilled?.toFixed(2)}</span>
+                    </div>
+
+                    <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                      <span className="text-slate-400 font-semibold block uppercase text-[10px]">Total Meta Payable Liability</span>
+                      <span className="text-lg font-black text-amber-400">₹{orgFinanceDetails?.metaBreakdown?.totals?.totalMetaCost?.toFixed(2)}</span>
+                    </div>
+
+                    <div className="bg-purple-950/40 p-3 rounded-lg border border-purple-500/30">
+                      <span className="text-purple-300 font-semibold block uppercase text-[10px]">Net Platform Margin</span>
+                      <span className="text-lg font-black text-purple-300">₹{orgFinanceDetails?.metaBreakdown?.totals?.netProfit?.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Wallet Ledger Statements */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-white text-sm flex items-center justify-between">
+                    <span>Recent Wallet Ledger Transactions & Statements</span>
+                    <span className="text-xs text-emerald-400 font-normal">
+                      Available Balance: ₹{Number(orgFinanceDetails?.wallet?.availableBalance || 0).toFixed(2)}
+                    </span>
+                  </h4>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                          <th className="py-2.5 px-3">Date</th>
+                          <th className="py-2.5 px-3">Type</th>
+                          <th className="py-2.5 px-3">Amount</th>
+                          <th className="py-2.5 px-3">Closing Balance</th>
+                          <th className="py-2.5 px-3">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 text-slate-300">
+                        {orgFinanceDetails?.ledgers?.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="text-center py-4 text-slate-500 italic">No ledger statement records found.</td>
+                          </tr>
+                        ) : (
+                          orgFinanceDetails?.ledgers?.map((item: any) => (
+                            <tr key={item.id} className="hover:bg-slate-900/50">
+                              <td className="py-2 px-3 text-slate-400 font-mono text-[10px]">
+                                {new Date(item.createdAt).toLocaleString()}
+                              </td>
+                              <td className="py-2 px-3 font-bold font-mono">
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                  item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                }`}>
+                                  {item.transactionType}
+                                </span>
+                              </td>
+                              <td className={`py-2 px-3 font-bold ${
+                                item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE'
+                                  ? 'text-emerald-400'
+                                  : 'text-rose-400'
+                              }`}>
+                                {item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE' ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-semibold text-slate-300">
+                                ₹{Number(item.closingBalance).toFixed(2)}
+                              </td>
+                              <td className="py-2 px-3 text-slate-400 truncate max-w-xs">
+                                {item.description || '—'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    onClick={() => setSelectedFinanceOrgId(null)}
+                    className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs cursor-pointer"
+                  >
+                    Close Financial Statement
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

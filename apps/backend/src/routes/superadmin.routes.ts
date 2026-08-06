@@ -28,6 +28,7 @@ router.get('/organizations', SuperAdminController.getOrganizations);
  * @route   POST /api/v1/superadmin/impersonate
  * @desc    Impersonate organization (Audit-Logged short-lived JWT)
  */
+router.get('/organizations/:id/financials', SuperAdminController.getOrgFinancials);
 router.post('/impersonate', SuperAdminController.impersonateOrganization);
 
 /**

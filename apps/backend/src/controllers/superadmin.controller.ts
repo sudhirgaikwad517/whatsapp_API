@@ -102,3 +102,13 @@ export async function replyTicket(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+export async function getOrgFinancials(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const data = await SuperAdminService.getOrganizationFinancialDetails(id);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
