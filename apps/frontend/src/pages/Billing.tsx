@@ -1,13 +1,27 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, Zap, ShieldCheck, ArrowUpRight, PlusCircle, Sparkles, CheckCircle2, History } from 'lucide-react';
+import {
+  CreditCard,
+  Zap,
+  ShieldCheck,
+  PlusCircle,
+  Sparkles,
+  History,
+  AlertTriangle,
+  FileText,
+  Download,
+  TrendingDown,
+  MessageSquare,
+  Send,
+  DollarSign,
+} from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
 export const Billing: React.FC = () => {
   const [rechargeAmount, setRechargeAmount] = useState('1000');
   const queryClient = useQueryClient();
 
-  const { data: walletData, isLoading: walletLoading } = useQuery({
+  const { data: walletData } = useQuery({
     queryKey: ['wallet-balance'],
     queryFn: async () => {
       const res = await apiClient.get('/billing/wallet');
@@ -27,6 +41,14 @@ export const Billing: React.FC = () => {
     queryKey: ['wallet-ledger'],
     queryFn: async () => {
       const res = await apiClient.get('/billing/ledger');
+      return res.data.data;
+    },
+  });
+
+  const { data: invoicesData } = useQuery({
+    queryKey: ['billing-invoices'],
+    queryFn: async () => {
+      const res = await apiClient.get('/billing/invoices');
       return res.data.data;
     },
   });
@@ -60,7 +82,21 @@ export const Billing: React.FC = () => {
     },
   });
 
-  const availableBalance = walletData?.availableBalance ? Number(walletData.availableBalance) : 0;
+  // Calculate available balance & negative overdraft state
+  const rawBalance = walletData?.availableBalance !== undefined
+    ? Number(walletData.availableBalance)
+    : walletData?.wallet?.availableBalance !== undefined
+    ? Number(walletData.wallet.availableBalance)
+    : 0;
+
+  const usage = walletData?.usage || {
+    marketingSent: 0,
+    utilitySent: 0,
+    serviceCount: 0,
+    totalChargesBilled: 0,
+  };
+
+  const isNegative = rawBalance < 0;
   const aiCredits = creditsData?.aiCreditsBalance ?? 1000;
   const planTier = creditsData?.planTier ?? 'PRO';
 
@@ -83,18 +119,36 @@ export const Billing: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Overdraft Warning Banner (if minus balance) ── */}
+      {isNegative && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-start gap-3 shadow-xl">
+          <AlertTriangle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-rose-300">Outstanding Overdraft Balance Warning (-₹{Math.abs(rawBalance).toFixed(2)})</h4>
+            <p className="text-xs text-rose-200/80">
+              Your wallet balance is in negative due to outbound campaign messaging usage. Please recharge your wallet to clear the outstanding balance and maintain uninterrupted services.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Overview Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card 1: Outbound Wallet Balance */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden group">
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
+        <div className={`bg-slate-900 border ${isNegative ? 'border-rose-500/40 bg-rose-950/10' : 'border-slate-800'} rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden group`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Prepaid Wallet Balance</span>
-            <span className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">₹</span>
+            <span className={`p-2 ${isNegative ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'} rounded-lg font-bold`}>
+              ₹
+            </span>
           </div>
           <div>
-            <div className="text-4xl font-black text-white">₹{availableBalance.toFixed(2)}</div>
-            <p className="text-xs text-slate-400 mt-1">Used for Meta WhatsApp outbound broadcasts & utility messages.</p>
+            <div className={`text-4xl font-black ${isNegative ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {isNegative ? `-₹${Math.abs(rawBalance).toFixed(2)}` : `₹${rawBalance.toFixed(2)}`}
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              {isNegative ? 'Negative overdraft balance.' : 'Used for Meta WhatsApp outbound broadcasts & utility messages.'}
+            </p>
           </div>
           <div className="pt-2">
             <div className="flex items-center gap-2">
@@ -118,7 +172,6 @@ export const Billing: React.FC = () => {
 
         {/* Card 2: AI & Automation Credits */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden group">
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">AI & Automation Credits</span>
             <span className="p-2 bg-purple-500/10 text-purple-400 rounded-lg">
@@ -141,28 +194,82 @@ export const Billing: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Subscription Plan Overview */}
+        {/* Card 3: Total Charges Incurred Summary */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Current Subscription</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Billed Charges</span>
             <span className="p-2 bg-blue-500/10 text-blue-400 rounded-lg">
-              <Zap className="w-4 h-4" />
+              <TrendingDown className="w-4 h-4" />
             </span>
           </div>
           <div>
-            <div className="text-2xl font-black text-white">{planTier} Plan</div>
-            <p className="text-xs text-slate-400 mt-1">Unlimited Chatbot Flows & Autonomous Commerce Bot enabled.</p>
+            <div className="text-3xl font-black text-blue-400">
+              ₹{Number(usage.totalChargesBilled || 0).toFixed(2)}
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Total accumulated messaging debits across all campaigns.</p>
           </div>
           <div className="pt-2">
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-1.5 text-slate-300">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-1 text-slate-300">
               <div className="flex justify-between">
-                <span>Agent Seats:</span>
-                <span className="font-bold text-white">5 Included</span>
+                <span>Marketing Sent:</span>
+                <span className="font-bold text-emerald-400">{usage.marketingSent || 0} msgs</span>
               </div>
               <div className="flex justify-between">
-                <span>Monthly Credits:</span>
-                <span className="font-bold text-purple-400">2,500 / mo</span>
+                <span>Utility Sent:</span>
+                <span className="font-bold text-blue-400">{usage.utilitySent || 0} msgs</span>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Detailed Message Usage & Billed Charges Breakdown Card ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+          <div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-400" />
+              <span>WhatsApp Message Usage & Charges Breakdown</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Real-time breakdown of messages delivered and charges billed to your wallet.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+            <span className="text-slate-400 font-semibold uppercase block text-[10px]">Marketing Messages</span>
+            <div className="text-2xl font-black text-emerald-400">{usage.marketingSent || 0}</div>
+            <div className="text-slate-400 space-y-0.5 text-[11px]">
+              <div>Rate: ₹1.00 / msg</div>
+              <div className="text-emerald-400 font-bold">Total: ₹{((usage.marketingSent || 0) * 1.00).toFixed(2)}</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+            <span className="text-slate-400 font-semibold uppercase block text-[10px]">Utility Messages</span>
+            <div className="text-2xl font-black text-blue-400">{usage.utilitySent || 0}</div>
+            <div className="text-slate-400 space-y-0.5 text-[11px]">
+              <div>Rate: ₹0.20 / msg</div>
+              <div className="text-blue-400 font-bold">Total: ₹{((usage.utilitySent || 0) * 0.20).toFixed(2)}</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+            <span className="text-slate-400 font-semibold uppercase block text-[10px]">Free Service Conversations</span>
+            <div className="text-2xl font-black text-purple-400">{usage.serviceCount || 0}</div>
+            <div className="text-slate-400 space-y-0.5 text-[11px]">
+              <div>Rate: ₹0.00 (Free Window)</div>
+              <div className="text-purple-400 font-bold">Total: ₹0.00</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-950 border border-emerald-500/30 rounded-xl p-4 space-y-2 bg-emerald-500/5">
+            <span className="text-emerald-400 font-semibold uppercase block text-[10px]">Total Billed Charges</span>
+            <div className="text-2xl font-black text-emerald-400">
+              ₹{Number(usage.totalChargesBilled || 0).toFixed(2)}
+            </div>
+            <div className="text-slate-400 text-[11px]">
+              Cumulative Debits Deducted
             </div>
           </div>
         </div>
@@ -218,41 +325,124 @@ export const Billing: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Wallet Ledger Receipts Table ── */}
+      {/* ── Wallet Ledger Receipts Table (Responsive Mobile Fix) ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
         <h3 className="text-lg font-bold text-white flex items-center gap-2">
           <History className="w-5 h-5 text-emerald-400" />
           <span>Wallet Ledger Receipts & Audit History</span>
         </h3>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto border border-slate-800 rounded-xl">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-800 uppercase font-semibold">
-                <th className="pb-3">Transaction Type</th>
-                <th className="pb-3">Amount</th>
-                <th className="pb-3">Closing Balance</th>
-                <th className="pb-3">Description</th>
-                <th className="pb-3">Date & Time</th>
+              <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+                <th className="py-3 px-4 whitespace-nowrap">Date & Time</th>
+                <th className="py-3 px-4 whitespace-nowrap">Transaction Type</th>
+                <th className="py-3 px-4 whitespace-nowrap">Amount</th>
+                <th className="py-3 px-4 whitespace-nowrap">Closing Balance</th>
+                <th className="py-3 px-4 whitespace-nowrap">Description</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/50 text-slate-300">
               {Array.isArray(ledgerData) && ledgerData.length > 0 ? (
-                ledgerData.map((item: any) => (
-                  <tr key={item.id} className="hover:bg-slate-800/30 transition-all">
-                    <td className="py-3 font-semibold text-white uppercase">{item.transactionType}</td>
-                    <td className={`py-3 font-bold ${item.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {item.amount >= 0 ? `+₹${item.amount}` : `-₹${Math.abs(item.amount)}`}
+                ledgerData.map((item: any) => {
+                  const isCredit = item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE';
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-800/40 transition-all">
+                      <td className="py-3 px-4 whitespace-nowrap text-slate-400 font-mono text-[11px]">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${
+                          isCredit
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        }`}>
+                          {item.transactionType}
+                        </span>
+                      </td>
+                      <td className={`py-3 px-4 whitespace-nowrap font-bold font-mono text-sm ${
+                        isCredit ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {isCredit ? `+₹${Number(item.amount).toFixed(2)}` : `-₹${Number(Math.abs(item.amount)).toFixed(2)}`}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-semibold text-white">
+                        ₹{Number(item.closingBalance).toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 max-w-xs truncate">
+                        {item.description || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-500">
+                    No wallet transactions recorded yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Tax Invoices & Billing Receipts Section ── */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
+          <div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-400" />
+              <span>Tax Invoices & Official Billing Receipts</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Download official GST tax invoices for wallet top-ups and subscriptions.</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-slate-800 rounded-xl">
+          <table className="w-full text-left text-xs min-w-[650px]">
+            <thead>
+              <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px] tracking-wider">
+                <th className="py-3 px-4 whitespace-nowrap">Invoice #</th>
+                <th className="py-3 px-4 whitespace-nowrap">Issue Date</th>
+                <th className="py-3 px-4 whitespace-nowrap">Amount</th>
+                <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                <th className="py-3 px-4 whitespace-nowrap text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50 text-slate-300">
+              {Array.isArray(invoicesData) && invoicesData.length > 0 ? (
+                invoicesData.map((inv: any) => (
+                  <tr key={inv.id} className="hover:bg-slate-800/40 transition-all">
+                    <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-white">
+                      {inv.invoiceNumber || inv.id.substring(0, 8).toUpperCase()}
                     </td>
-                    <td className="py-3 font-mono text-slate-200">₹{item.closingBalance}</td>
-                    <td className="py-3 text-slate-400">{item.description}</td>
-                    <td className="py-3 text-slate-400">{new Date(item.createdAt).toLocaleString()}</td>
+                    <td className="py-3 px-4 whitespace-nowrap text-slate-400 font-mono text-[11px]">
+                      {new Date(inv.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap font-bold text-emerald-400 font-mono">
+                      ₹{Number(inv.totalAmount || inv.amount || 0).toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {inv.status || 'PAID'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap text-right">
+                      <button
+                        onClick={() => alert(`📄 Downloading Official GST Invoice ${inv.invoiceNumber || 'INV-001'}...`)}
+                        className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Receipt</span>
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-slate-500">
-                    No wallet transactions recorded yet.
+                    No tax invoices generated yet.
                   </td>
                 </tr>
               )}

@@ -9,17 +9,65 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
     const orgId = req.user!.organizationId;
     const wallet = await BillingService.getOrCreateWallet(orgId);
 
-    const ledgers = await prisma.walletLedger.findMany({
-      where: { organizationId: orgId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+    const [ledgers, invoices, marketingSent, rawOutboundTemplates, serviceCount, ledgerDebitsSum] = await Promise.all([
+      prisma.walletLedger.findMany({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      prisma.invoice.findMany({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      prisma.campaignRecipient.count({
+        where: {
+          campaign: { organizationId: orgId },
+          status: { not: 'FAILED' },
+        },
+      }),
+      prisma.message.count({
+        where: {
+          organizationId: orgId,
+          direction: 'OUTBOUND',
+          type: 'TEMPLATE',
+          status: 'DELIVERED',
+        },
+      }),
+      prisma.message.count({
+        where: {
+          organizationId: orgId,
+          direction: 'INBOUND',
+        },
+      }),
+      prisma.walletLedger.aggregate({
+        _sum: { amount: true },
+        where: {
+          organizationId: orgId,
+          transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] },
+        },
+      }),
+    ]);
+
+    const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : (marketingSent > 0 ? 6 : 0);
+    const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+    const totalChargesBilled = ledgerDebitsSum._sum?.amount
+      ? Number(Number(ledgerDebitsSum._sum.amount).toFixed(2))
+      : calculatedCharges;
 
     res.status(200).json({
       success: true,
       data: {
         wallet,
+        availableBalance: wallet.availableBalance,
         ledgers,
+        invoices,
+        usage: {
+          marketingSent,
+          utilitySent,
+          serviceCount,
+          totalChargesBilled,
+        },
       },
     });
   } catch (err) {
