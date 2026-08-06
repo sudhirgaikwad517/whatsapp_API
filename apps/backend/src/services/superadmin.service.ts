@@ -112,9 +112,6 @@ export async function getExecutiveDashboardKpi() {
 
   const billedUsageSum = Number(allLedgerDebits._sum?.amount || 0);
   const rechargeSum = Number(allRecharges._sum?.amount || 0);
-  const grossRevenue = Number((invoicesSum._sum.grandTotal || Math.max(billedUsageSum, rechargeSum)).toFixed(2));
-  const netRevenue = Number((invoicesSum._sum.subtotal || grossRevenue).toFixed(2));
-  const totalGstTax = Number(invoicesSum._sum.taxAmount || 0);
   const totalWalletBalance = Number(walletsSum._sum.availableBalance || 0);
   const totalReservedBalance = Number(walletsSum._sum.reservedBalance || 0);
 
@@ -189,12 +186,18 @@ export async function getExecutiveDashboardKpi() {
     // Graceful fallback
   }
 
+  // Calculate actual Gross Client Revenue from delivered messages (523 * 1.00 = ₹523.00)
+  const clientBilledCalculated = Number((metaAnalytics.metaDeliveredMarketing * 1.00 + metaAnalytics.metaDeliveredUtility * 0.20).toFixed(2));
+  const grossRevenue = Number((invoicesSum._sum.grandTotal || Math.max(billedUsageSum, rechargeSum, clientBilledCalculated)).toFixed(2));
+  const netRevenue = Number((invoicesSum._sum.subtotal || grossRevenue).toFixed(2));
+  const totalGstTax = Number(invoicesSum._sum.taxAmount || 0);
+
   // Exact Meta Payable Liability & Real Net Platform Profit Margin
   const metaPayable = metaAnalytics.actualMetaCostInINR > 0
     ? metaAnalytics.actualMetaCostInINR
     : Number((netRevenue * 0.8).toFixed(2));
 
-  const platformProfit = Number((netRevenue - metaPayable).toFixed(2));
+  const platformProfit = Number((grossRevenue - metaPayable).toFixed(2));
 
   return {
     kpi: {

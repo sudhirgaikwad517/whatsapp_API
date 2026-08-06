@@ -21,7 +21,7 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
+  user: localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null,
   token: localStorage.getItem('access_token'),
   isAuthenticated: !!localStorage.getItem('access_token'),
   isImpersonating: localStorage.getItem('is_impersonating') === 'true',
@@ -32,6 +32,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: (user: User, accessToken: string, refreshToken: string) => {
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', refreshToken);
+    localStorage.setItem('auth_user', JSON.stringify(user));
     localStorage.removeItem('is_impersonating');
     localStorage.removeItem('superadmin_backup');
     set({ user, token: accessToken, isAuthenticated: true, isImpersonating: false, originalSuperAdmin: null });
@@ -44,6 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.setItem('superadmin_backup', JSON.stringify(backup));
     }
     localStorage.setItem('access_token', tenantToken);
+    localStorage.setItem('auth_user', JSON.stringify(tenantUser));
     localStorage.setItem('is_impersonating', 'true');
     set({
       user: tenantUser,
@@ -59,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       try {
         const backup = JSON.parse(backupStr);
         localStorage.setItem('access_token', backup.token);
+        localStorage.setItem('auth_user', JSON.stringify(backup.user));
         localStorage.removeItem('is_impersonating');
         localStorage.removeItem('superadmin_backup');
         set({
@@ -74,6 +77,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     }
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('auth_user');
     localStorage.removeItem('is_impersonating');
     localStorage.removeItem('superadmin_backup');
     set({ user: null, token: null, isAuthenticated: false, isImpersonating: false, originalSuperAdmin: null });
@@ -82,6 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('auth_user');
     localStorage.removeItem('is_impersonating');
     localStorage.removeItem('superadmin_backup');
     set({ user: null, token: null, isAuthenticated: false, isImpersonating: false, originalSuperAdmin: null });

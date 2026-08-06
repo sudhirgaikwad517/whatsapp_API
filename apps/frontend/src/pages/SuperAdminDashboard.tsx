@@ -643,87 +643,179 @@ export const SuperAdminDashboard: React.FC = () => {
       {/* TAB 3: PRICING RULES & GLOBAL MARKUP ENGINE */}
       {activeTab === 'pricing' && (
         <div className="space-y-6">
+          {/* SECTION 1: META OFFICIAL BASE CONVERSATION RATES (META PAYABLE COST) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h3 className="font-bold text-white text-base flex items-center gap-2">
                   <Scale className="w-5 h-5 text-amber-400" />
-                  <span>Configure Dynamic Per-Message Pricing Rules & Markups</span>
+                  <span>1. Official Meta Base Conversation Rates (Meta Payable Liability)</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Set live Meta base cost and platform markups charged to clients per WhatsApp message category.
+                  Adjust Meta Graph API base charges billed directly by Meta for India region.
                 </p>
               </div>
+              <span className="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-bold uppercase">
+                Meta Payable Rates
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                <span className="font-bold text-emerald-400 uppercase block">Marketing Message Rate</span>
+                <span className="font-bold text-amber-400 uppercase block">Meta Marketing Base Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    defaultValue="0.8631"
+                    id="meta-rate-marketing"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Official Meta India Rate per marketing msg</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-blue-400 uppercase block">Meta Utility Base Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    defaultValue="0.1150"
+                    id="meta-rate-utility"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Official Meta India Rate per utility msg</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-purple-400 uppercase block">Meta Authentication Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    defaultValue="0.1150"
+                    id="meta-rate-auth"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Official Meta India Rate per OTP msg</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-emerald-400 uppercase block">Meta Service Window</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    disabled
+                    value="0.0000"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-emerald-400 font-mono text-sm opacity-80"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Free 24h Customer Support Conversations</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => alert('📊 Meta Base Rate Card updated successfully!')}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+              >
+                Save Meta Base Rates
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION 2: PROWEXA CLIENT BILLED RATES & MARKUP MARGIN ENGINE */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                  <span>2. Prowexa Client Billed Pricing Rates & Profit Markups</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Configure rates charged to client tenant organization wallets per conversation category.
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-bold uppercase">
+                Client Billed Pricing
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              <div className="bg-slate-950 border border-emerald-500/30 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-emerald-400 uppercase block">Client Marketing Price</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
                     step="0.05"
                     defaultValue="1.00"
-                    id="rate-marketing"
+                    id="client-rate-marketing"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Meta Base ~₹0.78 + Markup ~₹0.22</p>
+                <p className="text-[10px] text-emerald-400/80">Platform Profit: ~₹0.1369 / msg</p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                <span className="font-bold text-blue-400 uppercase block">Utility Message Rate</span>
+                <span className="font-bold text-blue-400 uppercase block">Client Utility Price</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
                     step="0.05"
                     defaultValue="0.20"
-                    id="rate-utility"
+                    id="client-rate-utility"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Meta Base ~₹0.15 + Markup ~₹0.05</p>
+                <p className="text-[10px] text-blue-400/80">Platform Profit: ~₹0.0850 / msg</p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                <span className="font-bold text-amber-400 uppercase block">Authentication Rate</span>
+                <span className="font-bold text-purple-400 uppercase block">Client Authentication Price</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
                     step="0.05"
                     defaultValue="0.25"
-                    id="rate-auth"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
+                    id="client-rate-auth"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Meta Base ~₹0.18 + Markup ~₹0.07</p>
+                <p className="text-[10px] text-purple-400/80">Platform Profit: ~₹0.1350 / msg</p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                <span className="font-bold text-purple-400 uppercase block">International Message Rate</span>
+                <span className="font-bold text-slate-300 uppercase block">International SMS Price</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
                     step="0.10"
                     defaultValue="3.00"
-                    id="rate-intl"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
+                    id="client-rate-intl"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-slate-500"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Global outbound international SMS</p>
+                <p className="text-[10px] text-slate-500">Global outbound SMS rates</p>
               </div>
             </div>
 
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => alert('⚖️ Dynamic Platform Rate Cards updated successfully!')}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                onClick={() => alert('💰 Prowexa Client Markup & Profit Rates saved successfully!')}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer"
               >
-                Save Dynamic Pricing Rules
+                Save Client Markup Rates
               </button>
             </div>
           </div>
