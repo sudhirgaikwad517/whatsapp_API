@@ -9,7 +9,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
     const orgId = req.user!.organizationId;
     const wallet = await BillingService.getOrCreateWallet(orgId);
 
-    const [ledgers, invoices, marketingSent, utilitySent, serviceCount, ledgerDebitsSum] = await Promise.all([
+    const [ledgers, invoices, marketingSent, rawOutboundTemplates, serviceCount, ledgerDebitsSum] = await Promise.all([
       prisma.walletLedger.findMany({
         where: { organizationId: orgId },
         orderBy: { createdAt: 'desc' },
@@ -26,13 +26,12 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
           status: { not: 'FAILED' },
         },
       }),
-      prisma.campaignRecipient.count({
+      prisma.message.count({
         where: {
-          campaign: {
-            organizationId: orgId,
-            template: { category: { in: ['UTILITY', 'utility', 'Utility'] } },
-          },
-          status: { not: 'FAILED' },
+          organizationId: orgId,
+          direction: 'OUTBOUND',
+          type: 'TEMPLATE',
+          status: 'DELIVERED',
         },
       }),
       prisma.message.count({
@@ -49,6 +48,8 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
         },
       }),
     ]);
+    
+    const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
     const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
     const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
     

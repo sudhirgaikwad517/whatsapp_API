@@ -130,25 +130,23 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    const [marketingSent, utilitySentCount, inboundCount] = await Promise.all([
+    const [marketingSent, rawOutboundTemplates, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
           status: { not: 'FAILED' },
         },
       }),
-      prisma.campaignRecipient.count({
+      prisma.message.count({
         where: {
-          campaign: {
-            template: { category: { in: ['UTILITY', 'utility', 'Utility'] } },
-          },
-          status: { not: 'FAILED' },
+          direction: 'OUTBOUND',
+          type: 'TEMPLATE',
+          status: 'DELIVERED',
         },
       }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
 
-    // Fallback to 6 utility messages if utility templates exist for org but raw messages table was truncated
-    const finalUtilityCount = utilitySentCount > 0 ? utilitySentCount : 6;
+    const finalUtilityCount = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
     metaAnalytics.metaDeliveredUtility = finalUtilityCount;
@@ -274,7 +272,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
       const waAccount = org.whatsappAccounts?.[0];
 
       // Query actual ledger debits & recipient statuses strictly per-organization without leakage
-      const [ledgerDebitsSum, marketingSent, utilitySent] = await Promise.all([
+      const [ledgerDebitsSum, marketingSent, rawOutboundTemplates] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
@@ -288,16 +286,17 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             status: { not: 'FAILED' },
           },
         }),
-        prisma.campaignRecipient.count({
+        prisma.message.count({
           where: {
-            campaign: {
-              organizationId: org.id,
-              template: { category: { in: ['UTILITY', 'utility', 'Utility'] } },
-            },
-            status: { not: 'FAILED' },
+            organizationId: org.id,
+            direction: 'OUTBOUND',
+            type: 'TEMPLATE',
+            status: 'DELIVERED',
           },
         }),
       ]);
+
+      const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
@@ -567,20 +566,19 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
-  const [marketingSent, utilitySent, inboundCount, ledgers, invoices] = await Promise.all([
+  const [marketingSent, rawOutboundTemplates, inboundCount, ledgers, invoices] = await Promise.all([
     prisma.campaignRecipient.count({
       where: {
         campaign: { organizationId: org.id },
         status: { not: 'FAILED' },
       },
     }),
-    prisma.campaignRecipient.count({
+    prisma.message.count({
       where: {
-        campaign: {
-          organizationId: org.id,
-          template: { category: { in: ['UTILITY', 'utility', 'Utility'] } },
-        },
-        status: { not: 'FAILED' },
+        organizationId: org.id,
+        direction: 'OUTBOUND',
+        type: 'TEMPLATE',
+        status: 'DELIVERED',
       },
     }),
     prisma.message.count({
@@ -597,6 +595,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
       take: 10,
     }),
   ]);
+  const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
