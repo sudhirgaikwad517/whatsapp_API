@@ -263,7 +263,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                 required
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                className="w-full min-w-0 max-w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 truncate"
               >
                 <option value="">-- Choose Approved Template --</option>
                 {templates.map((tpl: any) => (
@@ -301,7 +301,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
 
               <div className="space-y-2 pt-1">
                 {templateVars.map((vNum: string) => (
-                  <div key={vNum} className="flex items-center space-x-3 bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs">
+                  <div key={vNum} className="flex items-center space-x-2 sm:space-x-3 bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs w-full min-w-0 overflow-hidden">
                     <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20 shrink-0">
                       {`{{${vNum}}}`}
                     </span>
@@ -309,7 +309,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                     <select
                       value={variableMapping[vNum] || ''}
                       onChange={(e) => setVariableMapping({ ...variableMapping, [vNum]: e.target.value })}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      className="flex-1 min-w-0 w-full max-w-full bg-slate-950 border border-slate-800 rounded-lg px-2 sm:px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 truncate"
                     >
                       <option value="">-- Select Field / Column --</option>
                       <optgroup label="Standard CRM Fields">
