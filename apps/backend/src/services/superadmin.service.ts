@@ -122,6 +122,14 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
+    // Fetch all campaign recipient wamids to strictly exclude campaign messages from non-campaign utility counts
+    const campaignRecipients = await prisma.campaignRecipient.findMany({
+      where: { wamid: { not: null } },
+      select: { wamid: true },
+    });
+    const campaignWamidSet = new Set(campaignRecipients.map((r) => r.wamid!).filter(Boolean));
+    const campaignWamids = Array.from(campaignWamidSet);
+
     const [marketingSent, utilitySent, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
@@ -130,7 +138,12 @@ export async function getExecutiveDashboardKpi() {
         },
       }),
       prisma.message.count({
-        where: { direction: 'OUTBOUND', type: 'TEMPLATE', errorCode: null },
+        where: {
+          direction: 'OUTBOUND',
+          type: 'TEMPLATE',
+          errorCode: null,
+          ...(campaignWamids.length > 0 ? { wamid: { notIn: campaignWamids } } : {}),
+        },
       }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
@@ -252,6 +265,13 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
 
+      // Fetch campaign recipient wamids for this org to exclude from non-campaign utility counts
+      const orgCampaignRecipients = await prisma.campaignRecipient.findMany({
+        where: { campaign: { organizationId: org.id }, wamid: { not: null } },
+        select: { wamid: true },
+      });
+      const orgCampaignWamids = Array.from(new Set(orgCampaignRecipients.map((r) => r.wamid!).filter(Boolean)));
+
       // Query actual ledger debits & recipient statuses strictly separating Template Utility vs Free Chat Window
       const [ledgerDebitsSum, marketingSent, utilitySent] = await Promise.all([
         prisma.walletLedger.aggregate({
@@ -274,6 +294,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             direction: 'OUTBOUND',
             type: 'TEMPLATE',
             errorCode: null,
+            ...(orgCampaignWamids.length > 0 ? { wamid: { notIn: orgCampaignWamids } } : {}),
           },
         }),
       ]);
@@ -546,6 +567,13 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
+  // Fetch campaign recipient wamids for this org to exclude from non-campaign utility counts
+  const orgCampaignRecipients = await prisma.campaignRecipient.findMany({
+    where: { campaign: { organizationId: org.id }, wamid: { not: null } },
+    select: { wamid: true },
+  });
+  const orgCampaignWamids = Array.from(new Set(orgCampaignRecipients.map((r) => r.wamid!).filter(Boolean)));
+
   const [marketingSent, utilitySent, inboundCount, ledgers, invoices] = await Promise.all([
     prisma.campaignRecipient.count({
       where: {
@@ -560,6 +588,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
         direction: 'OUTBOUND',
         type: 'TEMPLATE',
         errorCode: null,
+        ...(orgCampaignWamids.length > 0 ? { wamid: { notIn: orgCampaignWamids } } : {}),
       },
     }),
     prisma.message.count({
