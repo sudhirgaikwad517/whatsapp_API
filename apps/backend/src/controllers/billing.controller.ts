@@ -80,6 +80,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
           marketingSent,
           utilitySent,
           serviceCount: inboundCount,
+          totalChargesBilled,
         },
       },
     });
