@@ -23,6 +23,7 @@ import aiRoutes from './routes/ai.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import flowRoutes from './routes/flow.routes.js';
 import catalogRoutes from './routes/catalog.routes.js';
+import supportTicketRoutes from './routes/support-ticket.routes.js';
 import superAdminRoutes from './routes/superadmin.routes.js';
 
 export function createApp(): Application {
@@ -123,6 +124,7 @@ export function createApp(): Application {
   app.use('/api/v1/media', mediaRoutes);
   app.use('/api/v1/flows', flowRoutes);
   app.use('/api/v1/catalog', catalogRoutes);
+  app.use('/api/v1/support-tickets', supportTicketRoutes);
   app.use('/api/v1/superadmin', superAdminRoutes);
 
 

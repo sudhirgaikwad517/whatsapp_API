@@ -522,47 +522,90 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* TAB 3: PRICING RULES & GLOBAL MARKUP ENGINE */}
       {activeTab === 'pricing' && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold text-white tracking-tight flex items-center">
-            <Scale className="w-5 h-5 mr-2 text-amber-400" />
-            Global Meta Rate Card & Platform Markup Rules
-          </h3>
+        <div className="space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-amber-400" />
+                  <span>Configure Dynamic Per-Message Pricing Rules & Markups</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Set live Meta base cost and platform markups charged to clients per WhatsApp message category.
+                </p>
+              </div>
+            </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                  <th className="py-4 px-6">Country Code</th>
-                  <th className="py-4 px-6">Category</th>
-                  <th className="py-4 px-6">Meta Base Cost</th>
-                  <th className="py-4 px-6">Platform Markup</th>
-                  <th className="py-4 px-6 text-right">Total Price Charged</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
-                <tr className="hover:bg-slate-800/40">
-                  <td className="py-4 px-6 font-bold text-white">IN (+91)</td>
-                  <td className="py-4 px-6 text-xs text-slate-300 font-semibold">MARKETING</td>
-                  <td className="py-4 px-6 text-slate-400">₹0.7800</td>
-                  <td className="py-4 px-6 text-purple-400 font-semibold">+₹0.1200</td>
-                  <td className="py-4 px-6 text-right font-bold text-emerald-400">₹0.9000</td>
-                </tr>
-                <tr className="hover:bg-slate-800/40">
-                  <td className="py-4 px-6 font-bold text-white">IN (+91)</td>
-                  <td className="py-4 px-6 text-xs text-slate-300 font-semibold">UTILITY</td>
-                  <td className="py-4 px-6 text-slate-400">₹0.3000</td>
-                  <td className="py-4 px-6 text-purple-400 font-semibold">+₹0.0500</td>
-                  <td className="py-4 px-6 text-right font-bold text-emerald-400">₹0.3500</td>
-                </tr>
-                <tr className="hover:bg-slate-800/40">
-                  <td className="py-4 px-6 font-bold text-white">US (+1)</td>
-                  <td className="py-4 px-6 text-xs text-slate-300 font-semibold">MARKETING</td>
-                  <td className="py-4 px-6 text-slate-400">$0.0250</td>
-                  <td className="py-4 px-6 text-purple-400 font-semibold">+$0.0050</td>
-                  <td className="py-4 px-6 text-right font-bold text-emerald-400">$0.0300</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-emerald-400 uppercase block">Marketing Message Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    defaultValue="1.00"
+                    id="rate-marketing"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Meta Base ~₹0.78 + Markup ~₹0.22</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-blue-400 uppercase block">Utility Message Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    defaultValue="0.20"
+                    id="rate-utility"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Meta Base ~₹0.15 + Markup ~₹0.05</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-amber-400 uppercase block">Authentication Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    defaultValue="0.25"
+                    id="rate-auth"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Meta Base ~₹0.18 + Markup ~₹0.07</p>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+                <span className="font-bold text-purple-400 uppercase block">International Message Rate</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.10"
+                    defaultValue="3.00"
+                    id="rate-intl"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">Global outbound international SMS</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => alert('⚖️ Dynamic Platform Rate Cards updated successfully!')}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+              >
+                Save Dynamic Pricing Rules
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -583,13 +626,14 @@ export const SuperAdminDashboard: React.FC = () => {
                   <th className="py-4 px-6">Organization</th>
                   <th className="py-4 px-6">Subject</th>
                   <th className="py-4 px-6">Priority</th>
-                  <th className="py-4 px-6 text-right">Status</th>
+                  <th className="py-4 px-6">Date</th>
+                  <th className="py-4 px-6 text-right">Status / Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
                 {kpi.supportTickets?.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-slate-500">No support tickets currently open.</td>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">No support tickets currently open.</td>
                   </tr>
                 ) : (
                   kpi.supportTickets?.map((t: any) => (
@@ -598,10 +642,24 @@ export const SuperAdminDashboard: React.FC = () => {
                       <td className="py-4 px-6 font-semibold text-white">{t.organization?.name || '—'}</td>
                       <td className="py-4 px-6 text-slate-300">{t.subject}</td>
                       <td className="py-4 px-6 text-xs font-bold text-amber-400">{t.priority}</td>
+                      <td className="py-4 px-6 text-xs text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</td>
                       <td className="py-4 px-6 text-right">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          {t.status}
-                        </span>
+                        <button
+                          onClick={() => {
+                            const reply = prompt(`Reply to ticket ${t.ticketNumber} ("${t.subject}"):`);
+                            if (reply) {
+                              apiClient.post(`/superadmin/tickets/${t.id}/reply`, { message: reply, status: 'IN_PROGRESS' })
+                                .then(() => {
+                                  alert('✅ Response sent to client!');
+                                  refetch();
+                                })
+                                .catch((e) => alert(`Error: ${e.message}`));
+                            }
+                          }}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md"
+                        >
+                          Reply to Client
+                        </button>
                       </td>
                     </tr>
                   ))

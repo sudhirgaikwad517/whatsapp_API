@@ -312,3 +312,67 @@ export async function creditWalletForOrganization(organizationId: string, amount
 
   return wallet;
 }
+
+export async function updatePricingRule(data: {
+  countryCode: string;
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE';
+  metaCost: number;
+  platformMarkup: number;
+}) {
+  const totalPrice = Number((data.metaCost + data.platformMarkup).toFixed(4));
+
+  const rule = await prisma.pricingRule.upsert({
+    where: {
+      countryCode_conversationCategory: {
+        countryCode: data.countryCode,
+        conversationCategory: data.category as any,
+      },
+    },
+    update: {
+      metaCost: data.metaCost,
+      platformMarkup: data.platformMarkup,
+      totalPrice,
+    },
+    create: {
+      countryCode: data.countryCode,
+      conversationCategory: data.category as any,
+      metaCost: data.metaCost,
+      platformMarkup: data.platformMarkup,
+      totalPrice,
+      currency: 'INR',
+    },
+  });
+
+  return rule;
+}
+
+export async function superAdminReplyTicket(ticketId: string, message: string, status?: string) {
+  const ticket = await prisma.supportTicket.findUnique({
+    where: { id: ticketId },
+  });
+
+  if (!ticket) {
+    throw new AppError('Support ticket not found', 404, 'NOT_FOUND');
+  }
+
+  const msg = await prisma.ticketMessage.create({
+    data: {
+      ticketId,
+      senderType: 'SUPER_ADMIN',
+      senderId: 'SYSTEM_SUPER_ADMIN',
+      message,
+    },
+  });
+
+  const updatedTicket = await prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: {
+      status: status || 'IN_PROGRESS',
+      updatedAt: new Date(),
+    },
+    include: { messages: true, organization: true },
+  });
+
+  return updatedTicket;
+}
+

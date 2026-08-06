@@ -38,5 +38,7 @@ router.post('/suspension', SuperAdminController.toggleSuspension);
 router.post('/plan-tier', SuperAdminController.updatePlanTier);
 router.post('/grant-credits', SuperAdminController.grantAiCredits);
 router.post('/credit-wallet', SuperAdminController.manualCreditWallet);
+router.post('/pricing-rule', SuperAdminController.updatePricingRule);
+router.post('/tickets/:ticketId/reply', SuperAdminController.replyTicket);
 
 export default router;

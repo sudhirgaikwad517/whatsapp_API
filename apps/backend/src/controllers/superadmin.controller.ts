@@ -82,3 +82,23 @@ export async function manualCreditWallet(req: Request, res: Response, next: Next
     next(err);
   }
 }
+
+export async function updatePricingRule(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await SuperAdminService.updatePricingRule(req.body);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function replyTicket(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { ticketId } = req.params;
+    const { message, status } = req.body;
+    const data = await SuperAdminService.superAdminReplyTicket(ticketId, message, status);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

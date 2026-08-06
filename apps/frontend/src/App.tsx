@@ -21,6 +21,7 @@ import { Flows } from './pages/Flows';
 import { Catalog } from './pages/Catalog';
 import { Billing } from './pages/Billing';
 import { Settings } from './pages/Settings';
+import { Profile } from './pages/Profile';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ export const App: React.FC = () => {
             <Route path="team" element={<Team />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="profile" element={<Profile />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

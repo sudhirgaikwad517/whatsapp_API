@@ -15,6 +15,8 @@ import {
   Users2,
   ShieldAlert,
   Settings,
+  User,
+  LifeBuoy,
   LogOut,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
@@ -24,7 +26,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
-  const logout = useAuthStore((state) => state.logout);
+  const { user, logout } = useAuthStore();
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
     { to: '/team', label: 'Team & Agents', icon: Users2 },
     { to: '/analytics', label: 'Analytics', icon: BarChart3 },
     { to: '/settings', label: 'Organization Settings', icon: Settings },
+    { to: '/profile', label: 'Profile & Support Portal', icon: User },
   ];
 
   return (
@@ -77,10 +80,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
       </nav>
 
       {/* User Footer */}
-      <div className="p-4 border-t border-slate-800">
+      <div className="p-4 border-t border-slate-800 space-y-2">
+        <NavLink
+          to="/profile"
+          className="flex items-center space-x-3 p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 transition-all"
+        >
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold text-xs">
+            {user?.fullName?.charAt(0) || 'U'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-white truncate">{user?.fullName || 'User Profile'}</p>
+            <p className="text-[10px] text-slate-400 truncate">{user?.email || 'Support Portal'}</p>
+          </div>
+        </NavLink>
+
         <button
           onClick={logout}
-          className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-all"
+          className="w-full flex items-center justify-center px-3 py-2 text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 rounded-lg transition-all cursor-pointer"
         >
           <LogOut className="w-4 h-4 mr-2" />
           Log Out
