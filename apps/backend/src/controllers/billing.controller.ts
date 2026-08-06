@@ -9,7 +9,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
     const orgId = req.user!.organizationId;
     const wallet = await BillingService.getOrCreateWallet(orgId);
 
-    const [ledgers, invoices, marketingSent, rawOutboundTemplates, serviceCount, ledgerDebitsSum] = await Promise.all([
+    const [ledgers, invoices, campaignRecipients, inboundCount, ledgerDebitsSum] = await Promise.all([
       prisma.walletLedger.findMany({
         where: { organizationId: orgId },
         orderBy: { createdAt: 'desc' },
@@ -29,14 +29,6 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
       prisma.message.count({
         where: {
           organizationId: orgId,
-          direction: 'OUTBOUND',
-          type: 'TEMPLATE',
-          status: { not: 'FAILED' },
-        },
-      }),
-      prisma.message.count({
-        where: {
-          organizationId: orgId,
           direction: 'INBOUND',
         },
       }),
@@ -48,8 +40,21 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
         },
       }),
     ]);
-    
-    const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
+
+    const exactTemplateCounts: any[] = await prisma.$queryRaw`
+      SELECT 
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
+      FROM "Message" m
+      INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
+      WHERE m."organizationId" = ${orgId}::uuid
+        AND m."direction" = 'OUTBOUND'
+        AND m."type" = 'TEMPLATE'
+        AND m."status" != 'FAILED'
+    `;
+
+    const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+    const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
     const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
     const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
     
@@ -74,7 +79,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
         usage: {
           marketingSent,
           utilitySent,
-          serviceCount,
+          serviceCount: inboundCount,
         },
       },
     });

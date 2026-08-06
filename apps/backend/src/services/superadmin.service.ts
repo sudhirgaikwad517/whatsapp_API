@@ -130,23 +130,28 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    const [marketingSent, rawOutboundTemplates, inboundCount] = await Promise.all([
+    const [campaignRecipients, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
-          status: { not: 'FAILED' },
-        },
-      }),
-      prisma.message.count({
-        where: {
-          direction: 'OUTBOUND',
-          type: 'TEMPLATE',
           status: { not: 'FAILED' },
         },
       }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
 
-    const finalUtilityCount = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
+    const exactTemplateCounts: any[] = await prisma.$queryRaw`
+      SELECT 
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+        COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
+      FROM "Message" m
+      INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
+      WHERE m."direction" = 'OUTBOUND'
+        AND m."type" = 'TEMPLATE'
+        AND m."status" != 'FAILED'
+    `;
+
+    const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+    const finalUtilityCount = Number(exactTemplateCounts[0]?.utility_sent || 0);
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
     metaAnalytics.metaDeliveredUtility = finalUtilityCount;
@@ -272,7 +277,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
       const waAccount = org.whatsappAccounts?.[0];
 
       // Query actual ledger debits & recipient statuses strictly per-organization without leakage
-      const [ledgerDebitsSum, marketingSent, rawOutboundTemplates] = await Promise.all([
+      const [ledgerDebitsSum, campaignRecipients] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
@@ -286,17 +291,22 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             status: { not: 'FAILED' },
           },
         }),
-        prisma.message.count({
-          where: {
-            organizationId: org.id,
-            direction: 'OUTBOUND',
-            type: 'TEMPLATE',
-            status: { not: 'FAILED' },
-          },
-        }),
       ]);
 
-      const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
+      const exactTemplateCounts: any[] = await prisma.$queryRaw`
+        SELECT 
+          COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+          COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
+        FROM "Message" m
+        INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
+        WHERE m."organizationId" = ${org.id}::uuid
+          AND m."direction" = 'OUTBOUND'
+          AND m."type" = 'TEMPLATE'
+          AND m."status" != 'FAILED'
+      `;
+
+      const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+      const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
@@ -566,18 +576,10 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
-  const [marketingSent, rawOutboundTemplates, inboundCount, ledgers, invoices] = await Promise.all([
+  const [campaignRecipients, inboundCount, ledgers, invoices] = await Promise.all([
     prisma.campaignRecipient.count({
       where: {
         campaign: { organizationId: org.id },
-        status: { not: 'FAILED' },
-      },
-    }),
-    prisma.message.count({
-      where: {
-        organizationId: org.id,
-        direction: 'OUTBOUND',
-        type: 'TEMPLATE',
         status: { not: 'FAILED' },
       },
     }),
@@ -595,7 +597,22 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
       take: 10,
     }),
   ]);
-  const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
+
+  const exactTemplateCounts: any[] = await prisma.$queryRaw`
+    SELECT 
+      COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+      COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
+    FROM "Message" m
+    INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
+    WHERE m."organizationId" = ${org.id}::uuid
+      AND m."direction" = 'OUTBOUND'
+      AND m."type" = 'TEMPLATE'
+      AND m."status" != 'FAILED'
+  `;
+
+  // Use the exact SQL counts. If SQL fails or returns 0, fallback to campaign recipients for marketing.
+  const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+  const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
