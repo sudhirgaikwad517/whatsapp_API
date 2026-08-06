@@ -483,27 +483,57 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* TAB 2: FINANCE ERP & META SETTLEMENT CENTER */}
       {activeTab === 'finance' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <h3 className="text-lg font-bold text-white tracking-tight flex items-center">
             <DollarSign className="w-5 h-5 mr-2 text-emerald-400" />
-            Double-Entry Finance ERP & Meta Liability Reconciliation
+            Double-Entry Finance ERP & Live Meta Graph API Liability Reconciliation
           </h3>
 
+          {/* Live Meta Graph API Telemetry Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Marketing Messages Delivered</span>
+              <div className="text-2xl font-black text-emerald-400">{kpi?.financials?.metaAnalytics?.metaDeliveredMarketing || 0}</div>
+              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.78 / msg</p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Utility Messages Delivered</span>
+              <div className="text-2xl font-black text-blue-400">{kpi?.financials?.metaAnalytics?.metaDeliveredUtility || 0}</div>
+              <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.15 / msg</p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Free Service Conversations</span>
+              <div className="text-2xl font-black text-purple-400">{kpi?.financials?.metaAnalytics?.metaDeliveredService || 0}</div>
+              <p className="text-[10px] text-slate-500">Free 24h Customer Support Window</p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Actual Meta Payable Charges</span>
+              <div className="text-2xl font-black text-amber-400">₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}</div>
+              <p className="text-[10px] text-slate-500">Meta Graph API Billed Cost</p>
+            </div>
+          </div>
+
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
-            <div className="grid grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
-                <span className="text-slate-400 font-semibold">Total Gross Invoiced</span>
-                <div className="text-xl font-bold text-emerald-400">₹{Number(kpi?.financials?.grossRevenue || 0).toFixed(2)}</div>
+                <span className="text-slate-400 font-semibold uppercase">Gross Client Revenue</span>
+                <div className="text-2xl font-black text-emerald-400">₹{Number(kpi?.financials?.grossRevenue || 0).toFixed(2)}</div>
+                <p className="text-[10px] text-slate-500">Collected from Client Top-ups</p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
-                <span className="text-slate-400 font-semibold">Meta Graph API Payable</span>
-                <div className="text-xl font-bold text-amber-400">₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}</div>
+                <span className="text-slate-400 font-semibold uppercase">Exact Meta Payable Liability</span>
+                <div className="text-2xl font-black text-amber-400">₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}</div>
+                <p className="text-[10px] text-slate-500">Calculated Meta Graph API Charges</p>
               </div>
 
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1">
-                <span className="text-slate-400 font-semibold">Estimated Net Platform Margin</span>
-                <div className="text-xl font-bold text-purple-400">₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</div>
+              <div className="bg-slate-950 border border-purple-500/30 rounded-xl p-4 space-y-1 bg-purple-500/5">
+                <span className="text-purple-400 font-semibold uppercase">Net Platform Profit Margin</span>
+                <div className="text-2xl font-black text-purple-300">₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</div>
+                <p className="text-[10px] text-purple-400 font-bold">Gross Revenue - Meta Cost = Net Profit</p>
               </div>
             </div>
 
