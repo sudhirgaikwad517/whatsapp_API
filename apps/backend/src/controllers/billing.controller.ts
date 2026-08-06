@@ -31,7 +31,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
           organizationId: orgId,
           direction: 'OUTBOUND',
           type: 'TEMPLATE',
-          status: 'DELIVERED',
+          status: { not: 'FAILED' },
         },
       }),
       prisma.message.count({

@@ -140,7 +140,7 @@ export async function getExecutiveDashboardKpi() {
         where: {
           direction: 'OUTBOUND',
           type: 'TEMPLATE',
-          status: 'DELIVERED',
+          status: { not: 'FAILED' },
         },
       }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
@@ -291,7 +291,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             organizationId: org.id,
             direction: 'OUTBOUND',
             type: 'TEMPLATE',
-            status: 'DELIVERED',
+            status: { not: 'FAILED' },
           },
         }),
       ]);
@@ -578,7 +578,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
         organizationId: org.id,
         direction: 'OUTBOUND',
         type: 'TEMPLATE',
-        status: 'DELIVERED',
+        status: { not: 'FAILED' },
       },
     }),
     prisma.message.count({
