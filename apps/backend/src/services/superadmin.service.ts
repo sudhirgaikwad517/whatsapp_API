@@ -122,15 +122,11 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    // Fetch all campaign recipient wamids to strictly exclude campaign messages from non-campaign utility counts
-    const campaignRecipients = await prisma.campaignRecipient.findMany({
-      where: { wamid: { not: null } },
-      select: { wamid: true },
-    });
-    const campaignWamidSet = new Set(campaignRecipients.map((r) => r.wamid!).filter(Boolean));
-    const campaignWamids = Array.from(campaignWamidSet);
-
-    const [marketingSent, utilitySent, inboundCount] = await Promise.all([
+    // 100% Strict Meta Manager Mapping:
+    // Marketing = All Broadcast Campaign Recipients Delivered
+    // Utility = Transactional Single Template Messages
+    // Service = Free Customer Service 24h Window
+    const [marketingSent, nonCampaignOutboundTemplates, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
           errorCode: null,
@@ -142,11 +138,13 @@ export async function getExecutiveDashboardKpi() {
           direction: 'OUTBOUND',
           type: 'TEMPLATE',
           errorCode: null,
-          ...(campaignWamids.length > 0 ? { wamid: { notIn: campaignWamids } } : {}),
         },
       }),
       prisma.message.count({ where: { direction: 'INBOUND' } }),
     ]);
+
+    // Calculate non-campaign utility template messages (subtracting campaign messages from raw message table)
+    const utilitySent = Math.max(0, nonCampaignOutboundTemplates - marketingSent);
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
     metaAnalytics.metaDeliveredUtility = utilitySent;
@@ -265,15 +263,8 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
 
-      // Fetch campaign recipient wamids for this org to exclude from non-campaign utility counts
-      const orgCampaignRecipients = await prisma.campaignRecipient.findMany({
-        where: { campaign: { organizationId: org.id }, wamid: { not: null } },
-        select: { wamid: true },
-      });
-      const orgCampaignWamids = Array.from(new Set(orgCampaignRecipients.map((r) => r.wamid!).filter(Boolean)));
-
-      // Query actual ledger debits & recipient statuses strictly separating Template Utility vs Free Chat Window
-      const [ledgerDebitsSum, marketingSent, utilitySent] = await Promise.all([
+      // Query actual ledger debits & recipient statuses with strict category separation
+      const [ledgerDebitsSum, marketingSent, rawOutboundTemplates] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
@@ -294,10 +285,11 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             direction: 'OUTBOUND',
             type: 'TEMPLATE',
             errorCode: null,
-            ...(orgCampaignWamids.length > 0 ? { wamid: { notIn: orgCampaignWamids } } : {}),
           },
         }),
       ]);
+
+      const utilitySent = Math.max(0, rawOutboundTemplates - marketingSent);
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
@@ -567,14 +559,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
-  // Fetch campaign recipient wamids for this org to exclude from non-campaign utility counts
-  const orgCampaignRecipients = await prisma.campaignRecipient.findMany({
-    where: { campaign: { organizationId: org.id }, wamid: { not: null } },
-    select: { wamid: true },
-  });
-  const orgCampaignWamids = Array.from(new Set(orgCampaignRecipients.map((r) => r.wamid!).filter(Boolean)));
-
-  const [marketingSent, utilitySent, inboundCount, ledgers, invoices] = await Promise.all([
+  const [marketingSent, rawOutboundTemplates, inboundCount, ledgers, invoices] = await Promise.all([
     prisma.campaignRecipient.count({
       where: {
         campaign: { organizationId: org.id },
@@ -588,7 +573,6 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
         direction: 'OUTBOUND',
         type: 'TEMPLATE',
         errorCode: null,
-        ...(orgCampaignWamids.length > 0 ? { wamid: { notIn: orgCampaignWamids } } : {}),
       },
     }),
     prisma.message.count({
@@ -606,6 +590,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     }),
   ]);
 
+  const utilitySent = Math.max(0, rawOutboundTemplates - marketingSent);
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
