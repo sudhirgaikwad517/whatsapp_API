@@ -149,7 +149,7 @@ export async function getExecutiveDashboardKpi() {
         AND m."status" != 'FAILED'
     `;
 
-    const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+    const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
     const finalUtilityCount = Number(exactTemplateCounts[0]?.utility_sent || 0);
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
@@ -309,7 +309,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
           AND m."status" != 'FAILED'
       `;
 
-      const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+      const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
       const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
@@ -623,7 +623,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
   `;
 
   // Use the exact SQL counts. If SQL fails or returns 0, fallback to campaign recipients for marketing.
-  const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+  const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
   const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));

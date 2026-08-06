@@ -245,7 +245,7 @@ export async function rechargeWallet(
       where: { campaign: { organizationId: organizationId }, status: { not: 'FAILED' } },
     });
 
-    const marketingSent = Math.max(Number(exactTemplateCounts[0]?.marketing_sent || 0), campaignRecipients);
+    const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
     const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
     const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
     
