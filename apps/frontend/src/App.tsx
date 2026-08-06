@@ -32,9 +32,22 @@ const queryClient = new QueryClient({
   },
 });
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+const ProtectedRoute: React.FC<{ children: React.ReactNode; requireTenantAccess?: boolean }> = ({
+  children,
+  requireTenantAccess,
+}) => {
+  const { isAuthenticated, user, isImpersonating } = useAuthStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Redirect SuperAdmin away from tenant view if not explicitly impersonating
+  if (requireTenantAccess && user?.role === 'SUPER_ADMIN' && !isImpersonating) {
+    return <Navigate to="/superadmin" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 export const App: React.FC = () => {
@@ -62,7 +75,7 @@ export const App: React.FC = () => {
           <Route
             path="/"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireTenantAccess>
                 <Layout />
               </ProtectedRoute>
             }

@@ -28,7 +28,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const startImpersonation = useAuthStore((state) => state.startImpersonation);
 
   // Fetch detailed organization financials for modal audit
   const { data: orgFinanceDetails, isLoading: isFinanceDetailsLoading } = useQuery({
@@ -71,7 +71,7 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onSuccess: (data: any) => {
       alert(`🎭 Impersonating "${data.organization.name}"!\n\nLogging in as Owner: ${data.owner.email}`);
-      setAuth(data.owner, data.impersonationToken, data.impersonationToken);
+      startImpersonation(data.owner, data.impersonationToken);
       window.location.href = '/';
     },
     onError: (err: any) => {

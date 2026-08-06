@@ -49,7 +49,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
       }),
     ]);
 
-    const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : (marketingSent > 0 ? 6 : 0);
+    const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
     const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
     const totalChargesBilled = ledgerDebitsSum._sum?.amount
       ? Number(Number(ledgerDebitsSum._sum.amount).toFixed(2))

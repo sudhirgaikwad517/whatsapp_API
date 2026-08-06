@@ -1,17 +1,41 @@
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { Menu, X, MessageSquare } from 'lucide-react';
+import { Menu, X, MessageSquare, ShieldAlert } from 'lucide-react';
+import { useAuthStore } from '../../store/auth.store';
 
 export const Layout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isImpersonating, stopImpersonation, user } = useAuthStore();
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
-      {/* Desktop Fixed Sidebar */}
-      <div className="hidden lg:flex shrink-0">
-        <Sidebar />
-      </div>
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
+      {/* Impersonation Session Protection Top Bar */}
+      {isImpersonating && (
+        <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border-b border-amber-500/40 px-4 py-2 flex items-center justify-between text-xs text-amber-200 font-semibold z-50 shrink-0 shadow-lg">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>
+              IMPERSONATION MODE ACTIVE: Logged in as <strong>{user?.fullName || 'Tenant Owner'}</strong> ({user?.organizationId})
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              stopImpersonation();
+              window.location.href = '/superadmin';
+            }}
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+          >
+            <span>Exit to SuperAdmin ERP ➔</span>
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Desktop Fixed Sidebar */}
+        <div className="hidden lg:flex shrink-0">
+          <Sidebar />
+        </div>
 
       {/* Mobile Backdrop Overlay */}
       {isMobileMenuOpen && (
@@ -70,6 +94,7 @@ export const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+      </div>
     </div>
   );
 };

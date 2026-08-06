@@ -70,6 +70,8 @@ export async function getExecutiveDashboardKpi() {
     totalMessages,
     walletsSum,
     invoicesSum,
+    allLedgerDebits,
+    allRecharges,
     supportTickets,
     auditLogs,
     pricingRules,
@@ -84,6 +86,14 @@ export async function getExecutiveDashboardKpi() {
     }),
     prisma.invoice.aggregate({
       _sum: { grandTotal: true, subtotal: true, taxAmount: true },
+    }),
+    prisma.walletLedger.aggregate({
+      _sum: { amount: true },
+      where: { transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
+    }),
+    prisma.walletLedger.aggregate({
+      _sum: { amount: true },
+      where: { transactionType: { in: ['RECHARGE', 'MANUAL_CREDIT', 'BONUS'] } },
     }),
     prisma.supportTicket.findMany({
       include: { organization: true },
@@ -100,8 +110,10 @@ export async function getExecutiveDashboardKpi() {
     }),
   ]);
 
-  const grossRevenue = Number(invoicesSum._sum.grandTotal || 0);
-  const netRevenue = Number(invoicesSum._sum.subtotal || 0);
+  const billedUsageSum = Number(allLedgerDebits._sum?.amount || 0);
+  const rechargeSum = Number(allRecharges._sum?.amount || 0);
+  const grossRevenue = Number((invoicesSum._sum.grandTotal || Math.max(billedUsageSum, rechargeSum)).toFixed(2));
+  const netRevenue = Number((invoicesSum._sum.subtotal || grossRevenue).toFixed(2));
   const totalGstTax = Number(invoicesSum._sum.taxAmount || 0);
   const totalWalletBalance = Number(walletsSum._sum.availableBalance || 0);
   const totalReservedBalance = Number(walletsSum._sum.reservedBalance || 0);
@@ -110,7 +122,6 @@ export async function getExecutiveDashboardKpi() {
   let metaAnalytics = {
     metaDeliveredMarketing: 0,
     metaDeliveredUtility: 0,
-    metaDeliveredAuth: 0,
     metaDeliveredService: 0,
     actualMetaCostInINR: 0,
   };
@@ -122,10 +133,6 @@ export async function getExecutiveDashboardKpi() {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    // 100% Strict Meta Manager Mapping:
-    // Marketing = 522 Delivered Campaign Recipients (status != 'FAILED')
-    // Utility = 6 Transactional Utility Messages
-    // Service = Inbound/Free Customer Support Window Messages
     const [marketingSent, utilitySentRaw, inboundCount] = await Promise.all([
       prisma.campaignRecipient.count({
         where: {
@@ -143,7 +150,7 @@ export async function getExecutiveDashboardKpi() {
     ]);
 
     const marketingSentCount = marketingSent;
-    const utilitySentCount = utilitySentRaw > marketingSentCount ? utilitySentRaw - marketingSentCount : 6;
+    const utilitySentCount = utilitySentRaw > marketingSentCount ? utilitySentRaw - marketingSentCount : 0;
 
     metaAnalytics.metaDeliveredMarketing = marketingSentCount;
     metaAnalytics.metaDeliveredUtility = utilitySentCount;
@@ -262,7 +269,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     organizations.map(async (org) => {
       const waAccount = org.whatsappAccounts?.[0];
 
-      // Query actual ledger debits & recipient statuses with strict category separation
+      // Query actual ledger debits & recipient statuses strictly per-organization without leakage
       const [ledgerDebitsSum, marketingSent, rawOutboundTemplates] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
@@ -287,7 +294,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
         }),
       ]);
 
-      const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : (marketingSent > 0 ? 6 : 0);
+      const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
@@ -587,7 +594,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     }),
   ]);
 
-  const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : (marketingSent > 0 ? 6 : 0);
+  const utilitySent = rawOutboundTemplates > marketingSent ? rawOutboundTemplates - marketingSent : 0;
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));

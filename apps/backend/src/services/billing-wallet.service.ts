@@ -255,6 +255,59 @@ export async function rechargeWallet(
   });
 }
 
+/**
+ * Direct Wallet Debit Function (Supports overdraft negative balance)
+ */
+export async function deductDirectWalletBalance(
+  organizationId: string,
+  amountNumber: number,
+  referenceId: string,
+  description: string
+) {
+  const amount = new Prisma.Decimal(amountNumber);
+
+  return await prisma.$transaction(async (tx) => {
+    let wallet = await tx.wallet.findUnique({
+      where: { organizationId },
+    });
+
+    if (!wallet) {
+      wallet = await tx.wallet.create({
+        data: {
+          organizationId,
+          availableBalance: new Prisma.Decimal(0.0),
+          reservedBalance: new Prisma.Decimal(0.0),
+        },
+      });
+    }
+
+    const openingBalance = wallet.availableBalance;
+    const closingBalance = Decimal.sub(openingBalance, amount);
+
+    const updatedWallet = await tx.wallet.update({
+      where: { id: wallet.id },
+      data: {
+        availableBalance: closingBalance,
+      },
+    });
+
+    await tx.walletLedger.create({
+      data: {
+        walletId: wallet.id,
+        organizationId,
+        transactionType: 'DEBIT',
+        amount,
+        openingBalance,
+        closingBalance,
+        referenceId,
+        description,
+      },
+    });
+
+    return updatedWallet;
+  });
+}
+
 class Decimal {
   static sub(a: Prisma.Decimal, b: Prisma.Decimal) {
     return new Prisma.Decimal(a.toNumber() - b.toNumber());
