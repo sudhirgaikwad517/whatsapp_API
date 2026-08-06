@@ -63,7 +63,8 @@ export const Billing: React.FC = () => {
       alert('🪙 AI Credits Bundle added successfully!');
     },
     onError: (err: any) => {
-      alert(`Top-up failed: ${err.message}`);
+      const errorMsg = err.response?.data?.message || err.message;
+      alert(`Top-up failed: ${errorMsg}`);
     },
   });
 
@@ -78,7 +79,8 @@ export const Billing: React.FC = () => {
       alert('💳 Wallet Balance recharged successfully!');
     },
     onError: (err: any) => {
-      alert(`Recharge failed: ${err.message}`);
+      const errorMsg = err.response?.data?.message || err.message;
+      alert(`Recharge failed: ${errorMsg}`);
     },
   });
 
@@ -121,7 +123,8 @@ export const Billing: React.FC = () => {
       rzp.open();
     },
     onError: (err: any) => {
-      alert(`Failed to initiate recharge: ${err.message}`);
+      const errorMsg = err.response?.data?.message || err.message;
+      alert(`Failed to initiate recharge: ${errorMsg}`);
     },
   });
 
