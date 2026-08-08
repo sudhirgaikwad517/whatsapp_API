@@ -200,7 +200,10 @@ export async function assignConversation(organizationId: string, conversationId:
 
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
-    data: { assignedAgentId: agentId },
+    data: {
+      assignedAgentId: agentId,
+      ...(agentId === null && conversation.status === 'ESCALATED' ? { status: 'OPEN' } : {}),
+    },
     include: { assignedAgent: { select: { id: true, fullName: true, email: true } } },
   });
 
@@ -223,6 +226,13 @@ export async function updateConversationStatus(organizationId: string, conversat
       ...(isResolved ? { resolvedAt: new Date(), assignedAgentId: null } : {}),
     },
   });
+
+  try {
+    const { emitToOrganization } = await import('../socket/inbox.gateway.js');
+    emitToOrganization(organizationId, 'new_message', { conversationId });
+  } catch (err) {
+    // Ignore socket error
+  }
 
   return updated;
 }
