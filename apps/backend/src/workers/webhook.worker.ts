@@ -103,6 +103,9 @@ export const webhookWorker = new Worker(
           });
 
           let assignedAgentId = existingConv?.assignedAgentId || null;
+          if (existingConv?.status === 'RESOLVED' || existingConv?.status === 'CLOSED') {
+            assignedAgentId = null;
+          }
 
           // Only auto-assign agent on new incoming conversation if AI Auto-Responder is OFF
           if (!orgInfo?.isAiAutoRespondEnabled && (!existingConv || !assignedAgentId)) {
