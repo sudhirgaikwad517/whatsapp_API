@@ -123,6 +123,7 @@ model Organization {
   aiCreditsBalance  Int                @default(1000)
   aiKnowledgeBase   String?            @db.Text
   geminiApiKey      String?            @db.VarChar(255)
+  isAiAutoRespondEnabled Boolean       @default(false)
   razorpayKeyId     String?            @db.VarChar(255)
   razorpayKeySecret String?            @db.VarChar(255)
   isSuspended       Boolean            @default(false)

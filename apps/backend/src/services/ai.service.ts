@@ -155,3 +155,169 @@ Return ONLY the template text body.`;
 
   return `Hello {{1}}, exciting news from our team! Special offer just for you: {{2}}. Reply YES to claim now!`;
 }
+
+export async function processAutonomousAiResponse(organizationId: string, conversationId: string): Promise<void> {
+  try {
+    const org = await (prisma as any).organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, aiCreditsBalance: true, isAiAutoRespondEnabled: true },
+    });
+
+    // Check if AI Auto-Respond toggle is enabled and organization has AI Credits
+    if (!org || !org.isAiAutoRespondEnabled || (org.aiCreditsBalance ?? 0) <= 0) {
+      return;
+    }
+
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { assignedAgentId: true, status: true },
+    });
+
+    // Do NOT auto respond if conversation is already assigned to a human agent or resolved
+    if (conversation?.assignedAgentId || conversation?.status === 'RESOLVED') {
+      return;
+    }
+
+    // Evaluate AI Autonomous Reply with Handoff Check
+    const result = await evaluateAiAutonomousReply(organizationId, conversationId);
+
+    if (result.isEscalated) {
+      // 1. Mark conversation status as ESCALATED in DB
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { status: 'ESCALATED' },
+      });
+
+      // 2. Send polite handoff acknowledgement message to customer
+      const { sendOutboundTextMessage } = await import('./inbox.service.js');
+      await sendOutboundTextMessage(
+        organizationId,
+        conversationId,
+        `I am connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! ⏱️`
+      );
+
+      // 3. Emit socket notification to alert live agents in Live Inbox UI
+      const { emitToOrganization } = await import('../socket/inbox.gateway.js');
+      emitToOrganization(organizationId, 'conversation_escalated', {
+        conversationId,
+        reason: result.reason || 'Complex Query Escalation',
+      });
+      logger.info({ conversationId, organizationId }, 'Complex AI query escalated to Live Agent.');
+    } else if (result.replyText) {
+      // Send automated AI response to customer on WhatsApp
+      const { sendOutboundTextMessage } = await import('./inbox.service.js');
+      await sendOutboundTextMessage(organizationId, conversationId, result.replyText);
+      logger.info({ conversationId, organizationId }, 'Autonomous AI response dispatched to customer.');
+    }
+  } catch (err) {
+    logger.error({ err, conversationId, organizationId }, 'Error executing processAutonomousAiResponse');
+  }
+}
+
+async function evaluateAiAutonomousReply(organizationId: string, conversationId: string): Promise<{ replyText?: string; isEscalated: boolean; reason?: string }> {
+  const [org, messagesDesc, conversation, products] = await Promise.all([
+    (prisma as any).organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
+    }),
+    prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+    }),
+    prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { contact: true },
+    }),
+    (prisma as any).productCatalog.findMany({
+      where: { organizationId, isActive: true },
+      select: { title: true, priceInINR: true, description: true },
+      take: 10,
+    }),
+  ]);
+
+  const messages = (messagesDesc || []).reverse();
+  const customerName = conversation?.contact?.firstName || 'Customer';
+  const orgName = org?.name || 'Prowexa Business';
+  const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
+  const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+
+  const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
+  const lastInboundText = typeof lastInboundMsg?.content === 'object'
+    ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
+    : lastInboundMsg?.content || '';
+
+  const productCatalogText = products && products.length > 0
+    ? products.map((p: any) => `- ${p.title}: ₹${p.priceInINR} (${p.description || ''})`).join('\n')
+    : 'No catalog products listed yet.';
+
+  const chatHistory = messages
+    .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
+    .join('\n');
+
+  if (effectiveApiKey) {
+    const promptText = `You are an Autonomous AI Customer Support Bot for "${orgName}".
+
+Business Knowledgebase & FAQs:
+${knowledgeBase}
+
+Product Catalog:
+${productCatalogText}
+
+Recent Chat History:
+${chatHistory}
+
+LATEST CUSTOMER MESSAGE (${customerName}): "${lastInboundText}"
+
+CRITICAL TASK:
+1. Analyze if ${customerName}'s message can be clearly and accurately answered using the Knowledgebase, FAQs, or Product Catalog.
+2. IF YES (Standard question, general inquiry, delivery check, product info, pricing):
+   - Generate a concise, polite, helpful 1-2 sentence response to send to ${customerName} on WhatsApp.
+   - Return ONLY the response text.
+3. IF NO (Too complex, angry customer complaint, refund/cancellation request, custom price negotiation, or details missing in FAQ):
+   - Respond EXACTLY with: "[HANDOFF_TO_HUMAN: <Brief reason>]"`;
+
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    try {
+      const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await activeClient.models.generateContent({
+            model: modelName,
+            contents: promptText,
+          });
+
+          if (response?.text && response.text.trim()) {
+            const replyText = response.text.trim();
+            if (replyText.includes('[HANDOFF_TO_HUMAN')) {
+              return { isEscalated: true, reason: 'Complex Question Escalation' };
+            }
+
+            try {
+              const { deductAiCredit } = await import('./credits.service.js');
+              await deductAiCredit(organizationId, 'AI_AUTO_RESPONDER');
+            } catch (err) {
+              logger.error({ err }, 'Credit deduction failed after autonomous AI reply');
+            }
+            return { replyText, isEscalated: false };
+          }
+        } catch (e) {
+          // try next model
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, 'Autonomous AI client evaluation failed');
+    }
+  }
+
+  // Check fallback keywords for handoff
+  const lowerText = lastInboundText.toLowerCase();
+  if (/refund|cancel|complaint|talk to human|agent|supervisor|manager|scam|fraud/i.test(lowerText)) {
+    return { isEscalated: true, reason: 'Keyword Human Escalation' };
+  }
+
+  return {
+    replyText: `Hi ${customerName}! Thank you for reaching out to ${orgName}. How can we assist you today?`,
+    isEscalated: false,
+  };
+}

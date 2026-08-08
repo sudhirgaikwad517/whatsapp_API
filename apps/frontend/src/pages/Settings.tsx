@@ -10,6 +10,7 @@ export const Settings: React.FC = () => {
   const [accessToken, setAccessToken] = useState('');
   const [aiKnowledgeBase, setAiKnowledgeBase] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [isAiAutoRespondEnabled, setIsAiAutoRespondEnabled] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
   const [msg, setMsg] = useState('');
@@ -28,6 +29,7 @@ export const Settings: React.FC = () => {
     if (orgData) {
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
       if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
+      if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
       if (orgData.razorpayKeyId) setRazorpayKeyId(orgData.razorpayKeyId);
     }
   }, [orgData]);
@@ -37,12 +39,13 @@ export const Settings: React.FC = () => {
       const res = await apiClient.patch('/organization', {
         aiKnowledgeBase,
         geminiApiKey,
+        isAiAutoRespondEnabled,
       });
       return res.data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-details'] });
-      alert('🤖 AI Knowledgebase & Gemini API Key saved successfully!');
+      alert('🤖 AI Knowledgebase & Auto-Responder Settings saved successfully!');
     },
     onError: (err: any) => {
       alert(`Failed to save AI settings: ${err.message}`);
@@ -332,6 +335,36 @@ export const Settings: React.FC = () => {
         </div>
 
         <div className="space-y-4">
+          {/* Autonomous AI Auto-Responder Toggle Card */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+            <div className="space-y-0.5 max-w-xl">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <span>Autonomous AI 24/7 Auto-Responder</span>
+                {isAiAutoRespondEnabled ? (
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold uppercase animate-pulse">ACTIVE 24/7</span>
+                ) : (
+                  <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full font-bold uppercase">OFF (MANUAL SUGGESTIONS)</span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                When enabled, inbound customer WhatsApp messages are automatically answered using your Knowledgebase & FAQs. Complex queries are automatically escalated to Live Agents.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAiAutoRespondEnabled(!isAiAutoRespondEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAiAutoRespondEnabled ? 'bg-purple-600' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isAiAutoRespondEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
               AI Knowledgebase Context & FAQs

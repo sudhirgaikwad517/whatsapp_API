@@ -299,6 +299,18 @@ export const webhookWorker = new Worker(
                     logger.error({ err }, 'Auto-responder dispatch failed');
                   }
                 }, 1000);
+              } else {
+                // 3. Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog)
+                const orgId = waAccount.organizationId;
+                const convId = conversation.id;
+                setTimeout(async () => {
+                  try {
+                    const { processAutonomousAiResponse } = await import('../services/ai.service.js');
+                    await processAutonomousAiResponse(orgId, convId);
+                  } catch (err) {
+                    logger.error({ err }, 'Autonomous AI Auto-responder execution failed');
+                  }
+                }, 1200);
               }
             }
           }

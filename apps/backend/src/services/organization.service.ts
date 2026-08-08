@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 
 export async function getOrganization(organizationId: string) {
-  const org = await prisma.organization.findUnique({
+  const org = await (prisma as any).organization.findUnique({
     where: { id: organizationId, deletedAt: null },
     select: {
       id: true,
@@ -12,6 +12,9 @@ export async function getOrganization(organizationId: string) {
       slug: true,
       logoUrl: true,
       timezone: true,
+      aiKnowledgeBase: true,
+      geminiApiKey: true,
+      isAiAutoRespondEnabled: true,
       isSuspended: true,
       createdAt: true,
     },
@@ -23,12 +26,12 @@ export async function getOrganization(organizationId: string) {
 
 export async function updateOrganization(
   organizationId: string,
-  data: { name?: string; timezone?: string; logoUrl?: string; aiKnowledgeBase?: string; geminiApiKey?: string; razorpayKeyId?: string; razorpayKeySecret?: string }
+  data: { name?: string; timezone?: string; logoUrl?: string; aiKnowledgeBase?: string; geminiApiKey?: string; isAiAutoRespondEnabled?: boolean; razorpayKeyId?: string; razorpayKeySecret?: string }
 ) {
   const updated = await (prisma as any).organization.update({
     where: { id: organizationId },
     data,
-    select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, razorpayKeyId: true },
+    select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, isAiAutoRespondEnabled: true, razorpayKeyId: true },
   });
   return updated;
 }

@@ -403,12 +403,16 @@ export const Inbox: React.FC = () => {
                     )}
                   </div>
                   
-                  {chat.assignedAgent && (
+                  {chat.status === 'ESCALATED' ? (
+                    <div className="mt-1 flex items-center text-[10px] text-amber-400 font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md w-max animate-pulse">
+                      <span>⚠️ Escalated to Live Agent</span>
+                    </div>
+                  ) : chat.assignedAgent ? (
                     <div className="mt-1 flex items-center text-[10px] text-slate-400">
                       <UserCheck className="w-3 h-3 mr-1 text-emerald-400" />
                       <span>{chat.assignedAgent.fullName}</span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </button>
             ))
