@@ -7,9 +7,9 @@ export const SuperAdminLayout: React.FC = () => {
   const logout = useAuthStore((state) => state.logout);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="h-screen w-full bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden">
       {/* Top Super Admin Platform Navigation Bar */}
-      <header className="h-16 bg-slate-900/90 border-b border-purple-500/20 backdrop-blur-xl px-8 flex items-center justify-between sticky top-0 z-40">
+      <header className="h-16 bg-slate-900/90 border-b border-purple-500/20 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between shrink-0 z-40">
         <div className="flex items-center space-x-3">
           <div className="w-9 h-9 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold">
             <ShieldAlert className="w-5 h-5" />
@@ -52,8 +52,8 @@ export const SuperAdminLayout: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex w-full">
+      {/* Main Content Area - Fully Scrollable */}
+      <main className="flex-1 min-h-0 w-full overflow-y-auto">
         <Outlet />
       </main>
     </div>
