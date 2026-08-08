@@ -270,37 +270,14 @@ export const webhookWorker = new Worker(
                 }, 1000);
               }
             } else {
-              // 2. Keyword Auto-Responder Engine
-              const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
-              let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+              // 2. Autonomous AI Auto-Responder Engine OR Keyword Auto-Responder
+              const org = await (prisma as any).organization.findUnique({
+                where: { id: waAccount.organizationId },
+                select: { name: true, isAiAutoRespondEnabled: true },
+              });
 
-              // Default Dynamic Fallback if no custom rule matched
-              if (!autoReplyText) {
-                const org = await prisma.organization.findUnique({
-                  where: { id: waAccount.organizationId },
-                  select: { name: true },
-                });
-                const orgName = org?.name || 'our business';
-
-                if (/^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
-                  autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
-                }
-              }
-
-              if (autoReplyText) {
-                const orgId = waAccount.organizationId;
-                const convId = conversation.id;
-                const replyText = autoReplyText;
-                setTimeout(async () => {
-                  try {
-                    const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
-                    await sendOutboundTextMessage(orgId, convId, replyText);
-                  } catch (err) {
-                    logger.error({ err }, 'Auto-responder dispatch failed');
-                  }
-                }, 1000);
-              } else {
-                // 3. Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog)
+              if (org?.isAiAutoRespondEnabled) {
+                // Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog)
                 const orgId = waAccount.organizationId;
                 const convId = conversation.id;
                 setTimeout(async () => {
@@ -310,7 +287,30 @@ export const webhookWorker = new Worker(
                   } catch (err) {
                     logger.error({ err }, 'Autonomous AI Auto-responder execution failed');
                   }
-                }, 1200);
+                }, 1000);
+              } else {
+                // Keyword Auto-Responder Engine (Fallback when AI Auto-Responder is OFF)
+                const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
+                let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+
+                if (!autoReplyText && /^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
+                  const orgName = org?.name || 'our business';
+                  autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
+                }
+
+                if (autoReplyText) {
+                  const orgId = waAccount.organizationId;
+                  const convId = conversation.id;
+                  const replyText = autoReplyText;
+                  setTimeout(async () => {
+                    try {
+                      const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
+                      await sendOutboundTextMessage(orgId, convId, replyText);
+                    } catch (err) {
+                      logger.error({ err }, 'Auto-responder dispatch failed');
+                    }
+                  }, 1000);
+                }
               }
             }
           }
