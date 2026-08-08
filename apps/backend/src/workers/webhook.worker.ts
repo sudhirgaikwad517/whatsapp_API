@@ -99,12 +99,14 @@ export const webhookWorker = new Worker(
 
           const orgInfo = await (prisma as any).organization.findUnique({
             where: { id: waAccount.organizationId },
-            select: { isAiAutoRespondEnabled: true },
+            select: { aiKnowledgeBase: true, isAiAutoRespondEnabled: true },
           });
+
+          const isAiEnabled = orgInfo?.isAiAutoRespondEnabled !== false && (orgInfo?.isAiAutoRespondEnabled === true || Boolean(orgInfo?.aiKnowledgeBase && orgInfo.aiKnowledgeBase.trim().length > 0));
 
           let assignedAgentId = existingConv?.assignedAgentId || null;
 
-          if (orgInfo?.isAiAutoRespondEnabled) {
+          if (isAiEnabled) {
             // When AI Auto-Responder is ON:
             // Unless chat is actively ESCALATED for human intervention, clear assignedAgentId to null so AI handles the message 24/7!
             if (!existingConv || existingConv.status !== 'ESCALATED') {
@@ -145,8 +147,8 @@ export const webhookWorker = new Worker(
             update: {
               windowExpiresAt,
               status: existingConv?.status === 'ESCALATED' ? 'ESCALATED' : 'OPEN',
-              ...(orgInfo?.isAiAutoRespondEnabled && existingConv?.status !== 'ESCALATED' ? { assignedAgentId: null } : {}),
-              ...(!orgInfo?.isAiAutoRespondEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
+              ...(isAiEnabled && existingConv?.status !== 'ESCALATED' ? { assignedAgentId: null } : {}),
+              ...(!isAiEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {
               organizationId: waAccount.organizationId,

@@ -160,11 +160,13 @@ export async function processAutonomousAiResponse(organizationId: string, conver
   try {
     const org = await (prisma as any).organization.findUnique({
       where: { id: organizationId },
-      select: { name: true, aiCreditsBalance: true, isAiAutoRespondEnabled: true },
+      select: { name: true, aiCreditsBalance: true, aiKnowledgeBase: true, isAiAutoRespondEnabled: true },
     });
 
+    const isAiEnabled = org?.isAiAutoRespondEnabled !== false && (org?.isAiAutoRespondEnabled === true || Boolean(org?.aiKnowledgeBase && org.aiKnowledgeBase.trim().length > 0));
+
     // Check if AI Auto-Respond toggle is enabled and organization has AI Credits
-    if (!org || !org.isAiAutoRespondEnabled || (org.aiCreditsBalance ?? 0) <= 0) {
+    if (!org || !isAiEnabled || (org.aiCreditsBalance ?? 0) <= 0) {
       return;
     }
 
