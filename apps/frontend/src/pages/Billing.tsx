@@ -54,17 +54,65 @@ export const Billing: React.FC = () => {
   });
 
   const topupCreditsMutation = useMutation({
-    mutationFn: async (bundleAmount: number) => {
-      const res = await apiClient.post('/billing/topup-credits', { amount: bundleAmount });
+    mutationFn: async (payload: { amount: number; razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string; isMock?: boolean }) => {
+      const res = await apiClient.post('/billing/topup-credits', payload);
       return res.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['ai-credits-balance'] });
-      alert('🪙 AI Credits Bundle added successfully!');
+      queryClient.invalidateQueries({ queryKey: ['billing-invoices'] });
+      alert(`🪙 ${data.message || 'AI Credits Bundle added successfully!'}`);
     },
     onError: (err: any) => {
       const errorMsg = err.response?.data?.error?.message || err.message;
       alert(`Top-up failed: ${errorMsg}`);
+    },
+  });
+
+  const createRazorpayAiCreditsOrderMutation = useMutation({
+    mutationFn: async (amount: number) => {
+      const res = await apiClient.post('/billing/create-razorpay-order', { amount });
+      return res.data.data;
+    },
+    onSuccess: (data, amount) => {
+      if (data.isMock) {
+        const confirmMock = window.confirm('Razorpay Keys are missing on server .env file. Proceed with dev simulated AI Credits purchase?');
+        if (confirmMock) {
+          topupCreditsMutation.mutate({ amount, isMock: true });
+        }
+        return;
+      }
+
+      const options = {
+        key: data.key,
+        amount: data.amount,
+        currency: data.currency,
+        name: 'Prowexa SaaS Platform',
+        description: `AI & Automation Credits Pack (₹${amount})`,
+        order_id: data.id,
+        handler: function (response: any) {
+          topupCreditsMutation.mutate({
+            amount,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            isMock: false,
+          });
+        },
+        prefill: {
+          name: 'Prowexa Organization',
+        },
+        theme: {
+          color: '#9333ea',
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    },
+    onError: (err: any) => {
+      const errorMsg = err.response?.data?.error?.message || err.message;
+      alert(`Failed to initiate Razorpay order: ${errorMsg}`);
     },
   });
 
@@ -230,12 +278,12 @@ export const Billing: React.FC = () => {
           </div>
           <div className="pt-2">
             <button
-              onClick={() => topupCreditsMutation.mutate(500)}
-              disabled={topupCreditsMutation.isPending}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(500)}
+              disabled={createRazorpayAiCreditsOrderMutation.isPending || topupCreditsMutation.isPending}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-purple-500/20 cursor-pointer flex items-center justify-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Buy 1,000 Credits (₹500)</span>
+              <span>{createRazorpayAiCreditsOrderMutation.isPending ? 'Initiating Razorpay...' : 'Buy 1,000 Credits (₹500)'}</span>
             </button>
           </div>
         </div>
@@ -337,7 +385,8 @@ export const Billing: React.FC = () => {
             <div className="text-2xl font-black text-white">₹500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
             <p className="text-xs text-slate-400">Includes 1,000 AI Credits (₹0.50 per credit)</p>
             <button
-              onClick={() => topupCreditsMutation.mutate(500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(500)}
+              disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
             >
               Get 1,000 Credits
@@ -350,7 +399,8 @@ export const Billing: React.FC = () => {
             <div className="text-2xl font-black text-white">₹1,500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
             <p className="text-xs text-slate-400">Includes 3,500 AI Credits (₹0.42 per credit)</p>
             <button
-              onClick={() => topupCreditsMutation.mutate(1500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(1500)}
+              disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg text-xs transition-all cursor-pointer shadow-lg shadow-purple-500/20"
             >
               Get 3,500 Credits
@@ -362,7 +412,8 @@ export const Billing: React.FC = () => {
             <div className="text-2xl font-black text-white">₹3,500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
             <p className="text-xs text-slate-400">Includes 10,000 AI Credits (₹0.35 per credit)</p>
             <button
-              onClick={() => topupCreditsMutation.mutate(3500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(3500)}
+              disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
             >
               Get 10,000 Credits
