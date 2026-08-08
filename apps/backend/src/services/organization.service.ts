@@ -4,36 +4,80 @@ import bcrypt from 'bcryptjs';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 
 export async function getOrganization(organizationId: string) {
-  const org = await (prisma as any).organization.findUnique({
-    where: { id: organizationId, deletedAt: null },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      logoUrl: true,
-      timezone: true,
-      aiKnowledgeBase: true,
-      geminiApiKey: true,
-      isAiAutoRespondEnabled: true,
-      isSuspended: true,
-      createdAt: true,
-    },
-  });
+  try {
+    const org = await (prisma as any).organization.findUnique({
+      where: { id: organizationId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logoUrl: true,
+        timezone: true,
+        aiKnowledgeBase: true,
+        geminiApiKey: true,
+        isAiAutoRespondEnabled: true,
+        isSuspended: true,
+        createdAt: true,
+      },
+    });
 
-  if (!org) throw new AppError('Organization not found.', 404, 'ORGANIZATION_NOT_FOUND');
-  return org;
+    if (!org) throw new AppError('Organization not found.', 404, 'ORGANIZATION_NOT_FOUND');
+    return org;
+  } catch (err: any) {
+    const orgFallback = await (prisma as any).organization.findUnique({
+      where: { id: organizationId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logoUrl: true,
+        timezone: true,
+        aiKnowledgeBase: true,
+        geminiApiKey: true,
+        isSuspended: true,
+        createdAt: true,
+      },
+    });
+
+    if (!orgFallback) throw new AppError('Organization not found.', 404, 'ORGANIZATION_NOT_FOUND');
+    return { ...orgFallback, isAiAutoRespondEnabled: false };
+  }
 }
 
 export async function updateOrganization(
   organizationId: string,
   data: { name?: string; timezone?: string; logoUrl?: string; aiKnowledgeBase?: string; geminiApiKey?: string; isAiAutoRespondEnabled?: boolean; razorpayKeyId?: string; razorpayKeySecret?: string }
 ) {
-  const updated = await (prisma as any).organization.update({
-    where: { id: organizationId },
-    data,
-    select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, isAiAutoRespondEnabled: true, razorpayKeyId: true },
-  });
-  return updated;
+  const updateData: Record<string, any> = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.timezone !== undefined) updateData.timezone = data.timezone;
+  if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
+  if (data.aiKnowledgeBase !== undefined) updateData.aiKnowledgeBase = data.aiKnowledgeBase;
+  if (data.geminiApiKey !== undefined) updateData.geminiApiKey = data.geminiApiKey;
+  if (data.isAiAutoRespondEnabled !== undefined) updateData.isAiAutoRespondEnabled = Boolean(data.isAiAutoRespondEnabled);
+  if (data.razorpayKeyId !== undefined) updateData.razorpayKeyId = data.razorpayKeyId;
+  if (data.razorpayKeySecret !== undefined) updateData.razorpayKeySecret = data.razorpayKeySecret;
+
+  try {
+    const updated = await (prisma as any).organization.update({
+      where: { id: organizationId },
+      data: updateData,
+      select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, isAiAutoRespondEnabled: true, razorpayKeyId: true },
+    });
+    return updated;
+  } catch (err: any) {
+    // Gracefully fallback if isAiAutoRespondEnabled column does not exist yet in production DB schema
+    if (updateData.isAiAutoRespondEnabled !== undefined) {
+      delete updateData.isAiAutoRespondEnabled;
+      const updatedFallback = await (prisma as any).organization.update({
+        where: { id: organizationId },
+        data: updateData,
+        select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, razorpayKeyId: true },
+      });
+      return updatedFallback;
+    }
+    throw err;
+  }
 }
 
 export async function getMembers(organizationId: string) {
