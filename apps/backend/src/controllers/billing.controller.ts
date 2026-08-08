@@ -116,17 +116,18 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
 
     // Create Tax Invoice record for AI Credits Bundle purchase
     const subtotal = Number((Number(amount) / 1.18).toFixed(2));
-    const tax = Number((Number(amount) - subtotal).toFixed(2));
+    const taxAmount = Number((Number(amount) - subtotal).toFixed(2));
     await prisma.invoice.create({
       data: {
         organizationId: orgId,
         invoiceNumber: `INV-AI-${Date.now().toString().slice(-6)}`,
-        amount: new (await import('@prisma/client')).Prisma.Decimal(amount),
-        tax: new (await import('@prisma/client')).Prisma.Decimal(tax),
+        subtotal: new (await import('@prisma/client')).Prisma.Decimal(subtotal),
+        taxAmount: new (await import('@prisma/client')).Prisma.Decimal(taxAmount),
+        grandTotal: new (await import('@prisma/client')).Prisma.Decimal(amount),
+        currency: 'INR',
+        paymentId: razorpay_payment_id || `TXN_AI_${Date.now()}`,
+        gatewayName: 'RAZORPAY',
         status: 'PAID',
-        paymentGateway: 'RAZORPAY',
-        transactionId: razorpay_payment_id || `TXN_AI_${Date.now()}`,
-        invoiceUrl: '',
       },
     });
 
