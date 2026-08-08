@@ -794,6 +794,12 @@ export const Inbox: React.FC = () => {
                       type="text"
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          window.scrollTo(0, 0);
+                          document.body.scrollTop = 0;
+                        }, 50);
+                      }}
                       placeholder="Type your reply or '/' for quick snippets..."
                       className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
                     />

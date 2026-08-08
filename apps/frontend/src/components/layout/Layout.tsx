@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Menu, X, MessageSquare, ShieldAlert } from 'lucide-react';
@@ -7,6 +7,38 @@ import { useAuthStore } from '../../store/auth.store';
 export const Layout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isImpersonating, stopImpersonation, user } = useAuthStore();
+
+  // Reset scroll offset on mobile keyboard close (focusout) to prevent static whitespace gap at bottom
+  useEffect(() => {
+    const handleFocusOut = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          document.body.scrollTop = 0;
+        }, 50);
+      }
+    };
+
+    const handleViewportResize = () => {
+      if (window.visualViewport && window.visualViewport.height >= window.innerHeight - 30) {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+      }
+    };
+
+    window.addEventListener('focusout', handleFocusOut);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportResize);
+    }
+
+    return () => {
+      window.removeEventListener('focusout', handleFocusOut);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportResize);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-[100dvh] h-screen bg-slate-950 text-slate-100 overflow-hidden overscroll-none relative">
