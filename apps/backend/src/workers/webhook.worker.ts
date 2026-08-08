@@ -103,30 +103,35 @@ export const webhookWorker = new Worker(
           });
 
           let assignedAgentId = existingConv?.assignedAgentId || null;
-          if (existingConv?.status === 'RESOLVED' || existingConv?.status === 'CLOSED') {
-            assignedAgentId = null;
-          }
 
-          // Only auto-assign agent on new incoming conversation if AI Auto-Responder is OFF
-          if (!orgInfo?.isAiAutoRespondEnabled && (!existingConv || !assignedAgentId)) {
-            const members = await prisma.organizationMember.findMany({
-              where: {
-                organizationId: waAccount.organizationId,
-                role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
-              },
-              select: { userId: true },
-            });
-            if (members.length > 0) {
-              const openCounts = await Promise.all(
-                members.map(async (m) => ({
-                  id: m.userId,
-                  count: await prisma.conversation.count({
-                    where: { organizationId: waAccount.organizationId, assignedAgentId: m.userId, status: 'OPEN' },
-                  }),
-                }))
-              );
-              openCounts.sort((a, b) => a.count - b.count);
-              assignedAgentId = openCounts[0]?.id || null;
+          if (orgInfo?.isAiAutoRespondEnabled) {
+            // When AI Auto-Responder is ON:
+            // Unless chat is actively ESCALATED for human intervention, clear assignedAgentId to null so AI handles the message 24/7!
+            if (!existingConv || existingConv.status !== 'ESCALATED') {
+              assignedAgentId = null;
+            }
+          } else {
+            // Only auto-assign agent on new incoming conversation if AI Auto-Responder is OFF
+            if (!existingConv || !assignedAgentId) {
+              const members = await prisma.organizationMember.findMany({
+                where: {
+                  organizationId: waAccount.organizationId,
+                  role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
+                },
+                select: { userId: true },
+              });
+              if (members.length > 0) {
+                const openCounts = await Promise.all(
+                  members.map(async (m) => ({
+                    id: m.userId,
+                    count: await prisma.conversation.count({
+                      where: { organizationId: waAccount.organizationId, assignedAgentId: m.userId, status: 'OPEN' },
+                    }),
+                  }))
+                );
+                openCounts.sort((a, b) => a.count - b.count);
+                assignedAgentId = openCounts[0]?.id || null;
+              }
             }
           }
 
@@ -139,8 +144,8 @@ export const webhookWorker = new Worker(
             },
             update: {
               windowExpiresAt,
-              status: 'OPEN',
-              ...(existingConv?.status === 'RESOLVED' || existingConv?.status === 'CLOSED' ? { assignedAgentId: null } : {}),
+              status: existingConv?.status === 'ESCALATED' ? 'ESCALATED' : 'OPEN',
+              ...(orgInfo?.isAiAutoRespondEnabled && existingConv?.status !== 'ESCALATED' ? { assignedAgentId: null } : {}),
               ...(!orgInfo?.isAiAutoRespondEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {
