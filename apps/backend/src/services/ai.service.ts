@@ -3,40 +3,69 @@ import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 
 export async function suggestReply(organizationId: string, conversationId: string): Promise<string> {
-  const [org, messages, conversation] = await Promise.all([
+  const [org, messagesDesc, conversation, products] = await Promise.all([
     (prisma as any).organization.findUnique({
       where: { id: organizationId },
       select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
     }),
     prisma.message.findMany({
       where: { conversationId },
-      orderBy: { createdAt: 'asc' },
-      take: 10,
+      orderBy: { createdAt: 'desc' },
+      take: 15,
     }),
     prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { contact: true },
     }),
+    (prisma as any).productCatalog.findMany({
+      where: { organizationId },
+      select: { name: true, price: true, description: true },
+      take: 10,
+    }),
   ]);
+
+  // Order messages chronologically (oldest to newest)
+  const messages = messagesDesc.reverse();
 
   const customerName = conversation?.contact?.firstName || 'Customer';
   const orgName = org?.name || 'Prowexa Business';
-  const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support.';
+  const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
   const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+
+  // Extract latest customer message
+  const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
+  const lastInboundText = typeof lastInboundMsg?.content === 'object'
+    ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
+    : lastInboundMsg?.content || '';
+
+  const productCatalogText = products && products.length > 0
+    ? products.map((p: any) => `- ${p.name}: ₹${p.price} (${p.description || ''})`).join('\n')
+    : 'No catalog products listed yet.';
 
   if (effectiveApiKey) {
     const chatHistory = messages
       .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
       .join('\n');
 
-    const promptText = `You are an AI support copilot for "${orgName}".
-Knowledgebase & FAQs:
+    const promptText = `You are a helpful, courteous WhatsApp customer support copilot for "${orgName}".
+
+Business Knowledgebase & FAQs:
 ${knowledgeBase}
+
+Product Catalog:
+${productCatalogText}
 
 Recent Chat History:
 ${chatHistory}
 
-Task: Suggest a concise, polite, helpful 1-2 sentence response to send to ${customerName} on WhatsApp. Respond with ONLY the message text, no quotes or metadata.`;
+LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"
+
+CRITICAL INSTRUCTIONS:
+1. Directly answer ${customerName}'s latest question above ("${lastInboundText}").
+2. If they ask about delivery availability, locations (e.g. Pune, Mumbai, etc.), pricing, or products, provide a clear, direct, and accurate answer based on the knowledgebase or catalog.
+3. If specific city delivery rules are not detailed in the knowledgebase, answer politely confirming delivery or asking for pincode/address to confirm their slot.
+4. Keep the message concise (1-2 sentences maximum), friendly, and natural for WhatsApp.
+5. Return ONLY the final message text to send to the customer. No preamble, quotes, or metadata.`;
 
     const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
@@ -71,12 +100,14 @@ Task: Suggest a concise, polite, helpful 1-2 sentence response to send to ${cust
   }
 
   // Graceful intelligent fallback if API key is not set or call fails
-  const lastMsg = messages[messages.length - 1];
-  const lastText = (lastMsg?.content as any)?.text || '';
-  if (/price|cost|rate/i.test(lastText)) {
-    return `Hello ${customerName}! Thanks for reaching out. Please check our catalog or let us know which product price you would like to know.`;
+  const lowerText = lastInboundText.toLowerCase();
+  if (/pune|mumbai|delhi|bangalore|city|delivery|location|available/i.test(lowerText)) {
+    return `Hi ${customerName}! Yes, we deliver in Pune. Please share your complete delivery address or pincode to confirm your delivery slot!`;
   }
-  if (/order|track|status/i.test(lastText)) {
+  if (/price|cost|rate/i.test(lowerText)) {
+    return `Hello ${customerName}! Thanks for reaching out. Please check our product catalog or let us know which product price you would like to know.`;
+  }
+  if (/order|track|status/i.test(lowerText)) {
     return `Hi ${customerName}, your order is currently being processed by our team. We will share tracking details shortly!`;
   }
   return `Hi ${customerName}, thank you for contacting ${orgName}. How can we assist you today?`;
