@@ -22,6 +22,7 @@ router.get('/', OrgController.getOrganization);
  * @access  Bearer (Business Owner only)
  */
 router.put('/', authorize(UserRole.BUSINESS_OWNER), OrgController.updateOrganization);
+router.patch('/', authorize(UserRole.BUSINESS_OWNER), OrgController.updateOrganization);
 
 /**
  * @route   GET /api/v1/organization/members
