@@ -432,14 +432,14 @@ export const SuperAdminDashboard: React.FC = () => {
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-emerald-400">
-                              ₹{Number(org.wallet?.availableBalance || 0).toFixed(2)}
+                              {Number(org.wallet?.availableBalance || 0).toFixed(2)} Credits
                             </span>
                             <button
-                              onClick={() => manualCreditMutation.mutate({ orgId: org.id, amount: 500, description: 'SuperAdmin Bonus' })}
-                              title="Manual Credit +₹500 to Wallet"
+                              onClick={() => manualCreditMutation.mutate({ orgId: org.id, amount: 500, description: 'SuperAdmin Bonus Credits' })}
+                              title="Manual Credit +500 Credits to Wallet"
                               className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer"
                             >
-                              +₹500
+                              +500 Credits
                             </button>
                           </div>
                         </td>
@@ -609,7 +609,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             {org.planTier || 'PRO'}
                           </td>
                           <td className="py-3 px-4 font-bold text-emerald-400">
-                            ₹{Number(org.wallet?.availableBalance || 0).toFixed(2)}
+                            {Number(org.wallet?.availableBalance || 0).toFixed(2)} Credits
                           </td>
                           <td className="py-3 px-4 font-bold text-blue-400">
                             ₹{clientBilled.toFixed(2)}
@@ -955,10 +955,10 @@ export const SuperAdminDashboard: React.FC = () => {
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
                 <span className="text-slate-500 font-semibold uppercase block">Wallet & Financials</span>
                 <div className="text-emerald-400 font-extrabold text-base">
-                  ₹{Number(selectedOrg.wallet?.availableBalance || 0).toFixed(2)}
+                  {Number(selectedOrg.wallet?.availableBalance || 0).toFixed(2)} Credits
                 </div>
                 <div className="text-amber-400">
-                  Reserved Lock: ₹{Number(selectedOrg.wallet?.reservedBalance || 0).toFixed(2)}
+                  Reserved Lock: {Number(selectedOrg.wallet?.reservedBalance || 0).toFixed(2)} Credits
                 </div>
                 <div className="text-slate-400">Currency: {selectedOrg.wallet?.currency || 'INR'}</div>
               </div>
@@ -1093,7 +1093,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   <h4 className="font-bold text-white text-sm flex items-center justify-between">
                     <span>Recent Wallet Ledger Transactions & Statements</span>
                     <span className="text-xs text-emerald-400 font-normal">
-                      Available Balance: ₹{Number(orgFinanceDetails?.wallet?.availableBalance || 0).toFixed(2)}
+                      Available Balance: {Number(orgFinanceDetails?.wallet?.availableBalance || 0).toFixed(2)} Credits
                     </span>
                   </h4>
 

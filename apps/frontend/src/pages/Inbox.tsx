@@ -43,6 +43,7 @@ export const Inbox: React.FC = () => {
   const [noteText, setNoteText] = useState('');
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [isMobileOptionsMenuOpen, setIsMobileOptionsMenuOpen] = useState(false);
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
@@ -647,10 +648,84 @@ export const Inbox: React.FC = () => {
                       </div>
                     )}
 
+                    {/* Mobile Consolidated Quick Actions Menu */}
+                    {isMobileOptionsMenuOpen && (
+                      <div className="absolute bottom-full mb-2 left-3 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden z-30 p-2 space-y-1 min-w-[210px] animate-fadeIn">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-3 py-1 border-b border-slate-800 flex justify-between items-center">
+                          <span>Chat Actions Menu</span>
+                          <button type="button" onClick={() => setIsMobileOptionsMenuOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleAiSuggestReply();
+                            setIsMobileOptionsMenuOpen(false);
+                          }}
+                          disabled={isAiSuggesting}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-purple-300 hover:bg-purple-500/10 flex items-center space-x-2 transition-all cursor-pointer"
+                        >
+                          <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                          <span>{isAiSuggesting ? 'AI Thinking...' : '✨ AI Copilot Suggestion'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowQuickReplies(!showQuickReplies);
+                            setIsMobileOptionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10 flex items-center space-x-2 transition-all cursor-pointer font-mono"
+                        >
+                          <Tag className="w-4 h-4 text-emerald-400" />
+                          <span>⚡ Quick Replies (/)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPaymentModalOpen(true);
+                            setIsMobileOptionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10 flex items-center space-x-2 transition-all cursor-pointer"
+                        >
+                          <CreditCard className="w-4 h-4 text-emerald-400" />
+                          <span>💳 Request Payment Link</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCatalogModalOpen(true);
+                            setIsMobileOptionsMenuOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-blue-300 hover:bg-blue-500/10 flex items-center space-x-2 transition-all cursor-pointer"
+                        >
+                          <ShoppingBag className="w-4 h-4 text-blue-400" />
+                          <span>🛍️ Send Product Catalog</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Single Mobile Options Trigger Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileOptionsMenuOpen(!isMobileOptionsMenuOpen)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer sm:hidden shrink-0 ${
+                        isMobileOptionsMenuOpen
+                          ? 'bg-purple-500/20 text-purple-400 border-purple-500'
+                          : 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700'
+                      }`}
+                      title="Chat Tools & Actions Menu"
+                    >
+                      ⚡
+                    </button>
+
+                    {/* Desktop Toolbar Buttons (Hidden on small mobile screens) */}
                     <button
                       type="button"
                       onClick={() => setShowQuickReplies(!showQuickReplies)}
-                      className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+                      className={`hidden sm:flex p-2.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
                         showQuickReplies
                           ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500'
                           : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
@@ -663,34 +738,35 @@ export const Inbox: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsPaymentModalOpen(true)}
-                      className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer shrink-0"
+                      className="hidden sm:flex p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs items-center space-x-1.5 transition-all cursor-pointer shrink-0"
                       title="Request Razorpay Payment Link in WhatsApp Chat"
                     >
                       <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="hidden sm:inline">Pay Link</span>
+                      <span>Pay Link</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setIsCatalogModalOpen(true)}
-                      className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-blue-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer shrink-0"
+                      className="hidden sm:flex p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-blue-300 font-bold text-xs items-center space-x-1.5 transition-all cursor-pointer shrink-0"
                       title="Send Product Catalog Item"
                     >
                       <ShoppingBag className="w-3.5 h-3.5 text-blue-400" />
-                      <span className="hidden sm:inline">Catalog</span>
+                      <span>Catalog</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleAiSuggestReply}
                       disabled={isAiSuggesting}
-                      className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 text-purple-300 font-bold text-xs flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                      className="hidden sm:flex p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 text-purple-300 font-bold text-xs items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
                       title="Gemini AI Smart Copilot Suggestion"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-                      <span className="hidden sm:inline">{isAiSuggesting ? 'AI Thinking...' : 'AI Copilot'}</span>
+                      <span>{isAiSuggesting ? 'AI Thinking...' : 'AI Copilot'}</span>
                     </button>
 
+                    {/* Attachment, Input Field, and Send Button remain visible on all screen sizes */}
                     <button
                       type="button"
                       onClick={async () => {
@@ -708,7 +784,7 @@ export const Inbox: React.FC = () => {
                           alert(`Failed to attach media: ${err.message}`);
                         }
                       }}
-                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs"
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs shrink-0"
                       title="Attach Image / Document"
                     >
                       📎
@@ -719,12 +795,12 @@ export const Inbox: React.FC = () => {
                       value={messageText}
                       onChange={(e) => setMessageText(e.target.value)}
                       placeholder="Type your reply or '/' for quick snippets..."
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
+                      className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 sm:px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all font-sans"
                     />
                     <button
                       type="submit"
                       disabled={sendMutation.isPending || !messageText.trim()}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-2.5 rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-2.5 rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer shrink-0"
                     >
                       <Send className="w-5 h-5" />
                     </button>

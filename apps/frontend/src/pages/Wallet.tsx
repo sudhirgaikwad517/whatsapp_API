@@ -27,7 +27,7 @@ export const Wallet: React.FC = () => {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['wallet-details'] });
-      alert(`🎉 Success! Wallet recharged with ₹${rechargeAmount}. New Balance: ₹${data.wallet.availableBalance}`);
+      alert(`🎉 Success! Purchased ${rechargeAmount} Usage Credits. New Balance: ${data.wallet.availableBalance} Credits`);
       setIsRechargeOpen(false);
     },
     onError: (err: any) => {
@@ -52,10 +52,10 @@ export const Wallet: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center">
             <WalletIcon className="w-6 h-6 sm:w-7 sm:h-7 mr-3 text-emerald-400 shrink-0" />
-            <span>FinTech Wallet & Double-Entry Ledger</span>
+            <span>Usage Credits Wallet & Double-Entry Ledger</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            2-Phase Lock Reservation Engine & Immutable Financial Ledger
+            2-Phase Lock Reservation Engine & RBI PPI Compliant Usage Credits Ledger
           </p>
         </div>
 
@@ -64,15 +64,15 @@ export const Wallet: React.FC = () => {
           className="w-full sm:w-auto justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all cursor-pointer shrink-0"
         >
           <PlusCircle className="w-4 h-4 mr-2 stroke-[3]" />
-          Top-Up Wallet
+          Top-Up Credits
         </button>
       </div>
 
       {/* Financial Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 relative overflow-hidden shadow-xl">
-          <div className="text-xs uppercase tracking-wider font-semibold text-slate-400">Spendable Balance</div>
-          <div className="text-3xl font-extrabold text-white">₹{spendable.toFixed(2)}</div>
+          <div className="text-xs uppercase tracking-wider font-semibold text-slate-400">Spendable Credits</div>
+          <div className="text-3xl font-extrabold text-white">{spendable.toFixed(2)} <span className="text-xs font-semibold text-emerald-400">Credits</span></div>
           <div className="text-xs text-emerald-400 flex items-center font-medium">
             <ShieldCheck className="w-3.5 h-3.5 mr-1" />
             Available for immediate dispatches
@@ -80,17 +80,17 @@ export const Wallet: React.FC = () => {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-xl">
-          <div className="text-xs uppercase tracking-wider font-semibold text-slate-400">Available Balance</div>
-          <div className="text-2xl font-bold text-slate-200">₹{Number(wallet.availableBalance).toFixed(2)}</div>
-          <div className="text-xs text-slate-500">Gross Total Account Funds</div>
+          <div className="text-xs uppercase tracking-wider font-semibold text-slate-400">Available Usage Credits</div>
+          <div className="text-2xl font-bold text-slate-200">{Number(wallet.availableBalance).toFixed(2)} <span className="text-xs font-normal text-slate-400">Credits</span></div>
+          <div className="text-xs text-slate-500">Gross Total Account Credits</div>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-xl">
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-400 flex items-center">
             <Lock className="w-3.5 h-3.5 mr-1 text-amber-400" />
-            2-Phase Reserved Funds
+            2-Phase Reserved Credits
           </div>
-          <div className="text-2xl font-bold text-amber-400">₹{Number(wallet.reservedBalance).toFixed(2)}</div>
+          <div className="text-2xl font-bold text-amber-400">{Number(wallet.reservedBalance).toFixed(2)} <span className="text-xs font-normal text-amber-400/80">Credits</span></div>
           <div className="text-xs text-slate-500">Locked during pending dispatches</div>
         </div>
 
@@ -98,9 +98,9 @@ export const Wallet: React.FC = () => {
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-400">Billing Mode</div>
           <div className="text-lg font-bold text-emerald-400 flex items-center mt-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
-            PREPAID WALLET
+            PREPAID CREDITS
           </div>
-          <div className="text-xs text-slate-500">Prowexa Enterprise Rate Card</div>
+          <div className="text-xs text-slate-500">1 Credit / Msg (Marketing), 0.20 / Msg (Utility)</div>
         </div>
       </div>
 
@@ -115,9 +115,9 @@ export const Wallet: React.FC = () => {
                 <th className="py-4 px-6">Timestamp</th>
                 <th className="py-4 px-6">Type</th>
                 <th className="py-4 px-6">Description</th>
-                <th className="py-4 px-6">Amount</th>
-                <th className="py-4 px-6">Opening Balance</th>
-                <th className="py-4 px-6 text-right">Closing Balance</th>
+                <th className="py-4 px-6">Credits Amount</th>
+                <th className="py-4 px-6">Opening Credits</th>
+                <th className="py-4 px-6 text-right">Closing Credits</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
@@ -128,7 +128,7 @@ export const Wallet: React.FC = () => {
               ) : ledgers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-slate-500">
-                    No wallet transactions recorded yet. Click "Top-Up Wallet" to add funds.
+                    No wallet transactions recorded yet. Click "Top-Up Credits" to add credits.
                   </td>
                 </tr>
               ) : (
@@ -157,11 +157,11 @@ export const Wallet: React.FC = () => {
                       </td>
                       <td className="py-4 px-6 font-medium text-white">{item.description || '—'}</td>
                       <td className={`py-4 px-6 font-bold ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isCredit ? '+' : '-'}₹{Number(item.amount).toFixed(2)}
+                        {isCredit ? '+' : '-'}{Number(item.amount).toFixed(2)} Credits
                       </td>
-                      <td className="py-4 px-6 text-slate-400">₹{Number(item.openingBalance).toFixed(2)}</td>
+                      <td className="py-4 px-6 text-slate-400">{Number(item.openingBalance).toFixed(2)} Credits</td>
                       <td className="py-4 px-6 text-right font-bold text-white">
-                        ₹{Number(item.closingBalance).toFixed(2)}
+                        {Number(item.closingBalance).toFixed(2)} Credits
                       </td>
                     </tr>
                   );
@@ -257,8 +257,8 @@ export const Wallet: React.FC = () => {
                                 <tbody>
                                   <tr>
                                     <td>
-                                      <strong>Prowexa SaaS Wallet Top-Up</strong><br/>
-                                      <span style="font-size: 11px; color: #64748b;">Prepaid WhatsApp Marketing & API Credits</span>
+                                      <strong>Prowexa SaaS Usage Credits Purchase</strong><br/>
+                                      <span style="font-size: 11px; color: #64748b;">Prepaid WhatsApp Marketing & API Usage Credits</span>
                                     </td>
                                     <td>1</td>
                                     <td>₹${subtotal}</td>
@@ -307,7 +307,7 @@ export const Wallet: React.FC = () => {
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-white flex items-center">
                 <CreditCard className="w-5 h-5 mr-2 text-emerald-400" />
-                Recharge Wallet Balance
+                Purchase Usage Credits
               </h3>
               <button
                 onClick={() => setIsRechargeOpen(false)}
@@ -320,7 +320,7 @@ export const Wallet: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                  Select Recharge Amount (INR)
+                  Select Usage Credits Package (1 Credit = ₹1 + GST)
                 </label>
                 <div className="grid grid-cols-4 gap-2 mb-3">
                   {['500', '1000', '2500', '5000'].map((amt) => (
@@ -333,7 +333,7 @@ export const Wallet: React.FC = () => {
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                       }`}
                     >
-                      ₹{amt}
+                      {amt} Credits
                     </button>
                   ))}
                 </div>
@@ -342,21 +342,25 @@ export const Wallet: React.FC = () => {
                   value={rechargeAmount}
                   onChange={(e) => setRechargeAmount(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-bold"
-                  placeholder="Enter custom amount"
+                  placeholder="Enter custom credits quantity"
                 />
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-400 space-y-1">
                 <div className="flex justify-between">
-                  <span>Recharge Amount:</span>
+                  <span>Usage Credits to Deposit:</span>
+                  <span className="text-emerald-400 font-semibold">{Number(rechargeAmount || 0).toLocaleString()} Credits</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Subtotal Amount:</span>
                   <span className="text-white font-semibold">₹{Number(rechargeAmount || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>18% GST:</span>
+                  <span>18% GST Tax:</span>
                   <span className="text-white font-semibold">₹{(Number(rechargeAmount || 0) * 0.18).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-800 pt-1 font-bold text-emerald-400 text-sm">
-                  <span>Total Payable:</span>
+                  <span>Total Payment (INR):</span>
                   <span>₹{(Number(rechargeAmount || 0) * 1.18).toFixed(2)}</span>
                 </div>
               </div>
@@ -372,7 +376,7 @@ export const Wallet: React.FC = () => {
                     Processing Payment...
                   </>
                 ) : (
-                  `Pay ₹${(Number(rechargeAmount || 0) * 1.18).toFixed(2)} & Recharge`
+                  `Pay ₹${(Number(rechargeAmount || 0) * 1.18).toFixed(2)} & Deposit ${Number(rechargeAmount || 0).toLocaleString()} Credits`
                 )}
               </button>
             </div>

@@ -170,9 +170,9 @@ export const Billing: React.FC = () => {
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-start gap-3 shadow-xl">
           <AlertTriangle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <h4 className="text-sm font-bold text-rose-300">Outstanding Overdraft Balance Warning (-₹{Math.abs(rawBalance).toFixed(2)})</h4>
+            <h4 className="text-sm font-bold text-rose-300">Outstanding Overdraft Balance Warning (-{Math.abs(rawBalance).toFixed(2)} Credits)</h4>
             <p className="text-xs text-rose-200/80">
-              Your wallet balance is in negative due to outbound campaign messaging usage. Please recharge your wallet to clear the outstanding balance and maintain uninterrupted services.
+              Your usage credits balance is in negative due to outbound campaign messaging usage. Please top-up usage credits to clear the outstanding balance and maintain uninterrupted services.
             </p>
           </div>
         </div>
@@ -183,17 +183,17 @@ export const Billing: React.FC = () => {
         {/* Card 1: Outbound Wallet Balance */}
         <div className={`bg-slate-900 border ${isNegative ? 'border-rose-500/40 bg-rose-950/10' : 'border-slate-800'} rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden group`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Prepaid Wallet Balance</span>
-            <span className={`p-2 ${isNegative ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'} rounded-lg font-bold`}>
-              ₹
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Prepaid Usage Credits Balance</span>
+            <span className={`p-2 ${isNegative ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'} rounded-lg font-bold text-xs`}>
+              CREDITS
             </span>
           </div>
           <div>
             <div className={`text-4xl font-black ${isNegative ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {isNegative ? `-₹${Math.abs(rawBalance).toFixed(2)}` : `₹${rawBalance.toFixed(2)}`}
+              {isNegative ? `-${Math.abs(rawBalance).toFixed(2)}` : `${rawBalance.toFixed(2)}`}
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              {isNegative ? 'Negative overdraft balance.' : 'Used for Meta WhatsApp outbound broadcasts & utility messages.'}
+              {isNegative ? 'Negative overdraft credits balance.' : 'Used for Meta WhatsApp outbound broadcasts & utility messages.'}
             </p>
           </div>
           <div className="pt-2">
@@ -203,14 +203,14 @@ export const Billing: React.FC = () => {
                 value={rechargeAmount}
                 onChange={(e) => setRechargeAmount(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-                placeholder="Amount ₹"
+                placeholder="Credits Qty"
               />
               <button
                 onClick={() => createRazorpayOrderMutation.mutate(Number(rechargeAmount))}
                 disabled={createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
               >
-                {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Recharge'}
+                {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Buy Credits'}
               </button>
             </div>
           </div>
@@ -243,14 +243,14 @@ export const Billing: React.FC = () => {
         {/* Card 3: Total Charges Incurred Summary */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Billed Charges</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Billed Credits</span>
             <span className="p-2 bg-blue-500/10 text-blue-400 rounded-lg">
               <TrendingDown className="w-4 h-4" />
             </span>
           </div>
           <div>
             <div className="text-3xl font-black text-blue-400">
-              ₹{Number(usage.totalChargesBilled || 0).toFixed(2)}
+              {Number(usage.totalChargesBilled || 0).toFixed(2)} Credits
             </div>
             <p className="text-xs text-slate-400 mt-1">Total accumulated messaging debits across all campaigns.</p>
           </div>
@@ -275,9 +275,9 @@ export const Billing: React.FC = () => {
           <div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-emerald-400" />
-              <span>WhatsApp Message Usage & Charges Breakdown</span>
+              <span>WhatsApp Message Usage & Credits Breakdown</span>
             </h3>
-            <p className="text-xs text-slate-400 mt-1">Real-time breakdown of messages delivered and charges billed to your wallet.</p>
+            <p className="text-xs text-slate-400 mt-1">Real-time breakdown of messages delivered and credits debited from your account.</p>
           </div>
         </div>
 
@@ -286,8 +286,8 @@ export const Billing: React.FC = () => {
             <span className="text-slate-400 font-semibold uppercase block text-[10px]">Marketing Messages</span>
             <div className="text-2xl font-black text-emerald-400">{usage.marketingSent || 0}</div>
             <div className="text-slate-400 space-y-0.5 text-[11px]">
-              <div>Rate: ₹1.00 / msg</div>
-              <div className="text-emerald-400 font-bold">Total: ₹{((usage.marketingSent || 0) * 1.00).toFixed(2)}</div>
+              <div>Rate: 1 Credit / msg</div>
+              <div className="text-emerald-400 font-bold">Total: {((usage.marketingSent || 0) * 1.00).toFixed(2)} Credits</div>
             </div>
           </div>
 
@@ -295,8 +295,8 @@ export const Billing: React.FC = () => {
             <span className="text-slate-400 font-semibold uppercase block text-[10px]">Utility Messages</span>
             <div className="text-2xl font-black text-blue-400">{usage.utilitySent || 0}</div>
             <div className="text-slate-400 space-y-0.5 text-[11px]">
-              <div>Rate: ₹0.20 / msg</div>
-              <div className="text-blue-400 font-bold">Total: ₹{((usage.utilitySent || 0) * 0.20).toFixed(2)}</div>
+              <div>Rate: 0.20 Credits / msg</div>
+              <div className="text-blue-400 font-bold">Total: {((usage.utilitySent || 0) * 0.20).toFixed(2)} Credits</div>
             </div>
           </div>
 
@@ -304,15 +304,15 @@ export const Billing: React.FC = () => {
             <span className="text-slate-400 font-semibold uppercase block text-[10px]">Free Service Conversations</span>
             <div className="text-2xl font-black text-purple-400">{usage.serviceCount || 0}</div>
             <div className="text-slate-400 space-y-0.5 text-[11px]">
-              <div>Rate: ₹0.00 (Free Window)</div>
-              <div className="text-purple-400 font-bold">Total: ₹0.00</div>
+              <div>Rate: 0 Credits (Free Window)</div>
+              <div className="text-purple-400 font-bold">Total: 0.00 Credits</div>
             </div>
           </div>
 
           <div className="bg-slate-950 border border-emerald-500/30 rounded-xl p-4 space-y-2 bg-emerald-500/5">
-            <span className="text-emerald-400 font-semibold uppercase block text-[10px]">Total Billed Charges</span>
+            <span className="text-emerald-400 font-semibold uppercase block text-[10px]">Total Debited Usage Credits</span>
             <div className="text-2xl font-black text-emerald-400">
-              ₹{Number(usage.totalChargesBilled || 0).toFixed(2)}
+              {Number(usage.totalChargesBilled || 0).toFixed(2)} Credits
             </div>
             <div className="text-slate-400 text-[11px]">
               Cumulative Debits Deducted

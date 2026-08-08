@@ -9,7 +9,7 @@ export const Layout: React.FC = () => {
   const { isImpersonating, stopImpersonation, user } = useAuthStore();
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden relative">
+    <div className="flex flex-col h-[100dvh] h-screen bg-slate-950 text-slate-100 overflow-hidden overscroll-none relative">
       {/* Impersonation Session Protection Top Bar */}
       {isImpersonating && (
         <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border-b border-amber-500/40 px-4 py-2 flex items-center justify-between text-xs text-amber-200 font-semibold z-50 shrink-0 shadow-lg">
@@ -90,7 +90,7 @@ export const Layout: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 min-w-0 overflow-y-auto flex flex-col h-full">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-y-auto">
           <Outlet />
         </div>
       </main>

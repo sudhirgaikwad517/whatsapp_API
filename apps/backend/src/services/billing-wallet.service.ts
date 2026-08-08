@@ -67,7 +67,7 @@ export async function reserveWalletFunds(
     const spendable = Decimal.sub(wallet.availableBalance, wallet.reservedBalance);
     if (spendable.lessThan(amount)) {
       throw new AppError(
-        `Insufficient Wallet Balance. Required: ₹${amountNumber}, Spendable: ₹${spendable.toString()}`,
+        `Insufficient Usage Credits. Required: ${amountNumber} Credits, Spendable: ${spendable.toString()} Credits`,
         402,
         'INSUFFICIENT_FUNDS'
       );
