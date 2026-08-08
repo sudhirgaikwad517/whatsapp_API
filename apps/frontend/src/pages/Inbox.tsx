@@ -21,6 +21,7 @@ import {
   Sparkles,
   CreditCard,
   ShoppingBag,
+  CheckCircle,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { apiClient } from '../services/api.client';
@@ -269,6 +270,21 @@ export const Inbox: React.FC = () => {
     },
   });
 
+  // Status update mutation (e.g. Mark as RESOLVED / CLOSED)
+  const statusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      if (!activeConversationId) return;
+      const res = await apiClient.patch(`/inbox/conversations/${activeConversationId}/status`, {
+        status,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     sendMutation.mutate();
@@ -478,21 +494,40 @@ export const Inbox: React.FC = () => {
                 </div>
               </div>
 
-              {/* Agent Assignment Selector */}
-              <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-                <span className="text-xs text-slate-400 hidden sm:inline">Assigned Agent:</span>
-                <select
-                  value={currentConversation.assignedAgentId || ''}
-                  onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium max-w-[110px] sm:max-w-none truncate"
-                >
-                  <option value="">Unassigned</option>
-                  {teamMembers?.map((member: any) => (
-                    <option key={member.user.id} value={member.user.id}>
-                      {member.user.fullName}
-                    </option>
-                  ))}
-                </select>
+              {/* Agent Assignment & Resolution Controls */}
+              <div className="flex items-center space-x-2 shrink-0 ml-2">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs text-slate-400 hidden sm:inline">Assigned Agent:</span>
+                  <select
+                    value={currentConversation.assignedAgentId || ''}
+                    onChange={(e) => assignMutation.mutate(e.target.value || null)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] sm:text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium max-w-[110px] sm:max-w-none truncate"
+                  >
+                    <option value="">Unassigned (AI Active)</option>
+                    {teamMembers?.map((member: any) => (
+                      <option key={member.user.id} value={member.user.id}>
+                        {member.user.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {currentConversation.status === 'RESOLVED' || currentConversation.status === 'CLOSED' ? (
+                  <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Resolved</span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => statusMutation.mutate('RESOLVED')}
+                    disabled={statusMutation.isPending}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1.5 rounded-xl text-[11px] sm:text-xs flex items-center space-x-1 transition-all shadow-sm cursor-pointer shrink-0"
+                    title="Mark query as resolved & return to AI Auto-Responder"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Mark Resolved</span>
+                  </button>
+                )}
               </div>
             </div>
 
