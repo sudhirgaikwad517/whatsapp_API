@@ -3,44 +3,51 @@ import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 
 export async function suggestReply(organizationId: string, conversationId: string): Promise<string> {
-  const [org, messagesDesc, conversation, products] = await Promise.all([
-    (prisma as any).organization.findUnique({
-      where: { id: organizationId },
-      select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
-    }),
-    prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'desc' },
-      take: 15,
-    }),
-    prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: { contact: true },
-    }),
-    (prisma as any).productCatalog.findMany({
-      where: { organizationId },
-      select: { name: true, price: true, description: true },
-      take: 10,
-    }),
-  ]);
+  try {
+    let products: any[] = [];
+    try {
+      products = await (prisma as any).productCatalog.findMany({
+        where: { organizationId, isActive: true },
+        select: { title: true, priceInINR: true, description: true },
+        take: 10,
+      });
+    } catch (e) {
+      logger.warn({ error: e }, 'Failed to fetch product catalog for AI context');
+    }
 
-  // Order messages chronologically (oldest to newest)
-  const messages = messagesDesc.reverse();
+    const [org, messagesDesc, conversation] = await Promise.all([
+      (prisma as any).organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
+      }),
+      prisma.message.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+      }),
+      prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { contact: true },
+      }),
+    ]);
 
-  const customerName = conversation?.contact?.firstName || 'Customer';
-  const orgName = org?.name || 'Prowexa Business';
-  const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
-  const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+    // Order messages chronologically (oldest to newest)
+    const messages = (messagesDesc || []).reverse();
 
-  // Extract latest customer message
-  const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
-  const lastInboundText = typeof lastInboundMsg?.content === 'object'
-    ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
-    : lastInboundMsg?.content || '';
+    const customerName = conversation?.contact?.firstName || 'Customer';
+    const orgName = org?.name || 'Prowexa Business';
+    const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
+    const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
 
-  const productCatalogText = products && products.length > 0
-    ? products.map((p: any) => `- ${p.name}: ₹${p.price} (${p.description || ''})`).join('\n')
-    : 'No catalog products listed yet.';
+    // Extract latest customer message
+    const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
+    const lastInboundText = typeof lastInboundMsg?.content === 'object'
+      ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
+      : lastInboundMsg?.content || '';
+
+    const productCatalogText = products && products.length > 0
+      ? products.map((p: any) => `- ${p.title}: ₹${p.priceInINR} (${p.description || ''})`).join('\n')
+      : 'No catalog products listed yet.';
 
   if (effectiveApiKey) {
     const chatHistory = messages
@@ -111,6 +118,10 @@ CRITICAL INSTRUCTIONS:
     return `Hi ${customerName}, your order is currently being processed by our team. We will share tracking details shortly!`;
   }
   return `Hi ${customerName}, thank you for contacting ${orgName}. How can we assist you today?`;
+  } catch (topErr) {
+    logger.error({ error: topErr }, 'Top-level error in suggestReply');
+    return 'Hi! Thanks for contacting us. How can we assist you today?';
+  }
 }
 
 export async function generateTemplateText(promptText: string): Promise<string> {
