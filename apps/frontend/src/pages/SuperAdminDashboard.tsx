@@ -520,13 +520,13 @@ export const SuperAdminDashboard: React.FC = () => {
           {/* Live Meta Graph API Telemetry Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
-              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Marketing Messages Delivered</span>
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Marketing Messages Sent</span>
               <div className="text-2xl font-black text-emerald-400">{kpi?.financials?.metaAnalytics?.metaDeliveredMarketing || 0}</div>
               <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.8628 / msg</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-xl">
-              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Utility Messages Delivered</span>
+              <span className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Utility Messages Sent</span>
               <div className="text-2xl font-black text-blue-400">{kpi?.financials?.metaAnalytics?.metaDeliveredUtility || 0}</div>
               <p className="text-[10px] text-slate-500">Meta Base Charge ~₹0.1150 / msg</p>
             </div>
@@ -1033,7 +1033,7 @@ export const SuperAdminDashboard: React.FC = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-                      <span className="text-slate-400 font-semibold block">Marketing Messages Delivered</span>
+                      <span className="text-slate-400 font-semibold block">Marketing Messages Sent</span>
                       <div className="text-xl font-black text-emerald-400">
                         {orgFinanceDetails?.metaBreakdown?.marketing?.count || 0}
                       </div>
@@ -1045,7 +1045,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     </div>
 
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-                      <span className="text-slate-400 font-semibold block">Utility Messages Delivered</span>
+                      <span className="text-slate-400 font-semibold block">Utility Messages Sent</span>
                       <div className="text-xl font-black text-blue-400">
                         {orgFinanceDetails?.metaBreakdown?.utility?.count || 0}
                       </div>

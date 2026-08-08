@@ -51,7 +51,7 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
       WHERE m."organizationId" = ${orgId}::uuid
         AND m."direction" = 'OUTBOUND'
         AND m."type" = 'TEMPLATE'
-        AND m."status" IN ('DELIVERED', 'READ', 'REPLIED')
+        AND m."status" != 'FAILED'
     `;
 
     const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
