@@ -37,6 +37,13 @@ router.post('/conversations/:id/messages', InboxController.sendMessage);
 router.patch('/conversations/:id/assign', InboxController.assignAgent);
 
 /**
+ * @route   PATCH /api/v1/inbox/conversations/:id/status
+ * @desc    Update conversation status (OPEN, ESCALATED, RESOLVED)
+ * @access  Bearer
+ */
+router.patch('/conversations/:id/status', InboxController.updateStatus);
+
+/**
  * @route   GET /api/v1/inbox/conversations/:id/notes
  * @desc    Get list of internal collaboration notes for conversation
  * @access  Bearer

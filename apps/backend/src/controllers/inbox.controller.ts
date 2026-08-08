@@ -107,3 +107,15 @@ export async function sendMedia(req: AuthenticatedRequest, res: Response, next: 
   }
 }
 
+export async function updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const conversationId = req.params.id;
+    const status = req.body.status || 'OPEN';
+    const data = await InboxService.updateConversationStatus(orgId, conversationId, status);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
