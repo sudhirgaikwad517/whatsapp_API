@@ -30,6 +30,35 @@ export const SuperAdminDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const startImpersonation = useAuthStore((state) => state.startImpersonation);
 
+  // Fetch Master Global AI Key
+  const { data: globalAiKeyData } = useQuery({
+    queryKey: ['global-ai-key'],
+    queryFn: async () => {
+      const res = await apiClient.get('/superadmin/global-ai-key');
+      return res.data.data;
+    },
+  });
+
+  React.useEffect(() => {
+    if (globalAiKeyData?.apiKey) {
+      setGlobalGeminiKey(globalAiKeyData.apiKey);
+    }
+  }, [globalAiKeyData]);
+
+  const saveMasterKeyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post('/superadmin/global-ai-key', { apiKey: globalGeminiKey });
+      return res.data.data;
+    },
+    onSuccess: (data: any) => {
+      alert(`🔒 ${data.message || 'Master Global AI API Key updated securely across all tenant organizations!'}`);
+      queryClient.invalidateQueries({ queryKey: ['global-ai-key'] });
+    },
+    onError: (err: any) => {
+      alert(`Failed to save Master AI Key: ${err.message}`);
+    },
+  });
+
   // Fetch detailed organization financials for modal audit
   const { data: orgFinanceDetails, isLoading: isFinanceDetailsLoading } = useQuery({
     queryKey: ['superadmin-org-finance', selectedFinanceOrgId],
@@ -339,10 +368,11 @@ export const SuperAdminDashboard: React.FC = () => {
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
               />
               <button
-                onClick={() => alert('🔒 Master Global AI API Key updated securely in server vault!')}
-                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-purple-500/20 cursor-pointer"
+                onClick={() => saveMasterKeyMutation.mutate()}
+                disabled={saveMasterKeyMutation.isPending || !globalGeminiKey.trim()}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-purple-500/20 cursor-pointer disabled:opacity-50"
               >
-                Save Master Key
+                {saveMasterKeyMutation.isPending ? 'Saving Vault Key...' : 'Save Master Key'}
               </button>
             </div>
           </div>

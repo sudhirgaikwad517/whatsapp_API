@@ -684,3 +684,41 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
   };
 }
 
+let masterGlobalAiKeyMemory = process.env.GEMINI_API_KEY || '';
+
+export async function saveMasterAiKey(apiKey: string) {
+  const trimmedKey = (apiKey || '').trim();
+  masterGlobalAiKeyMemory = trimmedKey;
+  process.env.GEMINI_API_KEY = trimmedKey;
+
+  // Mass update all existing tenant organizations that don't have custom geminiApiKey set
+  await (prisma as any).organization.updateMany({
+    data: {
+      geminiApiKey: trimmedKey,
+    },
+  });
+
+  logger.info({ keyLength: trimmedKey.length }, 'Master Global Gemini API Key updated by SuperAdmin.');
+
+  return {
+    message: 'Master Global AI API Key saved and activated across all platform tenant organizations.',
+    key: trimmedKey,
+  };
+}
+
+export async function getMasterAiKey() {
+  const currentKey = process.env.GEMINI_API_KEY || masterGlobalAiKeyMemory || '';
+  return { apiKey: currentKey };
+}
+
+export async function updateOrganizationAiKey(organizationId: string, apiKey: string) {
+  const trimmedKey = (apiKey || '').trim();
+  const org = await (prisma as any).organization.update({
+    where: { id: organizationId },
+    data: { geminiApiKey: trimmedKey },
+    select: { id: true, name: true, geminiApiKey: true },
+  });
+
+  return org;
+}
+

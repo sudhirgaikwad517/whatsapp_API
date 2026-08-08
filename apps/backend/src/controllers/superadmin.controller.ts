@@ -112,3 +112,32 @@ export async function getOrgFinancials(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+export async function saveMasterAiKey(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { apiKey } = req.body;
+    const data = await SuperAdminService.saveMasterAiKey(apiKey || '');
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getMasterAiKey(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await SuperAdminService.getMasterAiKey();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateOrgAiKey(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { organizationId, apiKey } = req.body;
+    const data = await SuperAdminService.updateOrganizationAiKey(organizationId, apiKey);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

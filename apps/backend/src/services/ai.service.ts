@@ -1,16 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '../config/database.js';
-
-let aiClient: GoogleGenAI | null = null;
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (apiKey && apiKey.trim()) {
-  try {
-    aiClient = new GoogleGenAI({ apiKey: apiKey.trim() });
-  } catch (err) {
-    console.error('Failed to initialize GoogleGenAI client:', err);
-  }
-}
+import { logger } from '../utils/logger.js';
 
 export async function suggestReply(organizationId: string, conversationId: string): Promise<string> {
   const [org, messages, conversation] = await Promise.all([
@@ -32,49 +22,52 @@ export async function suggestReply(organizationId: string, conversationId: strin
   const customerName = conversation?.contact?.firstName || 'Customer';
   const orgName = org?.name || 'Prowexa Business';
   const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support.';
-  const effectiveApiKey = (org as any)?.geminiApiKey || process.env.GEMINI_API_KEY;
+  const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
 
-  const chatHistory = messages
-    .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
-    .join('\n');
+  if (effectiveApiKey) {
+    const chatHistory = messages
+      .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
+      .join('\n');
 
-  let activeClient = aiClient;
-  if (effectiveApiKey && effectiveApiKey.trim()) {
-    try {
-      activeClient = new GoogleGenAI({ apiKey: effectiveApiKey.trim() });
-    } catch (e) {
-      // fallback
-    }
-  }
-
-  if (activeClient) {
-    try {
-      const response = await activeClient.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: [
-          `You are an AI support copilot for "${orgName}".
+    const promptText = `You are an AI support copilot for "${orgName}".
 Knowledgebase & FAQs:
 ${knowledgeBase}
 
 Recent Chat History:
 ${chatHistory}
 
-Task: Suggest a concise, polite, helpful 1-2 sentence response to send to ${customerName} on WhatsApp. Respond with ONLY the message text, no quotes or metadata.`,
-        ],
-      });
+Task: Suggest a concise, polite, helpful 1-2 sentence response to send to ${customerName} on WhatsApp. Respond with ONLY the message text, no quotes or metadata.`;
 
-      if (response.text && response.text.trim()) {
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+
+    try {
+      const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
+
+      for (const modelName of modelsToTry) {
         try {
-          const { deductAiCredit } = await import('./credits.service.js');
-          await deductAiCredit(organizationId, 'AI_COPILOT');
-        } catch (err) {
-          console.error('Credit deduction failed:', err);
+          const response = await activeClient.models.generateContent({
+            model: modelName,
+            contents: promptText,
+          });
+
+          if (response?.text && response.text.trim()) {
+            try {
+              const { deductAiCredit } = await import('./credits.service.js');
+              await deductAiCredit(organizationId, 'AI_COPILOT');
+            } catch (creditErr) {
+              logger.error({ creditErr }, 'Credit deduction failed after Gemini reply generation');
+            }
+            return response.text.trim();
+          }
+        } catch (modelErr: any) {
+          logger.warn({ model: modelName, error: modelErr?.message || modelErr }, 'Gemini model attempt failed, trying next fallback model...');
         }
-        return response.text.trim();
       }
-    } catch (err) {
-      console.error('Gemini API call failed in suggestReply:', err);
+    } catch (err: any) {
+      logger.error({ err: err?.message || err }, 'Failed to initialize GoogleGenAI client');
     }
+  } else {
+    logger.warn({ organizationId }, 'No Gemini API key available for organization or global master.');
   }
 
   // Graceful intelligent fallback if API key is not set or call fails
@@ -90,22 +83,31 @@ Task: Suggest a concise, polite, helpful 1-2 sentence response to send to ${cust
 }
 
 export async function generateTemplateText(promptText: string): Promise<string> {
-  if (aiClient) {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (apiKey) {
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     try {
-      const response = await aiClient.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: [
-          `Create a high-converting Meta WhatsApp marketing broadcast template body text based on this prompt: "${promptText}".
+      const activeClient = new GoogleGenAI({ apiKey });
+      const prompt = `Create a high-converting Meta WhatsApp marketing broadcast template body text based on this prompt: "${promptText}".
 Include placeholders like {{1}} for customer name and {{2}} for offer details.
-Return ONLY the template text body.`,
-        ],
-      });
+Return ONLY the template text body.`;
 
-      if (response.text && response.text.trim()) {
-        return response.text.trim();
+      for (const modelName of modelsToTry) {
+        try {
+          const response = await activeClient.models.generateContent({
+            model: modelName,
+            contents: prompt,
+          });
+
+          if (response?.text && response.text.trim()) {
+            return response.text.trim();
+          }
+        } catch (e) {
+          // ignore & try next model
+        }
       }
     } catch (err) {
-      console.error('Gemini API call failed in generateTemplateText:', err);
+      logger.error({ err }, 'Gemini API call failed in generateTemplateText');
     }
   }
 
