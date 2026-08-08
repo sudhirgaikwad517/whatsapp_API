@@ -182,10 +182,35 @@ export async function processAutonomousAiResponse(organizationId: string, conver
     const result = await evaluateAiAutonomousReply(organizationId, conversationId);
 
     if (result.isEscalated) {
-      // 1. Mark conversation status as ESCALATED in DB
+      // Find best agent via Round-Robin for human handoff
+      let bestAgentId: string | null = null;
+      const members = await prisma.organizationMember.findMany({
+        where: {
+          organizationId,
+          role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
+        },
+        select: { userId: true },
+      });
+      if (members.length > 0) {
+        const openCounts = await Promise.all(
+          members.map(async (m) => ({
+            id: m.userId,
+            count: await prisma.conversation.count({
+              where: { organizationId, assignedAgentId: m.userId, status: 'OPEN' },
+            }),
+          }))
+        );
+        openCounts.sort((a, b) => a.count - b.count);
+        bestAgentId = openCounts[0]?.id || null;
+      }
+
+      // 1. Mark conversation status as ESCALATED and assign agent in DB
       await prisma.conversation.update({
         where: { id: conversationId },
-        data: { status: 'ESCALATED' },
+        data: {
+          status: 'ESCALATED',
+          ...(bestAgentId ? { assignedAgentId: bestAgentId } : {}),
+        },
       });
 
       // 2. Send polite handoff acknowledgement message to customer
