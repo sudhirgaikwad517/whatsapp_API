@@ -220,7 +220,7 @@ export async function updateConversationStatus(organizationId: string, conversat
     where: { id: conversationId },
     data: {
       status,
-      ...(isResolved ? { resolvedAt: new Date() } : {}),
+      ...(isResolved ? { resolvedAt: new Date(), assignedAgentId: null } : {}),
     },
   });
 

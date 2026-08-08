@@ -137,7 +137,8 @@ export const webhookWorker = new Worker(
             update: {
               windowExpiresAt,
               status: 'OPEN',
-              ...(assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
+              ...(existingConv?.status === 'RESOLVED' || existingConv?.status === 'CLOSED' ? { assignedAgentId: null } : {}),
+              ...(!orgInfo?.isAiAutoRespondEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {
               organizationId: waAccount.organizationId,
