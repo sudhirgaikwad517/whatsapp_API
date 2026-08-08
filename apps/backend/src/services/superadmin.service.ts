@@ -146,7 +146,7 @@ export async function getExecutiveDashboardKpi() {
       INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
       WHERE m."direction" = 'OUTBOUND'
         AND m."type" = 'TEMPLATE'
-        AND m."status" != 'FAILED'
+        AND m."status" IN ('DELIVERED', 'READ', 'REPLIED')
     `;
 
     const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
@@ -306,7 +306,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
         WHERE m."organizationId" = ${org.id}::uuid
           AND m."direction" = 'OUTBOUND'
           AND m."type" = 'TEMPLATE'
-          AND m."status" != 'FAILED'
+          AND m."status" IN ('DELIVERED', 'READ', 'REPLIED')
       `;
 
       const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
@@ -619,7 +619,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     WHERE m."organizationId" = ${org.id}::uuid
       AND m."direction" = 'OUTBOUND'
       AND m."type" = 'TEMPLATE'
-      AND m."status" != 'FAILED'
+      AND m."status" IN ('DELIVERED', 'READ', 'REPLIED')
   `;
 
   // Use the exact SQL counts. If SQL fails or returns 0, fallback to campaign recipients for marketing.

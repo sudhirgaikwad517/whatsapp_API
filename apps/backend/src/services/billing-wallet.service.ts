@@ -238,7 +238,7 @@ export async function rechargeWallet(
       WHERE m."organizationId" = ${organizationId}::uuid
         AND m."direction" = 'OUTBOUND'
         AND m."type" = 'TEMPLATE'
-        AND m."status" != 'FAILED'
+        AND m."status" IN ('DELIVERED', 'READ', 'REPLIED')
     `;
 
     const campaignRecipients = await tx.campaignRecipient.count({
