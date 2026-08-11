@@ -13,7 +13,8 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function getDashboardKpi(req: Request, res: Response, next: NextFunction) {
   try {
-    const data = await SuperAdminService.getExecutiveDashboardKpi();
+    const timeRange = (req.query.timeRange as string) || 'all';
+    const data = await SuperAdminService.getExecutiveDashboardKpi(timeRange);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

@@ -61,7 +61,22 @@ export async function loginSuperAdmin(email: string, password: string) {
   };
 }
 
-export async function getExecutiveDashboardKpi() {
+export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
+  let startDate: Date | undefined;
+  const now = new Date();
+
+  if (timeRange === 'today') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (timeRange === 'week') {
+    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (timeRange === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (timeRange === 'year') {
+    startDate = new Date(now.getFullYear(), 0, 1);
+  }
+
+  const dateFilter = startDate ? { createdAt: { gte: startDate } } : {};
+
   const [
     totalOrganizations,
     activeOrganizations,
@@ -71,7 +86,6 @@ export async function getExecutiveDashboardKpi() {
     walletsSum,
     invoicesSum,
     allLedgerDebits,
-    allRecharges,
     supportTickets,
     auditLogs,
     pricingRules,
@@ -80,20 +94,17 @@ export async function getExecutiveDashboardKpi() {
     prisma.organization.count({ where: { isSuspended: false, deletedAt: null } }),
     prisma.organization.count({ where: { isSuspended: true, deletedAt: null } }),
     prisma.user.count({ where: { deletedAt: null } }),
-    prisma.message.count(),
+    prisma.message.count({ where: { ...dateFilter } }),
     prisma.wallet.aggregate({
       _sum: { availableBalance: true, reservedBalance: true },
     }),
     prisma.invoice.aggregate({
       _sum: { grandTotal: true, subtotal: true, taxAmount: true },
+      where: { ...dateFilter },
     }),
     prisma.walletLedger.aggregate({
       _sum: { amount: true },
-      where: { transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
-    }),
-    prisma.walletLedger.aggregate({
-      _sum: { amount: true },
-      where: { transactionType: { in: ['RECHARGE', 'MANUAL_CREDIT', 'BONUS'] } },
+      where: { transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] }, ...dateFilter },
     }),
     prisma.supportTicket.findMany({
       include: { organization: true },
@@ -116,7 +127,7 @@ export async function getExecutiveDashboardKpi() {
   // Query actual client paid recharges & top-ups (excluding promotional bonus)
   const paidRechargesSum = await prisma.walletLedger.aggregate({
     _sum: { amount: true },
-    where: { transactionType: { in: ['RECHARGE', 'MANUAL_CREDIT'] } },
+    where: { transactionType: { in: ['RECHARGE', 'MANUAL_CREDIT'] }, ...dateFilter },
   });
   const actualPaidRecharges = Number(paidRechargesSum._sum?.amount || 0);
 
@@ -139,9 +150,10 @@ export async function getExecutiveDashboardKpi() {
       prisma.campaignRecipient.count({
         where: {
           status: { not: 'FAILED' },
+          ...(startDate ? { createdAt: { gte: startDate } } : {}),
         },
       }),
-      prisma.message.count({ where: { direction: 'INBOUND' } }),
+      prisma.message.count({ where: { direction: 'INBOUND', ...dateFilter } }),
     ]);
 
     const exactTemplateCounts: any[] = await prisma.$queryRaw`
@@ -153,6 +165,7 @@ export async function getExecutiveDashboardKpi() {
       WHERE m."direction" = 'OUTBOUND'
         AND m."type" = 'TEMPLATE'
         AND m."status" != 'FAILED'
+        ${startDate ? Prisma.sql`AND m."createdAt" >= ${startDate}` : Prisma.empty}
     `;
 
     const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
