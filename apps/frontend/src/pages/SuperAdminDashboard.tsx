@@ -321,7 +321,7 @@ export const SuperAdminDashboard: React.FC = () => {
             ₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}
           </div>
           <div className="text-xs text-slate-400">
-            Platform Profit Margin: <span className="text-emerald-400 font-bold">₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</span>
+            Platform Profit Margin: <span className={`font-bold ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</span>
           </div>
         </div>
 

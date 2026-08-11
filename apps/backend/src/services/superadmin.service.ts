@@ -111,8 +111,14 @@ export async function getExecutiveDashboardKpi() {
   ]);
 
   const billedUsageSum = Number(allLedgerDebits._sum?.amount || 0);
-  const rechargeSum = Number(allRecharges._sum?.amount || 0);
   const totalReservedBalance = Number(walletsSum._sum.reservedBalance || 0);
+
+  // Query actual client paid recharges & top-ups (excluding promotional bonus)
+  const paidRechargesSum = await prisma.walletLedger.aggregate({
+    _sum: { amount: true },
+    where: { transactionType: { in: ['RECHARGE', 'MANUAL_CREDIT'] } },
+  });
+  const actualPaidRecharges = Number(paidRechargesSum._sum?.amount || 0);
 
   // Fetch real-time Meta Graph API analytics & actual delivered charges
   let metaAnalytics = {
@@ -189,16 +195,20 @@ export async function getExecutiveDashboardKpi() {
     // Graceful fallback
   }
 
-  // Calculate actual Gross Client Revenue from delivered messages (523 * 1.00 = ₹523.00)
+  // Calculate actual Gross Client Revenue from delivered messages (Marketing @ ₹1.00, Utility @ ₹0.20)
   const clientBilledCalculated = Number((metaAnalytics.metaDeliveredMarketing * 1.00 + metaAnalytics.metaDeliveredUtility * 0.20).toFixed(2));
-  const grossRevenue = Number((invoicesSum._sum.grandTotal || Math.max(billedUsageSum, rechargeSum, clientBilledCalculated)).toFixed(2));
-  const netRevenue = Number((invoicesSum._sum.subtotal || grossRevenue).toFixed(2));
-  const totalGstTax = Number(invoicesSum._sum.taxAmount || 0);
+  const totalBilledUsage = Math.max(billedUsageSum, clientBilledCalculated);
+  const paidInvoicesSum = Number(invoicesSum._sum.grandTotal || 0);
+
+  // Gross Platform Revenue is max of (Client Paid Recharges, Total Billed Messaging Usage, Paid Invoices)
+  const grossRevenue = Number(Math.max(actualPaidRecharges, totalBilledUsage, paidInvoicesSum).toFixed(2));
+  const totalGstTax = Number((grossRevenue * 0.18 / 1.18).toFixed(2));
+  const netRevenue = Number((grossRevenue - totalGstTax).toFixed(2));
 
   // Exact Meta Payable Liability & Real Net Platform Profit Margin
   const metaPayable = metaAnalytics.actualMetaCostInINR > 0
     ? metaAnalytics.actualMetaCostInINR
-    : Number((netRevenue * 0.8).toFixed(2));
+    : Number((metaAnalytics.metaDeliveredMarketing * 0.86309 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
 
   const platformProfit = Number((grossRevenue - metaPayable).toFixed(2));
 
