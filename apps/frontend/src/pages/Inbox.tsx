@@ -208,7 +208,7 @@ export const Inbox: React.FC = () => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050';
+    const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:5050';
     const socket = io(apiUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
