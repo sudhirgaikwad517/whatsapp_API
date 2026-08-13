@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -197,29 +197,40 @@ export const Inbox: React.FC = () => {
     enabled: !!activeConversationId && activeTab === 'notes',
   });
 
+  // Keep track of active conversation without re-binding socket events
+  const activeConvRef = useRef(activeConversationId);
+  useEffect(() => {
+    activeConvRef.current = activeConversationId;
+  }, [activeConversationId]);
+
   // Realtime Socket.IO Connection
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    const socket = io('http://localhost:5050', {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5050';
+    const socket = io(apiUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
 
     socket.on('new_message', () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConvRef.current) {
+        queryClient.invalidateQueries({ queryKey: ['messages', activeConvRef.current] });
+      }
     });
 
     socket.on('message_status_update', () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConvRef.current) {
+        queryClient.invalidateQueries({ queryKey: ['messages', activeConvRef.current] });
+      }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [activeConversationId, queryClient]);
+  }, [queryClient]);
 
   // Outbound message mutation
   const sendMutation = useMutation({

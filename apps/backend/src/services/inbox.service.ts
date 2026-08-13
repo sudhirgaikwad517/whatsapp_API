@@ -38,36 +38,8 @@ export async function listConversations(
   }
 
   if (activeAccount) {
-    try {
-      const existingConvContacts = await prisma.conversation.findMany({
-        where: { whatsappAccountId: activeAccount.id },
-        select: { contactId: true },
-      });
-      const existingIds = new Set(existingConvContacts.map((c) => c.contactId));
-
-      const unlinkedContacts = await prisma.contact.findMany({
-        where: {
-          organizationId,
-          id: { notIn: Array.from(existingIds) },
-        },
-        select: { id: true },
-        take: 200,
-      });
-
-      if (unlinkedContacts.length > 0) {
-        await prisma.conversation.createMany({
-          data: unlinkedContacts.map((c) => ({
-            organizationId,
-            whatsappAccountId: activeAccount.id,
-            contactId: c.id,
-            status: 'OPEN',
-          })),
-          skipDuplicates: true,
-        });
-      }
-    } catch {
-      // Ignore background sync errors
-    }
+    // Background sync of contacts is now handled asynchronously when webhooks arrive,
+    // avoiding massive N+1 database spikes on every inbox refresh.
   }
 
   const where: any = { organizationId };

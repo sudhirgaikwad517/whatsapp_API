@@ -8,6 +8,8 @@ import { redis } from './config/redis.js';
 import { initSocketServer } from './socket/inbox.gateway.js';
 import './workers/webhook.worker.js';
 import './workers/campaign.worker.js';
+import './workers/autoresponder.worker.js';
+import './workers/media.worker.js';
 
 const app = createApp();
 const server = http.createServer(app);

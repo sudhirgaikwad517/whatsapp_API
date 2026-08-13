@@ -170,10 +170,13 @@ export async function createRazorpayOrder(req: AuthenticatedRequest, res: Respon
     const axios = (await import('axios')).default;
     const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
     
+    // Add 18% GST to the requested credits amount so the user pays Price + GST
+    const amountWithGst = amount * 1.18;
+
     const response = await axios.post(
       'https://api.razorpay.com/v1/orders',
       {
-        amount: Math.round(amount * 100),
+        amount: Math.round(amountWithGst * 100),
         currency: 'INR',
         receipt: `rcpt_${Date.now()}`,
       },

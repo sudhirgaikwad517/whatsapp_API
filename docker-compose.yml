@@ -7,8 +7,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-prowexa_whatsapp}
-    ports:
-      - "5433:5432"
     volumes:
       - prowexa_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,8 +19,6 @@ services:
     image: redis:7-alpine
     container_name: prowexa_redis
     restart: always
-    ports:
-      - "6380:6379"
     volumes:
       - prowexa_redisdata:/data
     healthcheck:
@@ -39,6 +35,16 @@ services:
     restart: always
     ports:
       - "5050:5050"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5050/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     environment:
       PORT: 5050
       NODE_ENV: production

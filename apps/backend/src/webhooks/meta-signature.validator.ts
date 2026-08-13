@@ -22,14 +22,14 @@ export function verifyMetaWebhookSignature(
   }
 
   if (!signatureHeader) {
-    logger.warn('Meta webhook missing X-Hub-Signature-256 header. Allowing event processing.');
-    return true;
+    logger.warn('Meta webhook missing X-Hub-Signature-256 header. Rejecting event processing.');
+    return false;
   }
 
   const parts = signatureHeader.split('=');
   if (parts.length !== 2 || parts[0] !== 'sha256') {
     logger.warn({ signatureHeader }, 'Malformed Meta webhook signature header format.');
-    return true;
+    return false;
   }
 
   const receivedSignature = parts[1];
@@ -48,15 +48,14 @@ export function verifyMetaWebhookSignature(
     if (!isValid) {
       logger.warn(
         { receivedSignature, expectedSignature },
-        'Meta webhook signature mismatch. Allowing payload for status update continuity.'
+        'Meta webhook signature mismatch. Rejecting payload.'
       );
-      // Soft fallback to ensure status callbacks are never lost
-      return true;
+      return false;
     }
 
     return true;
   } catch (err) {
-    logger.warn({ err }, 'Error during Meta webhook signature verification. Fallback to accept.');
-    return true;
+    logger.warn({ err }, 'Error during Meta webhook signature verification. Rejecting.');
+    return false;
   }
 }

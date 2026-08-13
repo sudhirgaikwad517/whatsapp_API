@@ -46,6 +46,9 @@ export async function reserveWalletFunds(
   const amount = new Prisma.Decimal(amountNumber);
 
   return await prisma.$transaction(async (tx) => {
+    // Acquire a pessimistic row-level lock on the wallet to prevent concurrent race conditions
+    await tx.$queryRaw`SELECT id FROM "Wallet" WHERE "organizationId" = ${organizationId}::uuid FOR UPDATE`;
+
     let wallet = await tx.wallet.findUnique({
       where: { organizationId },
     });
@@ -119,6 +122,9 @@ export async function commitWalletReservation(
       return null; // Already committed or released
     }
 
+    // Acquire a pessimistic row-level lock
+    await tx.$queryRaw`SELECT id FROM "Wallet" WHERE id = ${reservation.walletId}::uuid FOR UPDATE`;
+
     const wallet = await tx.wallet.findUnique({
       where: { id: reservation.walletId },
     });
@@ -183,6 +189,9 @@ export async function releaseWalletReservation(
       return null; // Already committed or released
     }
 
+    // Acquire a pessimistic row-level lock
+    await tx.$queryRaw`SELECT id FROM "Wallet" WHERE id = ${reservation.walletId}::uuid FOR UPDATE`;
+
     // Decrement reserved balance back to spendable
     await tx.wallet.update({
       where: { id: reservation.walletId },
@@ -218,6 +227,9 @@ export async function rechargeWallet(
   const amount = new Prisma.Decimal(amountNumber);
 
   return await prisma.$transaction(async (tx) => {
+    // Acquire a pessimistic row-level lock
+    await tx.$queryRaw`SELECT id FROM "Wallet" WHERE "organizationId" = ${organizationId}::uuid FOR UPDATE`;
+
     let wallet = await tx.wallet.findUnique({
       where: { organizationId },
     });
@@ -323,6 +335,9 @@ export async function deductDirectWalletBalance(
   const amount = new Prisma.Decimal(amountNumber);
 
   return await prisma.$transaction(async (tx) => {
+    // Acquire a pessimistic row-level lock
+    await tx.$queryRaw`SELECT id FROM "Wallet" WHERE "organizationId" = ${organizationId}::uuid FOR UPDATE`;
+
     let wallet = await tx.wallet.findUnique({
       where: { organizationId },
     });
@@ -366,10 +381,10 @@ export async function deductDirectWalletBalance(
 
 class Decimal {
   static sub(a: Prisma.Decimal, b: Prisma.Decimal) {
-    return new Prisma.Decimal(a.toNumber() - b.toNumber());
+    return a.sub(b);
   }
   static add(a: Prisma.Decimal, b: Prisma.Decimal) {
-    return new Prisma.Decimal(a.toNumber() + b.toNumber());
+    return a.add(b);
   }
 }
 

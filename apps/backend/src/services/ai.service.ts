@@ -54,7 +54,7 @@ export async function suggestReply(organizationId: string, conversationId: strin
       .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
       .join('\n');
 
-    const promptText = `You are a helpful, courteous WhatsApp customer support copilot for "${orgName}".
+    const systemInstruction = `You are a helpful, courteous WhatsApp customer support copilot for "${orgName}".
 
 Business Knowledgebase & FAQs:
 ${knowledgeBase}
@@ -62,17 +62,17 @@ ${knowledgeBase}
 Product Catalog:
 ${productCatalogText}
 
-Recent Chat History:
-${chatHistory}
-
-LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"
-
 CRITICAL INSTRUCTIONS:
-1. Directly answer ${customerName}'s latest question above ("${lastInboundText}").
+1. Directly answer the customer's latest question.
 2. If they ask about delivery availability, locations (e.g. Pune, Mumbai, etc.), pricing, or products, provide a clear, direct, and accurate answer based on the knowledgebase or catalog.
 3. If specific city delivery rules are not detailed in the knowledgebase, answer politely confirming delivery or asking for pincode/address to confirm their slot.
 4. Keep the message concise (1-2 sentences maximum), friendly, and natural for WhatsApp.
 5. Return ONLY the final message text to send to the customer. No preamble, quotes, or metadata.`;
+
+    const userContent = `Recent Chat History:
+${chatHistory}
+
+LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"`;
 
     const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
@@ -83,7 +83,10 @@ CRITICAL INSTRUCTIONS:
         try {
           const response = await activeClient.models.generateContent({
             model: modelName,
-            contents: promptText,
+            contents: userContent,
+            config: {
+              systemInstruction: systemInstruction,
+            },
           });
 
           if (response?.text && response.text.trim()) {

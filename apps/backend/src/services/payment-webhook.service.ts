@@ -28,6 +28,16 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
     const amountPaid = payment.amount / 100; // Razorpay amounts are in paise
     const organizationId = payment.notes?.organizationId || '3139c8ac-9b48-4d35-ad70-b6ff8db7addb';
 
+    // Idempotency Check: Prevent duplicate wallet recharges
+    const existingInvoice = await prisma.invoice.findFirst({
+      where: { paymentId },
+    });
+
+    if (existingInvoice) {
+      logger.info({ paymentId }, 'Razorpay webhook already processed. Skipping duplicate.');
+      return { success: true, processed: false, reason: 'ALREADY_PROCESSED' };
+    }
+
     // Calculate subtotal & 18% GST tax
     const subtotal = Number((amountPaid / 1.18).toFixed(2));
     const taxAmount = Number((amountPaid - subtotal).toFixed(2));
@@ -76,6 +86,16 @@ export async function processStripeWebhook(rawBody: string, signature: string) {
     const paymentId = session.id;
     const amountPaid = session.amount_total ? session.amount_total / 100 : session.amount / 100;
     const organizationId = session.metadata?.organizationId || '3139c8ac-9b48-4d35-ad70-b6ff8db7addb';
+
+    // Idempotency Check: Prevent duplicate wallet recharges
+    const existingInvoice = await prisma.invoice.findFirst({
+      where: { paymentId },
+    });
+
+    if (existingInvoice) {
+      logger.info({ paymentId }, 'Stripe webhook already processed. Skipping duplicate.');
+      return { success: true, processed: false, reason: 'ALREADY_PROCESSED' };
+    }
 
     const subtotal = Number((amountPaid / 1.18).toFixed(2));
     const taxAmount = Number((amountPaid - subtotal).toFixed(2));

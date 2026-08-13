@@ -250,7 +250,7 @@ export async function forgotPassword(email: string) {
   });
 
   // TODO: Send reset email via email provider
-  logger.info({ resetToken }, '[DEV] Password Reset Token (send via email service)');
+  logger.info({ userId: user.id }, 'Password reset requested (token generated)');
 
   return { message: 'If this email is registered, a reset link has been sent.' };
 }

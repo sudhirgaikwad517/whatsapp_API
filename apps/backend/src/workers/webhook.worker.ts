@@ -3,7 +3,7 @@ import { createRedisConnection } from '../config/redis.js';
 import { prisma } from '../config/database.js';
 import { redis } from '../config/redis.js';
 import { logger } from '../utils/logger.js';
-import { mediaQueue } from '../queues/index.js';
+import { mediaQueue, autoResponderQueue } from '../queues/index.js';
 import { emitToOrganization } from '../socket/inbox.gateway.js';
 import type { MetaWebhookEntry } from '@prowexa/shared-types';
 
@@ -123,14 +123,25 @@ export const webhookWorker = new Worker(
                 select: { userId: true },
               });
               if (members.length > 0) {
-                const openCounts = await Promise.all(
-                  members.map(async (m) => ({
-                    id: m.userId,
-                    count: await prisma.conversation.count({
-                      where: { organizationId: waAccount.organizationId, assignedAgentId: m.userId, status: 'OPEN' },
-                    }),
-                  }))
-                );
+                const memberIds = members.map((m) => m.userId);
+                const groupedCounts = await prisma.conversation.groupBy({
+                  by: ['assignedAgentId'],
+                  where: {
+                    organizationId: waAccount.organizationId,
+                    assignedAgentId: { in: memberIds },
+                    status: 'OPEN',
+                  },
+                  _count: { id: true },
+                });
+
+                const countMap = new Map(memberIds.map((id) => [id, 0]));
+                groupedCounts.forEach((g) => {
+                  if (g.assignedAgentId) {
+                    countMap.set(g.assignedAgentId, g._count.id);
+                  }
+                });
+
+                const openCounts = Array.from(countMap.entries()).map(([id, count]) => ({ id, count }));
                 openCounts.sort((a, b) => a.count - b.count);
                 assignedAgentId = openCounts[0]?.id || null;
               }
@@ -253,19 +264,17 @@ export const webhookWorker = new Worker(
             });
 
             if (matchedProduct && cleanTextLower.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower)) {
-              const { createRazorpayInChatPaymentLink } = await import('../services/in-chat-payment.service.js');
-              setTimeout(async () => {
-                try {
-                  await createRazorpayInChatPaymentLink(
-                    waAccount.organizationId,
-                    conversation.id,
-                    Number(matchedProduct.priceInINR),
-                    `Order for ${matchedProduct.title}`
-                  );
-                } catch (err) {
-                  logger.error({ err }, 'Autonomous Commerce Payment Link dispatch failed');
-                }
-              }, 1000);
+              await autoResponderQueue.add(
+                'commerce-link',
+                {
+                  type: 'commerce',
+                  organizationId: waAccount.organizationId,
+                  conversationId: conversation.id,
+                  priceInINR: Number(matchedProduct.priceInINR),
+                  title: matchedProduct.title,
+                },
+                { delay: 1000 }
+              );
             } else {
               // 1. Check Visual Chatbot Flow Engine
               const { evaluateInboundFlow } = await import('../services/flow.service.js');
@@ -278,14 +287,16 @@ export const webhookWorker = new Worker(
               if (flowReplyText) {
                 // Clean node type prefix e.g. "💬 Send Message: "
                 flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
-                setTimeout(async () => {
-                  try {
-                    const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
-                    await sendOutboundTextMessage(waAccount.organizationId, conversation.id, flowReplyText!);
-                  } catch (err) {
-                    logger.error({ err }, 'Chatbot Flow dispatch failed');
-                  }
-                }, 1000);
+                await autoResponderQueue.add(
+                  'flow-reply',
+                  {
+                    type: 'flow',
+                    organizationId: waAccount.organizationId,
+                    conversationId: conversation.id,
+                    text: flowReplyText,
+                  },
+                  { delay: 1000 }
+                );
               }
             } else {
               // 2. Autonomous AI Auto-Responder Engine OR Keyword Auto-Responder
@@ -296,16 +307,15 @@ export const webhookWorker = new Worker(
 
               if (org?.isAiAutoRespondEnabled) {
                 // Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog)
-                const orgId = waAccount.organizationId;
-                const convId = conversation.id;
-                setTimeout(async () => {
-                  try {
-                    const { processAutonomousAiResponse } = await import('../services/ai.service.js');
-                    await processAutonomousAiResponse(orgId, convId);
-                  } catch (err) {
-                    logger.error({ err }, 'Autonomous AI Auto-responder execution failed');
-                  }
-                }, 1000);
+                await autoResponderQueue.add(
+                  'ai-reply',
+                  {
+                    type: 'ai',
+                    organizationId: waAccount.organizationId,
+                    conversationId: conversation.id,
+                  },
+                  { delay: 1000 }
+                );
               } else {
                 // Keyword Auto-Responder Engine (Fallback when AI Auto-Responder is OFF)
                 const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');

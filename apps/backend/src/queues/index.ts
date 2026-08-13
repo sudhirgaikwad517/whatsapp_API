@@ -50,3 +50,15 @@ export const mediaQueue = new Queue('media-processing', {
     },
   },
 });
+
+/**
+ * Auto-Responder Queue — processes AI Copilot and Keyword Chatbot flows durably.
+ */
+export const autoResponderQueue = new Queue('autoresponder-processing', {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    removeOnComplete: 1000,
+    removeOnFail: 5000,
+    attempts: 3,
+  },
+});
