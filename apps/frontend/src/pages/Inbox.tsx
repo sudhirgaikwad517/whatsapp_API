@@ -208,7 +208,7 @@ export const Inbox: React.FC = () => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    const isProduction = import.meta.env.MODE === 'production';
+    const isProduction = (import.meta as any).env.MODE === 'production';
     const apiUrl = (import.meta as any).env.VITE_API_URL || (isProduction ? 'https://api.wabtic.com' : 'http://localhost:5050');
     const socket = io(apiUrl, {
       auth: { token },
