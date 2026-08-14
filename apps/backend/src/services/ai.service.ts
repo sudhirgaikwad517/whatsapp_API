@@ -281,6 +281,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
 }
 
 async function evaluateAiAutonomousReply(organizationId: string, conversationId: string): Promise<{ replyText?: string; isEscalated: boolean; reason?: string }> {
+  let lastError = 'No API Error';
   const [org, messagesDesc, conversation] = await Promise.all([
     (prisma as any).organization.findUnique({
       where: { id: organizationId },
