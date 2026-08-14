@@ -180,7 +180,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     for (const acc of accounts) {
       if (acc.encryptedAccessToken) {
         try {
-          const token = decryptToken(acc.encryptedAccessToken);
+          const token = env.META_SYSTEM_USER_TOKEN || decryptToken(acc.encryptedAccessToken);
           const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
           const endTime = Math.floor(Date.now() / 1000);
 
@@ -351,7 +351,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
           const axios = (await import('axios')).default;
           const fullAcc = await prisma.whatsappAccount.findUnique({ where: { id: waAccount.id } });
           if (fullAcc?.encryptedAccessToken) {
-            const token = decryptToken(fullAcc.encryptedAccessToken);
+            const token = env.META_SYSTEM_USER_TOKEN || decryptToken(fullAcc.encryptedAccessToken);
             const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
             const endTime = Math.floor(Date.now() / 1000);
             const res = await axios.get(
