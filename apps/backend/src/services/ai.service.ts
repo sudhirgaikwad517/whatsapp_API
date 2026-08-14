@@ -1,20 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { redis } from '../config/redis.js';
+import crypto from 'crypto';
 
 export async function suggestReply(organizationId: string, conversationId: string): Promise<string> {
   try {
-    let products: any[] = [];
-    try {
-      products = await (prisma as any).productCatalog.findMany({
-        where: { organizationId, isActive: true },
-        select: { title: true, priceInINR: true, description: true },
-        take: 10,
-      });
-    } catch (e) {
-      logger.warn({ error: e }, 'Failed to fetch product catalog for AI context');
-    }
-
     const [org, messagesDesc, conversation] = await Promise.all([
       (prisma as any).organization.findUnique({
         where: { id: organizationId },
@@ -23,7 +14,7 @@ export async function suggestReply(organizationId: string, conversationId: strin
       prisma.message.findMany({
         where: { conversationId },
         orderBy: { createdAt: 'desc' },
-        take: 15,
+        take: 5, // Optimization: Limit Chat History
       }),
       prisma.conversation.findUnique({
         where: { id: conversationId },
@@ -31,35 +22,71 @@ export async function suggestReply(organizationId: string, conversationId: strin
       }),
     ]);
 
-    // Order messages chronologically (oldest to newest)
     const messages = (messagesDesc || []).reverse();
-
     const customerName = conversation?.contact?.firstName || 'Customer';
     const orgName = org?.name || 'Prowexa Business';
     const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
     const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
 
-    // Extract latest customer message
     const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
     const lastInboundText = typeof lastInboundMsg?.content === 'object'
       ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
       : lastInboundMsg?.content || '';
 
+    // Optimization: Semantic Redis Caching
+    const normalizedHash = crypto.createHash('sha256').update(lastInboundText.toLowerCase().trim()).digest('hex');
+    const cacheKey = `ai_cache:${organizationId}:${normalizedHash}`;
+    try {
+      const cachedResponse = await redis.get(cacheKey);
+      if (cachedResponse) {
+        logger.info({ organizationId, cacheKey }, 'Semantic Cache Hit. Skipping Gemini AI.');
+        return cachedResponse;
+      }
+    } catch (e) {
+      logger.warn({ error: e }, 'Redis cache check failed');
+    }
+
+    // Optimization: Basic RAG (Product Vectorization via ILIKE keywords)
+    let products: any[] = [];
+    if (lastInboundText) {
+      const searchWords = lastInboundText.split(' ').filter((w: string) => w.length > 3).slice(0, 3);
+      const orConditions = searchWords.map((w: string) => ({
+        OR: [
+          { title: { contains: w, mode: 'insensitive' } },
+          { description: { contains: w, mode: 'insensitive' } }
+        ]
+      }));
+      
+      try {
+        products = await (prisma as any).productCatalog.findMany({
+          where: { 
+            organizationId, 
+            isActive: true,
+            ...(orConditions.length > 0 ? { OR: orConditions.flatMap((o: any) => o.OR) } : {})
+          },
+          select: { title: true, priceInINR: true, description: true },
+          take: 3, // Optimization: Top 3 products only
+        });
+      } catch (e) {
+        logger.warn({ error: e }, 'Failed to fetch product catalog for AI context');
+      }
+    }
+
     const productCatalogText = products && products.length > 0
       ? products.map((p: any) => `- ${p.title}: ₹${p.priceInINR} (${p.description || ''})`).join('\n')
-      : 'No catalog products listed yet.';
+      : 'No relevant catalog products found for this query.';
 
-  if (effectiveApiKey) {
-    const chatHistory = messages
-      .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
-      .join('\n');
+    if (effectiveApiKey) {
+      const chatHistory = messages
+        .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
+        .join('\n');
 
-    const systemInstruction = `You are a helpful, courteous WhatsApp customer support copilot for "${orgName}".
+      const systemInstruction = `You are a helpful, courteous WhatsApp customer support copilot for "${orgName}".
 
 Business Knowledgebase & FAQs:
 ${knowledgeBase}
 
-Product Catalog:
+Relevant Product Catalog Context (RAG):
 ${productCatalogText}
 
 CRITICAL INSTRUCTIONS:
@@ -69,58 +96,66 @@ CRITICAL INSTRUCTIONS:
 4. Keep the message concise (1-2 sentences maximum), friendly, and natural for WhatsApp.
 5. Return ONLY the final message text to send to the customer. No preamble, quotes, or metadata.`;
 
-    const userContent = `Recent Chat History:
+      const userContent = `Recent Chat History:
 ${chatHistory}
 
 LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"`;
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      // Optimization: Downgrade Model to 8B for huge cost savings
+      const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
 
-    try {
-      const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
+      try {
+        const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
 
-      for (const modelName of modelsToTry) {
-        try {
-          const response = await activeClient.models.generateContent({
-            model: modelName,
-            contents: userContent,
-            config: {
-              systemInstruction: systemInstruction,
-            },
-          });
+        for (const modelName of modelsToTry) {
+          try {
+            const response = await activeClient.models.generateContent({
+              model: modelName,
+              contents: userContent,
+              config: {
+                systemInstruction: systemInstruction,
+              },
+            });
 
-          if (response?.text && response.text.trim()) {
-            try {
-              const { deductAiCredit } = await import('./credits.service.js');
-              await deductAiCredit(organizationId, 'AI_COPILOT');
-            } catch (creditErr) {
-              logger.error({ creditErr }, 'Credit deduction failed after Gemini reply generation');
+            if (response?.text && response.text.trim()) {
+              const finalText = response.text.trim();
+              
+              // Save to Redis Cache (24 hours = 86400 seconds)
+              try {
+                await redis.setex(cacheKey, 86400, finalText);
+              } catch (e) {}
+
+              try {
+                const { deductAiCredit } = await import('./credits.service.js');
+                await deductAiCredit(organizationId, 'AI_COPILOT');
+              } catch (creditErr) {
+                logger.error({ creditErr }, 'Credit deduction failed after Gemini reply generation');
+              }
+              return finalText;
             }
-            return response.text.trim();
+          } catch (modelErr: any) {
+            logger.warn({ model: modelName, error: modelErr?.message || modelErr }, 'Gemini model attempt failed, trying next fallback model...');
           }
-        } catch (modelErr: any) {
-          logger.warn({ model: modelName, error: modelErr?.message || modelErr }, 'Gemini model attempt failed, trying next fallback model...');
         }
+      } catch (err: any) {
+        logger.error({ err: err?.message || err }, 'Failed to initialize GoogleGenAI client');
       }
-    } catch (err: any) {
-      logger.error({ err: err?.message || err }, 'Failed to initialize GoogleGenAI client');
+    } else {
+      logger.warn({ organizationId }, 'No Gemini API key available for organization or global master.');
     }
-  } else {
-    logger.warn({ organizationId }, 'No Gemini API key available for organization or global master.');
-  }
 
-  // Graceful intelligent fallback if API key is not set or call fails
-  const lowerText = lastInboundText.toLowerCase();
-  if (/pune|mumbai|delhi|bangalore|city|delivery|location|available/i.test(lowerText)) {
-    return `Hi ${customerName}! Yes, we deliver in Pune. Please share your complete delivery address or pincode to confirm your delivery slot!`;
-  }
-  if (/price|cost|rate/i.test(lowerText)) {
-    return `Hello ${customerName}! Thanks for reaching out. Please check our product catalog or let us know which product price you would like to know.`;
-  }
-  if (/order|track|status/i.test(lowerText)) {
-    return `Hi ${customerName}, your order is currently being processed by our team. We will share tracking details shortly!`;
-  }
-  return `Hi ${customerName}, thank you for contacting ${orgName}. How can we assist you today?`;
+    // Graceful intelligent fallback if API key is not set or call fails
+    const lowerText = lastInboundText.toLowerCase();
+    if (/pune|mumbai|delhi|bangalore|city|delivery|location|available/i.test(lowerText)) {
+      return `Hi ${customerName}! Yes, we deliver in Pune. Please share your complete delivery address or pincode to confirm your delivery slot!`;
+    }
+    if (/price|cost|rate/i.test(lowerText)) {
+      return `Hello ${customerName}! Thanks for reaching out. Please check our product catalog or let us know which product price you would like to know.`;
+    }
+    if (/order|track|status/i.test(lowerText)) {
+      return `Hi ${customerName}, your order is currently being processed by our team. We will share tracking details shortly!`;
+    }
+    return `Hi ${customerName}, thank you for contacting ${orgName}. How can we assist you today?`;
   } catch (topErr) {
     logger.error({ error: topErr }, 'Top-level error in suggestReply');
     return 'Hi! Thanks for contacting us. How can we assist you today?';
@@ -130,7 +165,8 @@ LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"`;
 export async function generateTemplateText(promptText: string): Promise<string> {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (apiKey) {
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Optimization: Downgrade to 8B
+    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
     try {
       const activeClient = new GoogleGenAI({ apiKey });
       const prompt = `Create a high-converting Meta WhatsApp marketing broadcast template body text based on this prompt: "${promptText}".
@@ -198,7 +234,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
       });
       if (members.length > 0) {
         const openCounts = await Promise.all(
-          members.map(async (m) => ({
+          members.map(async (m: any) => ({
             id: m.userId,
             count: await prisma.conversation.count({
               where: { organizationId, assignedAgentId: m.userId, status: 'OPEN' },
@@ -245,7 +281,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
 }
 
 async function evaluateAiAutonomousReply(organizationId: string, conversationId: string): Promise<{ replyText?: string; isEscalated: boolean; reason?: string }> {
-  const [org, messagesDesc, conversation, products] = await Promise.all([
+  const [org, messagesDesc, conversation] = await Promise.all([
     (prisma as any).organization.findUnique({
       where: { id: organizationId },
       select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
@@ -253,17 +289,12 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
     prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'desc' },
-      take: 15,
+      take: 5, // Optimization: Limit Chat History
     }),
     prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { contact: true },
-    }),
-    (prisma as any).productCatalog.findMany({
-      where: { organizationId, isActive: true },
-      select: { title: true, priceInINR: true, description: true },
-      take: 10,
-    }),
+    })
   ]);
 
   const messages = (messagesDesc || []).reverse();
@@ -277,9 +308,47 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
     ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
     : lastInboundMsg?.content || '';
 
+  // Optimization: Semantic Redis Caching
+  const normalizedHash = crypto.createHash('sha256').update(lastInboundText.toLowerCase().trim()).digest('hex');
+  const cacheKey = `ai_auto_cache:${organizationId}:${normalizedHash}`;
+  try {
+    const cachedResponse = await redis.get(cacheKey);
+    if (cachedResponse) {
+      if (cachedResponse === '[ESCALATED]') {
+        return { isEscalated: true, reason: 'Complex Question Escalation (Cached)' };
+      }
+      logger.info({ organizationId, cacheKey }, 'Semantic Cache Hit for Auto Responder. Skipping Gemini.');
+      return { replyText: cachedResponse, isEscalated: false };
+    }
+  } catch (e) {}
+
+  // Optimization: RAG (Product Vectorization)
+  let products: any[] = [];
+  if (lastInboundText) {
+    const searchWords = lastInboundText.split(' ').filter((w: string) => w.length > 3).slice(0, 3);
+    const orConditions = searchWords.map((w: string) => ({
+      OR: [
+        { title: { contains: w, mode: 'insensitive' } },
+        { description: { contains: w, mode: 'insensitive' } }
+      ]
+    }));
+    
+    try {
+      products = await (prisma as any).productCatalog.findMany({
+        where: { 
+          organizationId, 
+          isActive: true,
+          ...(orConditions.length > 0 ? { OR: orConditions.flatMap((o: any) => o.OR) } : {})
+        },
+        select: { title: true, priceInINR: true, description: true },
+        take: 3, // Optimization: Top 3 only
+      });
+    } catch (e) {}
+  }
+
   const productCatalogText = products && products.length > 0
     ? products.map((p: any) => `- ${p.title}: ₹${p.priceInINR} (${p.description || ''})`).join('\n')
-    : 'No catalog products listed yet.';
+    : 'No relevant catalog products found for this query.';
 
   const chatHistory = messages
     .map((m) => `${m.direction === 'INBOUND' ? customerName : 'Agent'}: ${typeof m.content === 'object' ? (m.content as any)?.text || JSON.stringify(m.content) : m.content}`)
@@ -291,7 +360,7 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
 Business Knowledgebase & FAQs:
 ${knowledgeBase}
 
-Product Catalog:
+Relevant Product Catalog (RAG):
 ${productCatalogText}
 
 Recent Chat History:
@@ -307,7 +376,8 @@ CRITICAL TASK:
 3. IF NO (Too complex, angry customer complaint, refund/cancellation request, custom price negotiation, or details missing in FAQ):
    - Respond EXACTLY with: "[HANDOFF_TO_HUMAN: <Brief reason>]"`;
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    // Optimization: Model Downgrade
+    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
     try {
       const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
       for (const modelName of modelsToTry) {
@@ -320,8 +390,11 @@ CRITICAL TASK:
           if (response?.text && response.text.trim()) {
             const replyText = response.text.trim();
             if (replyText.includes('[HANDOFF_TO_HUMAN')) {
+              try { await redis.setex(cacheKey, 86400, '[ESCALATED]'); } catch (e) {}
               return { isEscalated: true, reason: 'Complex Question Escalation' };
             }
+
+            try { await redis.setex(cacheKey, 86400, replyText); } catch (e) {}
 
             try {
               const { deductAiCredit } = await import('./credits.service.js');
