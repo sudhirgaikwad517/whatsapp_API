@@ -102,7 +102,7 @@ ${chatHistory}
 LATEST CUSTOMER QUESTION (${customerName}): "${lastInboundText}"`;
 
       // Optimization: Downgrade Model to 8B for huge cost savings
-      const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+      const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash'];
 
       try {
         const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
@@ -166,7 +166,7 @@ export async function generateTemplateText(promptText: string): Promise<string> 
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (apiKey) {
     // Optimization: Downgrade to 8B
-    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash'];
     try {
       const activeClient = new GoogleGenAI({ apiKey });
       const prompt = `Create a high-converting Meta WhatsApp marketing broadcast template body text based on this prompt: "${promptText}".
@@ -378,7 +378,7 @@ CRITICAL TASK:
    - Respond EXACTLY with: "[HANDOFF_TO_HUMAN: <Brief reason>]"`;
 
     // Optimization: Model Downgrade
-    const modelsToTry = ['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+    const modelsToTry = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.6-flash'];
     try {
       const activeClient = new GoogleGenAI({ apiKey: effectiveApiKey });
       for (const modelName of modelsToTry) {
