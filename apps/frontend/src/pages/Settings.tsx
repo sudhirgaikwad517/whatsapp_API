@@ -3,6 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Settings as SettingsIcon, Link2, ShieldCheck, CheckCircle, RefreshCw, Bot, Plus, Trash2, Tag, CreditCard } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: () => void;
+  }
+}
+
 export const Settings: React.FC = () => {
   const [wabaId, setWabaId] = useState('2251442372294214');
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
@@ -16,6 +23,18 @@ export const Settings: React.FC = () => {
   const [msg, setMsg] = useState('');
 
   const queryClient = useQueryClient();
+
+  // Initialize Facebook SDK
+  React.useEffect(() => {
+    window.fbAsyncInit = function () {
+      window.FB.init({
+        appId: '1965990760786807', // Platform's SuperAdmin Facebook App ID
+        cookie: true,
+        xfbml: true,
+        version: 'v20.0',
+      });
+    };
+  }, []);
 
   const { data: orgData } = useQuery({
     queryKey: ['org-details'],
@@ -86,6 +105,25 @@ export const Settings: React.FC = () => {
       if (healthData.displayPhoneNumber) setDisplayPhoneNumber(healthData.displayPhoneNumber);
     }
   }, [healthData]);
+
+  const embeddedSignupMutation = useMutation({
+    mutationFn: async (payload: { accessToken: string; wabaId: string; phoneNumberId: string; displayPhoneNumber: string }) => {
+      const res = await apiClient.post('/whatsapp/embedded-signup', payload);
+      return res.data.data;
+    },
+    onSuccess: async () => {
+      alert('Meta Connected Successfully!');
+      try {
+        await apiClient.post('/whatsapp/templates/sync');
+        queryClient.invalidateQueries({ queryKey: ['whatsapp-health'] });
+      } catch (e) {
+        console.warn('Template sync failed after embedded signup');
+      }
+    },
+    onError: (err: any) => {
+      alert(`Embedded Signup Failed: ${err.message}`);
+    },
+  });
 
   // Connect mutation
   const connectMutation = useMutation({
@@ -227,20 +265,36 @@ export const Settings: React.FC = () => {
 
           <button
             onClick={() => {
-              const appId = '1965990760786807';
-              const redirectUri = encodeURIComponent(window.location.origin + '/settings');
-              const scope = 'whatsapp_business_management,whatsapp_business_messaging';
-              const oauthUrl = `https://www.facebook.com/v26.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+              if (!window.FB) {
+                alert('Facebook SDK is still loading. Please try again in a few seconds.');
+                return;
+              }
 
-              const width = 600;
-              const height = 750;
-              const left = window.screen.width / 2 - width / 2;
-              const top = window.screen.height / 2 - height / 2;
-
-              window.open(
-                oauthUrl,
-                'MetaEmbeddedSignup',
-                `toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=${width}, height=${height}, top=${top}, left=${left}`
+              // Trigger Meta Embedded Signup Flow
+              window.FB.login(
+                function (response: any) {
+                  if (response.authResponse) {
+                    const { accessToken } = response.authResponse;
+                    
+                    // In a production Embedded Signup, Facebook returns a 'code' and 'setup' object.
+                    // For standard FB login, we just get the access token. 
+                    // You will need to fetch WABA ID and Phone ID via Graph API or pass them manually.
+                    
+                    embeddedSignupMutation.mutate({
+                      accessToken,
+                      // These placeholders would be dynamically fetched via Graph API
+                      wabaId: 'YOUR_WABA_ID',
+                      phoneNumberId: 'YOUR_PHONE_ID',
+                      displayPhoneNumber: 'YOUR_DISPLAY_PHONE',
+                    });
+                  } else {
+                    alert('Facebook login was cancelled or failed.');
+                  }
+                },
+                {
+                  scope: 'whatsapp_business_management,whatsapp_business_messaging',
+                  return_scopes: true
+                }
               );
             }}
             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 text-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
@@ -251,74 +305,7 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      {/* Onboarding Credentials Form */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
-        <h3 className="font-semibold text-white flex items-center">
-          <Link2 className="w-5 h-5 mr-2.5 text-emerald-400" />
-          Connect / Update Meta Credentials (Manual Fallback)
-        </h3>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">WABA ID</label>
-              <input
-                type="text"
-                value={wabaId}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWabaId(e.target.value)}
-                placeholder="109823471293847"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Phone Number ID</label>
-              <input
-                type="text"
-                value={phoneNumberId}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumberId(e.target.value)}
-                placeholder="102938471293847"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Display Phone Number</label>
-            <input
-              type="text"
-              value={displayPhoneNumber}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDisplayPhoneNumber(e.target.value)}
-              placeholder="+1 415 555 2671"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              Permanent System User Access Token (AES-256 Encrypted at Rest)
-            </label>
-            <textarea
-              rows={3}
-              value={accessToken}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAccessToken(e.target.value)}
-              placeholder="EAABcXWp..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              onClick={() => connectMutation.mutate()}
-              disabled={connectMutation.isPending}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 text-sm cursor-pointer"
-            >
-              {connectMutation.isPending ? 'Saving Meta Credentials...' : 'Save Meta Credentials'}
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* ── AI Smart Copilot Knowledgebase Configurator ── */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
