@@ -25,6 +25,7 @@ const envSchema = z.object({
   META_APP_ID: z.string().optional().default(''),
   META_APP_SECRET: z.string().optional().default(''),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional().default('prowexa_webhook_secret'),
+  META_SYSTEM_USER_TOKEN: z.string().optional().default(''),
   ENCRYPTION_KEY: z.string().min(16).default('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
   MEDIA_STORAGE_PATH: z.string().default('./uploads'),
 });

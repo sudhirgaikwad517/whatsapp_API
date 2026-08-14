@@ -81,7 +81,7 @@ export async function syncMetaTemplates(organizationId: string) {
 
   const response = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${decryptedToken}`,
+      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
     },
   });
 
@@ -175,7 +175,7 @@ export async function sendMetaOutboundMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${decryptedToken}`,
+      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
     },
     body: JSON.stringify(body),
   });
@@ -356,7 +356,7 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${decryptedToken}`,
+      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
