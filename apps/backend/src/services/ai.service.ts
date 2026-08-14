@@ -404,12 +404,13 @@ CRITICAL TASK:
             }
             return { replyText, isEscalated: false };
           }
-        } catch (e) {
-          // try next model
+        } catch (e: any) {
+          lastError = e?.message || String(e);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       logger.error({ err }, 'Autonomous AI client evaluation failed');
+      lastError = err?.message || String(err);
     }
   }
 
@@ -420,7 +421,7 @@ CRITICAL TASK:
   }
 
   return {
-    replyText: `Hi ${customerName}! Thank you for reaching out to ${orgName}. How can we assist you today?`,
+    replyText: `[DEBUG: API Key Len: ${effectiveApiKey.length}, Err: ${lastError}] Hi ${customerName}! Thank you for reaching out to ${orgName}. How can we assist you today?`,
     isEscalated: false,
   };
 }
