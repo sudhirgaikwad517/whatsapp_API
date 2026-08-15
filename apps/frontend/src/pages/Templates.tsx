@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileCode2, RefreshCw, CheckCircle2, MessageSquare, Tag, Plus } from 'lucide-react';
+import { FileCode2, RefreshCw, CheckCircle2, MessageSquare, Plus } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateTemplateModal } from '../components/templates/CreateTemplateModal';
+import { EditTemplateModal } from '../components/templates/EditTemplateModal';
 
 export const Templates: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const queryClient = useQueryClient();
 
   const { data: templates, isLoading } = useQuery({
@@ -113,7 +115,15 @@ export const Templates: React.FC = () => {
                 {/* Footer */}
                 <div className="text-[10px] text-slate-500 flex justify-between items-center border-t border-slate-800/60 pt-3">
                   <span>ID: {tpl.metaTemplateId || tpl.id.slice(0, 8)}</span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => setEditingTemplate(tpl)}
+                      className="text-emerald-400 hover:text-emerald-300 font-bold transition-colors"
+                    >
+                      Edit Config
+                    </button>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
                 </div>
               </div>
             );
@@ -122,6 +132,7 @@ export const Templates: React.FC = () => {
       )}
 
       <CreateTemplateModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      <EditTemplateModal isOpen={!!editingTemplate} onClose={() => setEditingTemplate(null)} template={editingTemplate} />
     </div>
   );
 };

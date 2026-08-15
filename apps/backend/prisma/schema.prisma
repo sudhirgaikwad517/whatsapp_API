@@ -239,6 +239,7 @@ model Template {
   language          String          @db.VarChar(10)
   category          String          @db.VarChar(100)
   status            String          @db.VarChar(50)
+  defaultMediaId    String?         @db.VarChar(255)
   components        Json
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt

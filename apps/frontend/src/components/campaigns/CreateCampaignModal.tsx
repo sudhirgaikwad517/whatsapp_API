@@ -265,7 +265,16 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
               <select
                 required
                 value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  setTemplateId(selectedId);
+                  const template = templates?.find((t: any) => t.id === selectedId);
+                  if (template?.defaultMediaId) {
+                    setHeaderMediaUrl(template.defaultMediaId);
+                  } else {
+                    setHeaderMediaUrl(''); // Reset if no default media
+                  }
+                }}
                 className="w-full min-w-0 max-w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 truncate"
               >
                 <option value="">-- Choose Approved Template --</option>

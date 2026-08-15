@@ -76,6 +76,17 @@ export async function createTemplate(req: AuthenticatedRequest, res: Response, n
   }
 }
 
+export async function editTemplate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const templateId = req.params.id;
+    const result = await MetaService.editMetaTemplate(orgId, templateId, req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function uploadMedia(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

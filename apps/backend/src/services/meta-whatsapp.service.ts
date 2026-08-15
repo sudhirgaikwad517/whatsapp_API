@@ -431,3 +431,108 @@ export async function uploadMediaToMeta(organizationId: string, file: Express.Mu
 
   return { mediaId: responseData.id };
 }
+
+export interface EditTemplateInput extends Partial<CreateTemplateInput> {
+  defaultMediaId?: string | null;
+}
+
+export async function editMetaTemplate(organizationId: string, templateId: string, input: EditTemplateInput) {
+  const template = await prisma.template.findFirst({
+    where: { id: templateId, organizationId },
+    include: { whatsappAccount: true },
+  });
+
+  if (!template) {
+    throw new AppError('Template not found.', 404, 'NOT_FOUND');
+  }
+
+  // If ONLY updating local defaultMediaId
+  const hasContentChanges = input.bodyText || input.headerText || input.buttons?.length;
+  
+  if (!hasContentChanges && input.defaultMediaId !== undefined) {
+    return await prisma.template.update({
+      where: { id: templateId },
+      data: { defaultMediaId: input.defaultMediaId },
+    });
+  }
+
+  if (!hasContentChanges) {
+    return template;
+  }
+
+  // If there are content changes, we must submit to Meta
+  const components: any[] = [];
+
+  // Header component
+  if (input.headerType === 'TEXT' && input.headerText?.trim()) {
+    const headerComp: any = { type: 'HEADER', format: 'TEXT', text: input.headerText.trim() };
+    if (input.headerText.includes('{{1}}') && input.headerSampleValue?.trim()) {
+      headerComp.example = { header_text: [input.headerSampleValue.trim()] };
+    }
+    components.push(headerComp);
+  } else if (input.headerType === 'IMAGE') {
+    components.push({ type: 'HEADER', format: 'IMAGE' });
+  }
+
+  // Body component
+  if (input.bodyText?.trim()) {
+    const bodyComp: any = { type: 'BODY', text: input.bodyText.trim() };
+    const matches = input.bodyText.match(/\{\{(\d+)\}\}/g);
+    if (matches && matches.length > 0) {
+      const sampleValues = (input.sampleBodyValues && input.sampleBodyValues.length > 0)
+        ? input.sampleBodyValues
+        : matches.map((_, idx) => `Sample${idx + 1}`);
+      bodyComp.example = { body_text: [sampleValues] };
+    }
+    components.push(bodyComp);
+  }
+
+  // Footer component
+  if (input.footerText?.trim()) {
+    components.push({ type: 'FOOTER', text: input.footerText.trim() });
+  }
+
+  // Buttons component
+  if (input.buttons && input.buttons.length > 0) {
+    components.push({
+      type: 'BUTTONS',
+      buttons: input.buttons.map((b) => {
+        if (b.type === 'PHONE_NUMBER') return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber };
+        if (b.type === 'URL') return { type: 'URL', text: b.text, url: b.url };
+        return { type: 'QUICK_REPLY', text: b.text };
+      }),
+    });
+  }
+
+  const decryptedToken = decryptToken(template.whatsappAccount.encryptedAccessToken);
+  const url = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${template.metaTemplateId}`;
+
+  const response = await fetch(url, {
+    method: 'POST', // Meta uses POST to edit templates by ID
+    headers: {
+      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ components }),
+  });
+
+  const responseData = (await response.json()) as any;
+
+  if (!response.ok) {
+    logger.error({ responseData }, 'Failed to edit template in Meta Graph API');
+    throw new AppError(
+      responseData?.error?.message || 'Meta API rejected template edit request.',
+      response.status || 400,
+      'META_TEMPLATE_EDIT_ERROR'
+    );
+  }
+
+  return await prisma.template.update({
+    where: { id: templateId },
+    data: {
+      components,
+      status: 'PENDING',
+      defaultMediaId: input.defaultMediaId !== undefined ? input.defaultMediaId : template.defaultMediaId,
+    },
+  });
+}

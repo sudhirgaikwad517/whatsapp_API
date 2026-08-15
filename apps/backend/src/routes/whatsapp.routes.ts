@@ -51,6 +51,13 @@ router.get('/health', WhatsAppController.getAccountHealth);
 router.get('/templates', WhatsAppController.getTemplates);
 
 /**
+ * @route   PATCH /api/v1/whatsapp/templates/:id
+ * @desc    Edit a template (Content or Default Media)
+ * @access  Bearer
+ */
+router.patch('/templates/:id', WhatsAppController.editTemplate);
+
+/**
  * @route   POST /api/v1/whatsapp/templates/sync
  * @desc    Fetch and sync message templates from Meta Graph API
  * @access  Bearer (Manager, Business Owner)
