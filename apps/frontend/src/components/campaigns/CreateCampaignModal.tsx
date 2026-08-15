@@ -354,7 +354,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
               </label>
             </div>
             <input
-              type="url"
+              type="text"
               placeholder="https://your-domain.com/banner.jpg or click Upload above"
               value={headerMediaUrl}
               onChange={(e) => setHeaderMediaUrl(e.target.value)}
