@@ -388,3 +388,46 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
 
   return template;
 }
+
+export async function uploadMediaToMeta(organizationId: string, file: Express.Multer.File) {
+  const waAccount = await prisma.whatsappAccount.findFirst({
+    where: { organizationId, deletedAt: null },
+  });
+
+  if (!waAccount) {
+    throw new AppError('No WhatsApp account connected.', 404, 'NO_WHATSAPP_ACCOUNT');
+  }
+
+  const decryptedToken = decryptToken(waAccount.encryptedAccessToken);
+  const url = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${waAccount.phoneNumberId}/media`;
+
+  const formData = new FormData();
+  formData.append('messaging_product', 'whatsapp');
+  formData.append('type', file.mimetype);
+  
+  const blob = new Blob([file.buffer], { type: file.mimetype });
+  formData.append('file', blob, file.originalname);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
+      // Do NOT set Content-Type header manually when using native FormData with fetch.
+      // fetch will automatically set it to multipart/form-data with the correct boundary.
+    },
+    body: formData,
+  });
+
+  const responseData = (await response.json()) as any;
+
+  if (!response.ok) {
+    logger.error({ responseData }, 'Failed to upload media to Meta');
+    throw new AppError(
+      responseData?.error?.message || 'Meta API rejected media upload.',
+      response.status || 400,
+      'META_MEDIA_UPLOAD_ERROR'
+    );
+  }
+
+  return { mediaId: responseData.id };
+}

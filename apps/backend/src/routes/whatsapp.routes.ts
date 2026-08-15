@@ -3,6 +3,12 @@ import * as WhatsAppController from '../controllers/whatsapp.controller.js';
 import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
+import multer from 'multer';
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 const router = Router();
 
@@ -22,6 +28,13 @@ router.post('/embedded-signup', authorize(UserRole.BUSINESS_OWNER), WhatsAppCont
  * @access  Bearer (Business Owner only)
  */
 router.post('/connect', WhatsAppController.connectAccount);
+
+/**
+ * @route   POST /api/v1/whatsapp/media
+ * @desc    Upload media to Meta CDN for campaigns
+ * @access  Bearer
+ */
+router.post('/media', upload.single('file'), WhatsAppController.uploadMedia);
 
 /**
  * @route   GET /api/v1/whatsapp/health

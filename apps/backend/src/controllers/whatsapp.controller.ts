@@ -75,3 +75,17 @@ export async function createTemplate(req: AuthenticatedRequest, res: Response, n
     next(err);
   }
 }
+
+export async function uploadMedia(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const file = (req as any).file;
+    if (!file) {
+      return res.status(400).json({ success: false, error: { message: 'No file uploaded.' } });
+    }
+    const result = await MetaService.uploadMediaToMeta(orgId, file);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}

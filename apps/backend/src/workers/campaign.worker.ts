@@ -51,7 +51,9 @@ export const campaignWorker = new Worker(
           parameters: [
             {
               type: 'image',
-              image: { link: data.headerMediaUrl },
+              image: data.headerMediaUrl.startsWith('http') 
+                ? { link: data.headerMediaUrl } 
+                : { id: data.headerMediaUrl },
             },
           ],
         });

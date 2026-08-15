@@ -51,23 +51,26 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size exceeds 5MB limit for Meta Media Upload.');
+      return;
+    }
+
     setIsUploadingMedia(true);
     setMediaCompressStats(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await apiClient.post('/media/upload', formData, {
+      const res = await apiClient.post('/whatsapp/media', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const { url, originalSize, compressedSize, compressionRatioPercent } = res.data.data;
-      setHeaderMediaUrl(url);
-      setMediaCompressStats(
-        `⚡ Sharp.js Compressed: ${(originalSize / 1024).toFixed(0)} KB ➔ ${(compressedSize / 1024).toFixed(0)} KB (${compressionRatioPercent}% space saved)`
-      );
+      const { mediaId } = res.data.data;
+      setHeaderMediaUrl(mediaId);
+      setMediaCompressStats(`⚡ Uploaded securely to Meta. Media ID: ${mediaId}`);
     } catch (err: any) {
-      alert(`Media Upload Error: ${err.message}`);
+      alert(`Meta Media Upload Error: ${err.response?.data?.error?.message || err.message}`);
     } finally {
       setIsUploadingMedia(false);
     }

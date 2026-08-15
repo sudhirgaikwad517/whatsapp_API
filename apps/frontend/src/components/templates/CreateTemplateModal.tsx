@@ -213,6 +213,15 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               )}
+
+              {headerType === 'IMAGE' && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 mt-2 flex items-start">
+                  <span className="text-emerald-400 mr-2 text-lg leading-none">💡</span>
+                  <p className="text-[10px] text-emerald-300 leading-relaxed">
+                    <strong>No need to upload the image here!</strong> You will securely upload the actual high-quality image file to Meta's CDN when you launch a campaign using this template. This guarantees 100% delivery without URL download errors (131053).
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
