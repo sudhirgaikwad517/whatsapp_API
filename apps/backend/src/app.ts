@@ -31,6 +31,12 @@ import superAdminRoutes from './routes/superadmin.routes.js';
 export function createApp(): Application {
   const app = express();
 
+  // Trust exactly one hop (the host nginx reverse proxy) so req.ip and
+  // express-rate-limit read the real client IP from X-Forwarded-For instead
+  // of nginx's own address — `true` would trust the header at any depth,
+  // letting a client spoof its own IP by setting the header itself.
+  app.set('trust proxy', 1);
+
   // ── Security Headers & Production CORS ─────────────────────────────────────
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
