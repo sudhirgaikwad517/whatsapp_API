@@ -47,7 +47,6 @@ async function main() {
   if (oldKey === newKey) throw new Error('OLD_ENCRYPTION_KEY and ENCRYPTION_KEY must differ.');
 
   const accounts = await prisma.whatsappAccount.findMany({
-    where: { encryptedAccessToken: { not: null } },
     select: { id: true, encryptedAccessToken: true, displayPhoneNumber: true },
   });
 
