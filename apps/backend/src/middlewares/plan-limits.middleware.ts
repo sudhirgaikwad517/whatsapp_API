@@ -34,7 +34,7 @@ export const PLAN_LIMITS_MAP: Record<string, PlanLimits> = {
 };
 
 export async function checkAgentLimit(organizationId: string): Promise<void> {
-  const org = await (prisma as any).organization.findUnique({
+  const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { planTier: true },
   });
@@ -56,7 +56,7 @@ export async function checkAgentLimit(organizationId: string): Promise<void> {
 }
 
 export async function checkFlowLimit(organizationId: string): Promise<void> {
-  const org = await (prisma as any).organization.findUnique({
+  const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { planTier: true },
   });
@@ -64,7 +64,7 @@ export async function checkFlowLimit(organizationId: string): Promise<void> {
   const tier = org?.planTier || 'PRO';
   const limits = PLAN_LIMITS_MAP[tier] || PLAN_LIMITS_MAP.PRO;
 
-  const activeFlows = await (prisma as any).flow.count({
+  const activeFlows = await prisma.flow.count({
     where: { organizationId, isActive: true },
   });
 
@@ -78,7 +78,7 @@ export async function checkFlowLimit(organizationId: string): Promise<void> {
 }
 
 export async function checkCatalogLimit(organizationId: string): Promise<void> {
-  const org = await (prisma as any).organization.findUnique({
+  const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { planTier: true },
   });
@@ -86,7 +86,7 @@ export async function checkCatalogLimit(organizationId: string): Promise<void> {
   const tier = org?.planTier || 'PRO';
   const limits = PLAN_LIMITS_MAP[tier] || PLAN_LIMITS_MAP.PRO;
 
-  const currentProducts = await (prisma as any).productCatalog.count({
+  const currentProducts = await prisma.productCatalog.count({
     where: { organizationId },
   });
 

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { GitFork, Plus, Edit3, Trash2, Power, Zap, MessageSquare, Bot } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { FlowBuilder } from '../components/flows/FlowBuilder';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Flows: React.FC = () => {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
@@ -25,10 +27,10 @@ export const Flows: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows-list'] });
-      alert('✅ Flow deleted successfully.');
+      toast.success('Flow deleted successfully.');
     },
     onError: (err: any) => {
-      alert(`❌ Failed to delete flow: ${err.message}`);
+      toast.error('Failed to delete flow', { description: err.message });
     },
   });
 
@@ -146,13 +148,18 @@ export const Flows: React.FC = () => {
                     Edit Flow
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete chatbot flow "${flow.name}"?`)) {
-                        deleteMutation.mutate(flow.id);
-                      }
+                    onClick={async () => {
+                      const ok = await confirmAction({
+                        title: `Delete chatbot flow "${flow.name}"?`,
+                        message: 'This cannot be undone.',
+                        danger: true,
+                        confirmLabel: 'Delete',
+                      });
+                      if (ok) deleteMutation.mutate(flow.id);
                     }}
                     className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
                     title="Delete Flow"
+                    aria-label="Delete flow"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

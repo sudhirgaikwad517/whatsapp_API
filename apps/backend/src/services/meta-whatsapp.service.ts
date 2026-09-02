@@ -4,6 +4,20 @@ import { encryptToken, decryptToken } from '../utils/encryption.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * Classifies a Meta send failure as worth retrying (transient — rate limits,
+ * server errors, network blips) vs. permanent (bad request — invalid
+ * template/number/business restriction, auth failure). Workers use this to
+ * decide whether to rethrow (letting BullMQ's configured backoff retry) or
+ * mark the item failed immediately.
+ */
+export function isRetryableMetaError(err: any): boolean {
+  const statusCode = err instanceof AppError ? err.statusCode : undefined;
+  if (statusCode === undefined) return true; // network/unknown errors — worth retrying
+  if (statusCode === 429) return true; // rate limited
+  return statusCode >= 500;
+}
+
 export interface ConnectWhatsAppInput {
   wabaId: string;
   phoneNumberId: string;

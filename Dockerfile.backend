@@ -32,15 +32,27 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package files and node_modules
+# Copy package files and install ONLY production dependencies fresh — do not
+# reuse the builder's node_modules, which also contains devDependencies
+# (typescript, vitest, tsx, the prisma CLI) that have no place in the runtime image.
 COPY package*.json ./
 COPY apps/backend/package*.json ./apps/backend/
 COPY packages/shared-types/package*.json ./packages/shared-types/
+RUN npm ci --omit=dev
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/shared-types ./packages/shared-types
+COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
 COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
 COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
+
+# The fresh `npm ci --omit=dev` above does NOT include the generated Prisma
+# client (that's produced by this command, not installed from the registry) —
+# without this, `@prisma/client` has no generated code and every DB call
+# throws at runtime, even though the package itself is present.
+RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
+
+# Run as a non-root user rather than the image default (root).
+RUN chown -R node:node /app
+USER node
 
 EXPOSE 5050
 

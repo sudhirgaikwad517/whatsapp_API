@@ -1,10 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import * as SuperAdminService from '../services/superadmin.service.js';
+import { extractToken, type AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import {
+  setAccessTokenCookie,
+  setPreImpersonationCookie,
+  clearPreImpersonationCookie,
+  clearAuthCookies,
+  COOKIE_NAMES,
+} from '../utils/auth-cookies.js';
+import { AppError } from '../middlewares/error-handler.middleware.js';
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password } = req.body;
     const data = await SuperAdminService.loginSuperAdmin(email, password);
+    setAccessTokenCookie(res, data.accessToken, 24 * 60 * 60 * 1000);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -34,11 +44,64 @@ export async function getOrganizations(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function impersonateOrganization(req: Request, res: Response, next: NextFunction) {
+export async function impersonateOrganization(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, reason } = req.body;
-    const data = await SuperAdminService.impersonateTenant(organizationId, undefined, reason);
+    const data = await SuperAdminService.impersonateTenant(organizationId, req.user!.userId, reason);
+
+    // Swap the active session cookie to the impersonation token, but keep the
+    // super admin's own token recoverable via a separate cookie so "stop
+    // impersonation" can restore it without ever handling raw tokens in JS.
+    const currentSuperAdminToken = extractToken(req);
+    if (currentSuperAdminToken) {
+      setPreImpersonationCookie(res, currentSuperAdminToken);
+    }
+    setAccessTokenCookie(res, data.impersonationToken, 15 * 60 * 1000);
+
     res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * @route   POST /api/v1/superadmin/stop-impersonation
+ * @desc    Restore the original Super Admin session after impersonating a tenant.
+ * Deliberately not behind `requireSuperAdmin` — during impersonation the active
+ * session cookie belongs to the tenant user, not the super admin; this route
+ * authenticates purely off the separate backup cookie instead.
+ */
+export async function stopImpersonation(req: Request, res: Response, next: NextFunction) {
+  try {
+    const backupToken = (req as any).cookies?.[COOKIE_NAMES.PRE_IMPERSONATION];
+    if (!backupToken) {
+      throw new AppError('No super admin session to restore.', 400, 'NO_BACKUP_SESSION');
+    }
+
+    const jwt = (await import('jsonwebtoken')).default;
+    const { env } = await import('../config/env.js');
+    let decoded: any;
+    try {
+      decoded = jwt.verify(backupToken, env.JWT_SECRET, { algorithms: ['HS256'] });
+    } catch {
+      clearPreImpersonationCookie(res);
+      throw new AppError('Super admin session has expired. Please log in again.', 401, 'INVALID_TOKEN');
+    }
+
+    setAccessTokenCookie(res, backupToken, 24 * 60 * 60 * 1000);
+    clearPreImpersonationCookie(res);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: decoded.userId,
+          email: decoded.email,
+          role: decoded.role,
+          organizationId: 'SYSTEM_SUPER_ADMIN',
+        },
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -137,6 +200,24 @@ export async function updateOrgAiKey(req: Request, res: Response, next: NextFunc
   try {
     const { organizationId, apiKey } = req.body;
     const data = await SuperAdminService.updateOrganizationAiKey(organizationId, apiKey);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSystemSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await SuperAdminService.getSystemSettings();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateSystemSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await SuperAdminService.updateSystemSettings(req.body);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

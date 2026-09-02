@@ -2,7 +2,7 @@ import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 
 export async function deductAiCredit(organizationId: string, source: string = 'AI_COPILOT'): Promise<number> {
-  const org = await (prisma as any).organization.findUnique({
+  const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { aiCreditsBalance: true, name: true },
   });
@@ -21,7 +21,7 @@ export async function deductAiCredit(organizationId: string, source: string = 'A
     );
   }
 
-  const updated = await (prisma as any).organization.update({
+  const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: {
       aiCreditsBalance: { decrement: 1 },
@@ -33,7 +33,7 @@ export async function deductAiCredit(organizationId: string, source: string = 'A
 }
 
 export async function addAiCredits(organizationId: string, creditsAmount: number): Promise<number> {
-  const updated = await (prisma as any).organization.update({
+  const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: {
       aiCreditsBalance: { increment: creditsAmount },
@@ -45,13 +45,14 @@ export async function addAiCredits(organizationId: string, creditsAmount: number
 }
 
 export async function getAiCreditsBalance(organizationId: string) {
-  const org = await (prisma as any).organization.findUnique({
+  const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { aiCreditsBalance: true, planTier: true },
+    select: { aiCreditsBalance: true, planTier: true, planExpiryDate: true },
   });
 
   return {
     aiCreditsBalance: org?.aiCreditsBalance ?? 0,
     planTier: org?.planTier ?? 'PRO',
+    planExpiryDate: org?.planExpiryDate || null,
   };
 }

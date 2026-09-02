@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, FileCode2, Plus, Trash2, CheckCircle2, Phone, ExternalLink, MessageSquare, Send, HelpCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '../../services/api.client';
 
 interface EditTemplateModalProps {
@@ -81,7 +82,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates-list'] });
-      alert('🎉 Success! Template updated successfully.');
+      toast.success('Template updated successfully!');
       setName('');
       setHeaderType('NONE');
       setHeaderText('');
@@ -101,7 +102,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit for Meta Media Upload.');
+      toast.error('File size exceeds 5MB limit for Meta Media Upload.');
       return;
     }
 
@@ -117,7 +118,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
       const { mediaId } = res.data.data;
       setDefaultMediaId(mediaId);
     } catch (err: any) {
-      alert(`Meta Media Upload Error: ${err.response?.data?.error?.message || err.message}`);
+      toast.error('Meta media upload failed', { description: err.response?.data?.error?.message || err.message });
     } finally {
       setIsUploadingMedia(false);
     }
@@ -131,7 +132,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
 
   const addButton = (type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL') => {
     if (buttons.length >= 3) {
-      alert('Meta allows maximum 3 buttons per template.');
+      toast.error('Meta allows maximum 3 buttons per template.');
       return;
     }
     if (type === 'QUICK_REPLY') {

@@ -18,6 +18,7 @@ import {
   Scale,
   RefreshCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 
@@ -26,6 +27,14 @@ export const SuperAdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all');
   const [globalGeminiKey, setGlobalGeminiKey] = useState('');
+  
+  // Settings States
+  const [invoiceCompanyName, setInvoiceCompanyName] = useState('');
+  const [invoiceCin, setInvoiceCin] = useState('');
+  const [invoiceAddress, setInvoiceAddress] = useState('');
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const [invoiceWebsite, setInvoiceWebsite] = useState('');
+  const [invoicePhone, setInvoicePhone] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -52,12 +61,51 @@ export const SuperAdminDashboard: React.FC = () => {
       return res.data.data;
     },
     onSuccess: (data: any) => {
-      alert(`🔒 ${data.message || 'Master Global AI API Key updated securely across all tenant organizations!'}`);
+      toast.success(data.message || 'Master global AI API key updated securely across all tenant organizations!');
       queryClient.invalidateQueries({ queryKey: ['global-ai-key'] });
     },
     onError: (err: any) => {
-      alert(`Failed to save Master AI Key: ${err.message}`);
+      toast.error('Failed to save master AI key', { description: err.message });
     },
+  });
+
+  // Fetch Settings
+  const { data: settingsData } = useQuery({
+    queryKey: ['superadmin-settings'],
+    queryFn: async () => {
+      const res = await apiClient.get('/superadmin/settings');
+      return res.data.data;
+    },
+  });
+
+  React.useEffect(() => {
+    if (settingsData) {
+      setInvoiceCompanyName(settingsData.invoiceCompanyName || '');
+      setInvoiceCin(settingsData.invoiceCin || '');
+      setInvoiceAddress(settingsData.invoiceAddress || '');
+      setInvoiceEmail(settingsData.invoiceEmail || '');
+      setInvoiceWebsite(settingsData.invoiceWebsite || '');
+      setInvoicePhone(settingsData.invoicePhone || '');
+    }
+  }, [settingsData]);
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.put('/superadmin/settings', {
+        invoiceCompanyName,
+        invoiceCin,
+        invoiceAddress,
+        invoiceEmail,
+        invoiceWebsite,
+        invoicePhone,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      toast.success('Invoice settings saved successfully!');
+      queryClient.invalidateQueries({ queryKey: ['superadmin-settings'] });
+    },
+    onError: (err: any) => toast.error('Failed to save settings', { description: err.message }),
   });
 
   // Fetch detailed organization financials for modal audit
@@ -100,12 +148,12 @@ export const SuperAdminDashboard: React.FC = () => {
       return res.data.data;
     },
     onSuccess: (data: any) => {
-      alert(`🎭 Impersonating "${data.organization.name}"!\n\nLogging in as Owner: ${data.owner.email}`);
-      startImpersonation(data.owner, data.impersonationToken);
+      toast.success(`Impersonating "${data.organization.name}"`, { description: `Logging in as owner: ${data.owner.email}` });
+      startImpersonation(data.owner);
       window.location.href = '/';
     },
     onError: (err: any) => {
-      alert(`❌ Impersonation Failed: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Impersonation failed', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 
@@ -135,9 +183,9 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
-      alert('Plan tier updated successfully!');
+      toast.success('Plan tier updated successfully!');
     },
-    onError: (err: any) => alert(`Failed: ${err.message}`),
+    onError: (err: any) => toast.error('Failed to update plan tier', { description: err.message }),
   });
 
   // Grant AI Credits Mutation
@@ -151,9 +199,9 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
-      alert('AI Credits granted successfully!');
+      toast.success('AI credits granted successfully!');
     },
-    onError: (err: any) => alert(`Failed: ${err.message}`),
+    onError: (err: any) => toast.error('Failed to grant AI credits', { description: err.message }),
   });
 
   // Manual Credit Wallet Mutation
@@ -168,9 +216,9 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
-      alert('Wallet balance credited successfully!');
+      toast.success('Wallet balance credited successfully!');
     },
-    onError: (err: any) => alert(`Failed: ${err.message}`),
+    onError: (err: any) => toast.error('Failed to credit wallet', { description: err.message }),
   });
 
   const kpi = kpiData || {
@@ -186,17 +234,17 @@ export const SuperAdminDashboard: React.FC = () => {
   const organizations = orgsData?.organizations || [];
 
   return (
-    <div className="p-8 space-y-8 w-full bg-slate-50 text-slate-900 min-h-screen">
+    <div className="p-8 space-y-8 w-full bg-[#0b101e] text-white min-h-screen">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-none">
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-extrabold text-xl shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-extrabold text-xl shadow-none">
             👑
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center">
+            <h1 className="text-2xl font-bold text-white tracking-tight flex items-center">
               Super Admin Platform ERP
-              <span className="ml-3 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-full font-semibold">
+              <span className="ml-3 text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full font-semibold">
                 GLOBAL SYSTEM CONTROL PLANE
               </span>
             </h1>
@@ -209,30 +257,30 @@ export const SuperAdminDashboard: React.FC = () => {
         <div className="flex items-center space-x-3 text-xs">
           <button
             onClick={() => refetch()}
-            className="p-2 text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all cursor-pointer shadow-xs"
+            className="p-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:bg-[#0b101e] rounded-xl transition-all cursor-pointer shadow-none"
             title="Refresh Telemetry"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold flex items-center shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
+          <span className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold flex items-center shadow-none">
+            <span className="w-2 h-2 rounded-full bg-emerald-500/100 mr-2 animate-pulse"></span>
             System API: ONLINE
           </span>
-          <span className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold shadow-xs">
+          <span className="px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold shadow-none">
             PostgreSQL DB: CONNECTED
           </span>
         </div>
       </div>
 
       {/* ERP Sub-Navigation Tabs & Time Filter Selector Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex items-center space-x-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
               activeTab === 'overview'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
             }`}
           >
             <Building2 className="w-4 h-4 mr-2" />
@@ -243,8 +291,8 @@ export const SuperAdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('finance')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
               activeTab === 'finance'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
             }`}
           >
             <DollarSign className="w-4 h-4 mr-2 text-emerald-500" />
@@ -255,8 +303,8 @@ export const SuperAdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('pricing')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
               activeTab === 'pricing'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
             }`}
           >
             <Scale className="w-4 h-4 mr-2 text-amber-500" />
@@ -267,8 +315,8 @@ export const SuperAdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('tickets')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
               activeTab === 'tickets'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
             }`}
           >
             <Ticket className="w-4 h-4 mr-2 text-blue-500" />
@@ -279,8 +327,8 @@ export const SuperAdminDashboard: React.FC = () => {
             onClick={() => setActiveTab('audit')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
               activeTab === 'audit'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
             }`}
           >
             <ShieldCheck className="w-4 h-4 mr-2 text-indigo-500" />
@@ -289,7 +337,7 @@ export const SuperAdminDashboard: React.FC = () => {
         </div>
 
         {/* Dynamic Time Range Filter Bar */}
-        <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200 shadow-xs">
+        <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-none">
           {[
             { id: 'all', label: 'All Time' },
             { id: 'today', label: 'Today' },
@@ -302,8 +350,8 @@ export const SuperAdminDashboard: React.FC = () => {
               onClick={() => setTimeRange(range.id as any)}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 timeRange === range.id
-                  ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-indigo-500/10 text-indigo-400 font-bold border border-indigo-500/20 shadow-none'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
               {range.label}
@@ -314,18 +362,18 @@ export const SuperAdminDashboard: React.FC = () => {
 
       {/* Real-time Telemetry KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-2 shadow-sm">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-none">
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 flex items-center justify-between">
             <span>Total Organizations</span>
-            <Building2 className="w-4 h-4 text-indigo-600" />
+            <Building2 className="w-4 h-4 text-indigo-400" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-900">{kpi?.organizations?.total || 0}</div>
+          <div className="text-3xl font-extrabold text-white">{kpi?.organizations?.total || 0}</div>
           <div className="text-xs text-slate-500">
             Active: <span className="text-emerald-600 font-bold">{kpi?.organizations?.active || 0}</span> | Suspended: <span className="text-rose-600 font-bold">{kpi?.organizations?.suspended || 0}</span>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-2 shadow-sm">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-none">
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 flex items-center justify-between">
             <span>Gross Platform Revenue</span>
             <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -334,11 +382,11 @@ export const SuperAdminDashboard: React.FC = () => {
             ₹{Number(kpi?.financials?.grossRevenue || 0).toFixed(2)}
           </div>
           <div className="text-xs text-slate-500">
-            Net: ₹{Number(kpi?.financials?.netRevenue || 0).toFixed(2)} | GST: ₹{Number(kpi?.financials?.totalGstTax || 0).toFixed(2)}
+            Plans: <span className="text-emerald-500 font-bold">₹{Number(kpi?.financials?.planRevenue || 0).toFixed(2)}</span> | Credits: <span className="text-blue-500 font-bold">₹{Number(kpi?.financials?.creditsRevenue || 0).toFixed(2)}</span>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-2 shadow-sm">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-none">
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 flex items-center justify-between">
             <span>Meta Payable Liability</span>
             <Activity className="w-4 h-4 text-amber-600" />
@@ -351,12 +399,12 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-2 shadow-sm">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2 shadow-none">
           <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 flex items-center justify-between">
             <span>Client Wallet Balances</span>
             <Lock className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-900">
+          <div className="text-3xl font-extrabold text-white">
             ₹{Number(kpi?.financials?.totalWalletBalance || 0).toFixed(2)}
           </div>
           <div className="text-xs text-slate-500">
@@ -396,10 +444,97 @@ export const SuperAdminDashboard: React.FC = () => {
               <button
                 onClick={() => saveMasterKeyMutation.mutate()}
                 disabled={saveMasterKeyMutation.isPending || !globalGeminiKey.trim()}
-                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-purple-500/20 cursor-pointer disabled:opacity-50"
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-none cursor-pointer disabled:opacity-50"
               >
                 {saveMasterKeyMutation.isPending ? 'Saving Vault Key...' : 'Save Master Key'}
               </button>
+            </div>
+          </div>
+
+          {/* Invoice Master Settings */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center">
+                  <FileSpreadsheet className="w-5 h-5 mr-2 text-emerald-400" />
+                  <span>Platform Invoice & Letterhead Settings</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  These details will appear on all automatically generated tenant tax invoices.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={invoiceCompanyName}
+                  onChange={(e) => setInvoiceCompanyName(e.target.value)}
+                  placeholder="PROWEXA TECHNOLOGIES PRIVATE LIMITED"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Company Identification Number (CIN)</label>
+                <input
+                  type="text"
+                  value={invoiceCin}
+                  onChange={(e) => setInvoiceCin(e.target.value)}
+                  placeholder="U62090PN..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Registered Address</label>
+                <input
+                  type="text"
+                  value={invoiceAddress}
+                  onChange={(e) => setInvoiceAddress(e.target.value)}
+                  placeholder="S.No.50/14/4/4, Near Patil House..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Support Email</label>
+                <input
+                  type="email"
+                  value={invoiceEmail}
+                  onChange={(e) => setInvoiceEmail(e.target.value)}
+                  placeholder="support@company.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Website URL</label>
+                <input
+                  type="text"
+                  value={invoiceWebsite}
+                  onChange={(e) => setInvoiceWebsite(e.target.value)}
+                  placeholder="www.company.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Contact Phone</label>
+                <input
+                  type="text"
+                  value={invoicePhone}
+                  onChange={(e) => setInvoicePhone(e.target.value)}
+                  placeholder="+91-XXXXXXXXXX"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => saveSettingsMutation.mutate()}
+                  disabled={saveSettingsMutation.isPending}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-none cursor-pointer disabled:opacity-50"
+                >
+                  {saveSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -493,7 +628,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             <button
                               onClick={() => manualCreditMutation.mutate({ orgId: org.id, amount: 500, description: 'SuperAdmin Bonus Credits' })}
                               title="Manual Credit +500 Credits to Wallet"
-                              className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer"
+                              className="text-[10px] bg-emerald-500/100/10 hover:bg-emerald-500/100/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer"
                             >
                               +500 Credits
                             </button>
@@ -518,7 +653,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
                               org.isSuspended
                                 ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-emerald-500/100/10 text-emerald-400 border border-emerald-500/20'
                             }`}
                           >
                             {org.isSuspended ? 'SUSPENDED' : 'ACTIVE'}
@@ -548,7 +683,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             title={org.isSuspended ? 'Activate Tenant' : 'Suspend Tenant'}
                             className={`p-2 rounded-lg transition-all text-xs font-semibold cursor-pointer ${
                               org.isSuspended
-                                ? 'text-emerald-400 hover:bg-emerald-500/10'
+                                ? 'text-emerald-400 hover:bg-emerald-500/100/10'
                                 : 'text-rose-400 hover:bg-rose-500/10'
                             }`}
                           >
@@ -568,32 +703,32 @@ export const SuperAdminDashboard: React.FC = () => {
       {/* TAB 2: FINANCE ERP & META SETTLEMENT CENTER */}
       {activeTab === 'finance' && (
         <div className="space-y-6">
-          <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center">
+          <h3 className="text-lg font-bold text-white tracking-tight flex items-center">
             <DollarSign className="w-5 h-5 mr-2 text-emerald-600" />
             Double-Entry Finance ERP & Live Meta Graph API Liability Reconciliation
           </h3>
 
           {/* Live Meta Graph API Telemetry Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2 shadow-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-none">
               <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Marketing Messages Sent</span>
               <div className="text-2xl font-black text-emerald-600">{kpi?.financials?.metaAnalytics?.metaDeliveredMarketing || 0}</div>
               <p className="text-[10px] text-slate-400">Meta Base Charge ~₹0.8628 / msg</p>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2 shadow-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-none">
               <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Utility Messages Sent</span>
               <div className="text-2xl font-black text-blue-600">{kpi?.financials?.metaAnalytics?.metaDeliveredUtility || 0}</div>
               <p className="text-[10px] text-slate-400">Meta Base Charge ~₹0.1150 / msg</p>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2 shadow-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-none">
               <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Free Service Conversations</span>
-              <div className="text-2xl font-black text-indigo-600">{kpi?.financials?.metaAnalytics?.metaDeliveredService || 0}</div>
+              <div className="text-2xl font-black text-indigo-400">{kpi?.financials?.metaAnalytics?.metaDeliveredService || 0}</div>
               <p className="text-[10px] text-slate-400">Free 24h Customer Support Window</p>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-2 shadow-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-none">
               <span className="text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Actual Meta Payable Charges</span>
               <div className="text-2xl font-black text-amber-600">₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}</div>
               <p className="text-[10px] text-slate-400">Meta Graph API Billed Cost</p>
@@ -601,35 +736,35 @@ export const SuperAdminDashboard: React.FC = () => {
           </div>
 
           {/* Executive Revenue Summary */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-none">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
-                <span className="text-slate-600 font-semibold uppercase">Gross Client Revenue</span>
+              <div className="bg-[#0b101e] border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-slate-400 font-semibold uppercase">Gross Client Revenue</span>
                 <div className="text-2xl font-black text-emerald-600">₹{Number(kpi?.financials?.grossRevenue || 0).toFixed(2)}</div>
                 <p className="text-[10px] text-slate-400">Collected from Client Top-ups & Usage</p>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
-                <span className="text-slate-600 font-semibold uppercase">Exact Meta Payable Liability</span>
+              <div className="bg-[#0b101e] border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-slate-400 font-semibold uppercase">Exact Meta Payable Liability</span>
                 <div className="text-2xl font-black text-amber-600">₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}</div>
                 <p className="text-[10px] text-slate-400">Calculated Meta Graph API Charges</p>
               </div>
 
-              <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-4 space-y-1">
+              <div className="bg-emerald-500/10/60 border border-emerald-500/20 rounded-xl p-4 space-y-1">
                 <span className="text-emerald-800 font-semibold uppercase">Net Platform Profit Margin</span>
-                <div className={`text-2xl font-black ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                <div className={`text-2xl font-black ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-600'}`}>
                   ₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}
                 </div>
-                <p className="text-[10px] text-emerald-700 font-bold">Gross Revenue - Meta Cost = Net Profit</p>
+                <p className="text-[10px] text-emerald-400 font-bold">Gross Revenue - Meta Cost = Net Profit</p>
               </div>
             </div>
           </div>
 
           {/* Dedicated Organization-Wise Finance ERP Table */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-none">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-bold text-slate-900 text-base">Organization-Wise Financial Audit & Meta Insights Table</h4>
+                <h4 className="font-bold text-white text-base">Organization-Wise Financial Audit & Meta Insights Table</h4>
                 <p className="text-xs text-slate-500 mt-0.5">Click "View Meta Breakdown" to open Meta Insights-style billing statement for any organization.</p>
               </div>
             </div>
@@ -637,7 +772,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-600 font-semibold">
+                  <tr className="bg-[#0b101e] border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     <th className="py-3 px-4">Organization</th>
                     <th className="py-3 px-4">Plan Tier</th>
                     <th className="py-3 px-4">Wallet Balance</th>
@@ -647,7 +782,7 @@ export const SuperAdminDashboard: React.FC = () => {
                     <th className="py-3 px-4 text-right">Audit Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                <tbody className="divide-y divide-slate-100 text-xs text-slate-300">
                   {organizations.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center py-6 text-slate-400">No organizations found.</td>
@@ -658,15 +793,15 @@ export const SuperAdminDashboard: React.FC = () => {
                       const clientBilled = org.financialTelemetry?.clientBilled || 0;
                       const markupProfit = org.financialTelemetry?.markupProfit || 0;
                       return (
-                        <tr key={org.id} className="hover:bg-slate-50 transition-all">
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                        <tr key={org.id} className="hover:bg-[#0b101e] transition-all">
+                          <td className="py-3.5 px-4 font-bold text-white">
                             <div>{org.name}</div>
                             <div className="text-[10px] text-slate-400 font-normal">slug: {org.slug}</div>
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-indigo-700 uppercase">
+                          <td className="py-3.5 px-4 font-bold text-indigo-400 uppercase">
                             {org.planTier || 'PRO'}
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                          <td className="py-3.5 px-4 font-bold text-white">
                             {Number(org.wallet?.availableBalance || 0).toFixed(2)} Credits
                           </td>
                           <td className="py-3.5 px-4 font-bold text-emerald-600">
@@ -675,13 +810,13 @@ export const SuperAdminDashboard: React.FC = () => {
                           <td className="py-3.5 px-4 font-bold text-amber-600">
                             ₹{metaCost.toFixed(2)}
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-indigo-600">
+                          <td className="py-3.5 px-4 font-bold text-indigo-400">
                             ₹{markupProfit.toFixed(2)}
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <button
                               onClick={() => setSelectedFinanceOrgId(org.id)}
-                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer inline-flex items-center gap-1.5"
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-none transition-all cursor-pointer inline-flex items-center gap-1.5"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>View Meta Breakdown</span>
@@ -713,7 +848,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   Adjust Meta Graph API base charges billed directly by Meta for India region.
                 </p>
               </div>
-              <span className="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-bold uppercase">
+              <span className="px-3 py-1 bg-amber-500/100/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-bold uppercase">
                 Meta Payable Rates
               </span>
             </div>
@@ -781,8 +916,8 @@ export const SuperAdminDashboard: React.FC = () => {
 
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => alert('📊 Meta Base Rate Card updated successfully!')}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                onClick={() => toast.success('Meta base rate card updated successfully!')}
+                className="bg-amber-500/100 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
               >
                 Save Meta Base Rates
               </button>
@@ -801,7 +936,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   Configure rates charged to client tenant organization wallets per conversation category.
                 </p>
               </div>
-              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-bold uppercase">
+              <span className="px-3 py-1 bg-emerald-500/100/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-bold uppercase">
                 Client Billed Pricing
               </span>
             </div>
@@ -870,8 +1005,8 @@ export const SuperAdminDashboard: React.FC = () => {
 
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => alert('💰 Prowexa Client Markup & Profit Rates saved successfully!')}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer"
+                onClick={() => toast.success('Prowexa client markup & profit rates saved successfully!')}
+                className="bg-emerald-500/100 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer"
               >
                 Save Client Markup Rates
               </button>
@@ -920,10 +1055,10 @@ export const SuperAdminDashboard: React.FC = () => {
                             if (reply) {
                               apiClient.post(`/superadmin/tickets/${t.id}/reply`, { message: reply, status: 'IN_PROGRESS' })
                                 .then(() => {
-                                  alert('✅ Response sent to client!');
+                                  toast.success('Response sent to client!');
                                   refetch();
                                 })
-                                .catch((e) => alert(`Error: ${e.message}`));
+                                .catch((e) => toast.error('Failed to send response', { description: e.message }));
                             }
                           }}
                           className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md"
@@ -1031,7 +1166,7 @@ export const SuperAdminDashboard: React.FC = () => {
                       <span className="font-bold text-white block">{w.displayPhoneNumber}</span>
                       <span className="font-mono text-slate-400 text-[10px]">WABA ID: {w.wabaId}</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/100/10 text-emerald-400 border border-emerald-500/20">
                       {w.status}
                     </span>
                   </div>
@@ -1084,7 +1219,7 @@ export const SuperAdminDashboard: React.FC = () => {
                 <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Meta Graph API & Client Billing Statement</span>
-                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/100/10 px-3 py-1 rounded-full border border-emerald-500/20">
                       Live Reconciled
                     </span>
                   </div>
@@ -1180,7 +1315,7 @@ export const SuperAdminDashboard: React.FC = () => {
                               <td className="py-2 px-3 font-bold font-mono">
                                 <span className={`px-2 py-0.5 rounded text-[10px] ${
                                   item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    ? 'bg-emerald-500/100/10 text-emerald-400 border border-emerald-500/20'
                                     : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                                 }`}>
                                   {item.transactionType}

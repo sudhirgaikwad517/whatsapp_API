@@ -5,6 +5,7 @@ import { apiClient } from '../services/api.client';
 import { AddContactModal } from '../components/contacts/AddContactModal';
 import { ImportCsvModal } from '../components/contacts/ImportCsvModal';
 import { ContactTimelineModal } from '../components/contacts/ContactTimelineModal';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Contacts: React.FC = () => {
   const [search, setSearch] = useState('');
@@ -205,13 +206,18 @@ export const Contacts: React.FC = () => {
                         Timeline
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete contact ${c.phoneNumber}?`)) {
-                            deleteContactMutation.mutate(c.id);
-                          }
+                        onClick={async () => {
+                          const ok = await confirmAction({
+                            title: 'Delete this contact?',
+                            message: `${c.phoneNumber} and their conversation history will be permanently removed.`,
+                            danger: true,
+                            confirmLabel: 'Delete',
+                          });
+                          if (ok) deleteContactMutation.mutate(c.id);
                         }}
                         className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg transition-all"
                         title="Delete contact"
+                        aria-label="Delete contact"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

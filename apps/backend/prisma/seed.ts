@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { encryptToken } from '../src/utils/encryption.js';
@@ -6,9 +7,16 @@ const prisma = new PrismaClient();
 const rawAccessToken = 'EAAb8DuTtq3cBSDmPq4ZAaBnhb8srY5IlHWInhuroFmEAaRciQuWZAOqnLXcYeyqWoWsZB3dlkdeKL8OUGbhEZCaCldkFGLCRqn3xnjripv17ZAaVGyHORHnUfQ2Mo8A5iQrI8yZCWeuBEJw8u0SsZCHBpL8rukQWhRL3NEcOhB0clQ3KYSZCIgxgj4ZAvms2EnJf8FZBUZBghyL8S5qE2mfquOZBjhhoTcquhcOTDSqHMZAtey5A3ZCGqxgEX0JbnZBR4ww6NJ3cZAuy9VLjkakMkmCpZCwvE7QZDZD';
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'This seed script creates demo/test data with a printed password and must never run against production. ' +
+      'Use "npm run seed:superadmin" (env-driven, no demo data) for production super admin provisioning instead.'
+    );
+  }
+
   const encryptedAccessToken = encryptToken(rawAccessToken);
   const email = 'admin@prowexa.com';
-  const plainPassword = 'Admin123!';
+  const plainPassword = process.env.SEED_PASSWORD || crypto.randomBytes(9).toString('base64url');
 
   const passwordHash = await bcrypt.hash(plainPassword, 12);
 
@@ -115,39 +123,11 @@ async function main() {
     },
   });
 
-  // Clean up any tenant membership for Super Admin to ensure total isolation
-  const superUser = await prisma.user.upsert({
-    where: { email: 'superadmin@prowexa.com' },
-    update: { isEmailVerified: true },
-    create: {
-      email: 'superadmin@prowexa.com',
-      fullName: 'Chief Platform Architect',
-      passwordHash,
-      isEmailVerified: true,
-    },
-  });
-
-  await prisma.organizationMember.deleteMany({
-    where: { userId: superUser.id },
-  });
-
-  await prisma.superAdminUser.upsert({
-    where: { email: 'superadmin@prowexa.com' },
-    update: {},
-    create: {
-      email: 'superadmin@prowexa.com',
-      fullName: 'Chief Platform Architect',
-      passwordHash,
-      role: 'SUPER_ADMIN',
-    },
-  });
-
-  console.log('✅ Seed successful!');
+  console.log('✅ Seed successful! (development/demo data only)');
   console.log('──────────────────────────────────────');
   console.log('Admin Email:      admin@prowexa.com');
-  console.log('Admin Password:   Admin123!');
-  console.log('SuperAdmin Email: superadmin@prowexa.com');
-  console.log('SuperAdmin Pass:  Admin123!');
+  console.log(`Admin Password:   ${plainPassword}`);
+  console.log('(Run "npm run seed:superadmin" separately to provision a Super Admin account.)');
   console.log('Org:              Prowexa Enterprise');
   console.log('Role:             SUPER_ADMIN / BUSINESS_OWNER');
   console.log('App ID:           1965990760786807');

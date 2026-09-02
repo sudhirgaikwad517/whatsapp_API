@@ -26,8 +26,8 @@ export const Signup: React.FC = () => {
         password,
       });
 
-      const { user, tokens } = res.data.data;
-      setAuth(user, tokens.accessToken, tokens.refreshToken);
+      const { user } = res.data.data;
+      setAuth(user);
       window.location.href = '/settings';
     } catch (err: any) {
       const serverMsg =
@@ -66,12 +66,13 @@ export const Signup: React.FC = () => {
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="signup-fullname" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Full Name
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="signup-fullname"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -83,12 +84,13 @@ export const Signup: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="signup-orgname" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Company / Business Name
             </label>
             <div className="relative">
               <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="signup-orgname"
                 type="text"
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
@@ -100,12 +102,13 @@ export const Signup: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="signup-email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Work Email Address
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="signup-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -117,20 +120,23 @@ export const Signup: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="signup-password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Password
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="signup-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={8}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition-all"
                 placeholder="••••••••"
               />
             </div>
+            <p className="text-[11px] text-slate-500">At least 8 characters, with an uppercase letter and a number.</p>
           </div>
 
           <button

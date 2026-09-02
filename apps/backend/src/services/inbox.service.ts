@@ -1,4 +1,5 @@
 import { prisma } from '../config/database.js';
+import { ConversationStatus } from '@prisma/client';
 import { sendMetaOutboundMessage } from './meta-whatsapp.service.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { env } from '../config/env.js';
@@ -150,7 +151,7 @@ export async function sendOutboundTextMessage(
     ? Math.max(0, Date.now() - new Date(conversation.createdAt).getTime())
     : undefined;
 
-  await (prisma as any).conversation.update({
+  await prisma.conversation.update({
     where: { id: conversationId },
     data: {
       lastMessageSnippet: text.slice(0, 100),
@@ -183,18 +184,27 @@ export async function assignConversation(organizationId: string, conversationId:
 }
 
 export async function updateConversationStatus(organizationId: string, conversationId: string, status: string) {
+  if (!Object.values(ConversationStatus).includes(status as ConversationStatus)) {
+    throw new AppError(
+      `Invalid conversation status "${status}". Must be one of: ${Object.values(ConversationStatus).join(', ')}.`,
+      400,
+      'INVALID_STATUS'
+    );
+  }
+  const validatedStatus = status as ConversationStatus;
+
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId },
   });
 
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
 
-  const isResolved = status === 'CLOSED' || status === 'RESOLVED';
+  const isResolved = validatedStatus === 'CLOSED' || validatedStatus === 'RESOLVED';
 
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
     data: {
-      status,
+      status: validatedStatus,
       ...(isResolved ? { resolvedAt: new Date(), assignedAgentId: null } : {}),
     },
   });

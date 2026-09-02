@@ -9,6 +9,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-prowexa_whatsapp}
     volumes:
       - prowexa_pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -21,6 +26,11 @@ services:
     restart: always
     volumes:
       - prowexa_redisdata:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -49,6 +59,9 @@ services:
       PORT: 5050
       NODE_ENV: production
       FRONTEND_URL: ${FRONTEND_URL:-https://wabtic.com}
+      API_BASE_URL: ${API_BASE_URL:-https://api.wabtic.com}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-.wabtic.com}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -59,8 +72,14 @@ services:
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN}
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       META_SYSTEM_USER_TOKEN: ${META_SYSTEM_USER_TOKEN}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-Prowexa <no-reply@wabtic.com>}
     depends_on:
       - postgres
       - redis
@@ -72,7 +91,12 @@ services:
     container_name: prowexa_frontend
     restart: always
     ports:
-      - "8085:80"
+      - "8085:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
     depends_on:
       - backend
 

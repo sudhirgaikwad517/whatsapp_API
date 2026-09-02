@@ -1,4 +1,5 @@
 import { prisma } from '../config/database.js';
+import { TicketPriority } from '@prisma/client';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 
 export async function createSupportTicket(
@@ -8,12 +9,20 @@ export async function createSupportTicket(
 ) {
   const ticketNumber = `TKT-${Math.floor(100000 + Math.random() * 900000)}`;
 
+  if (data.priority && !Object.values(TicketPriority).includes(data.priority as TicketPriority)) {
+    throw new AppError(
+      `Invalid ticket priority "${data.priority}". Must be one of: ${Object.values(TicketPriority).join(', ')}.`,
+      400,
+      'INVALID_PRIORITY'
+    );
+  }
+
   const ticket = await prisma.supportTicket.create({
     data: {
       ticketNumber,
       organizationId,
       subject: data.subject,
-      priority: data.priority || 'MEDIUM',
+      priority: (data.priority as TicketPriority) || 'MEDIUM',
       status: 'OPEN',
       messages: {
         create: {

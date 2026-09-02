@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from './error-handler.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
+import { COOKIE_NAMES } from '../utils/auth-cookies.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,21 +11,35 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     organizationId: string;
     role: UserRole;
+    isSuperAdmin?: boolean;
   };
 }
 
 /**
  * Middleware: Verify JWT Bearer token and attach user payload to request.
  */
-export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+/**
+ * Extracts the current request's bearer token from the Authorization header
+ * or, failing that, the httpOnly access-token cookie. Exported so handlers
+ * that need the raw current token (e.g. to back it up before impersonation)
+ * don't have to duplicate this precedence logic.
+ */
+export function extractToken(req: Request): string | undefined {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  return authHeader && authHeader.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : (req as any).cookies?.[COOKIE_NAMES.ACCESS_TOKEN];
+}
+
+export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {
+  const token = extractToken(req);
+
+  if (!token) {
     return next(new AppError('Authorization token is required.', 401, 'UNAUTHORIZED'));
   }
 
-  const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthenticatedRequest['user'];
+    const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as AuthenticatedRequest['user'];
     req.user = decoded;
     next();
   } catch (err) {

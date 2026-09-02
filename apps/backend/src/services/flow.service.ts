@@ -15,14 +15,14 @@ export interface UpdateFlowInput {
 }
 
 export async function listFlows(organizationId: string) {
-  return (prisma as any).flow.findMany({
+  return prisma.flow.findMany({
     where: { organizationId },
     orderBy: { updatedAt: 'desc' },
   });
 }
 
 export async function getFlowById(organizationId: string, id: string) {
-  const flow = await (prisma as any).flow.findFirst({
+  const flow = await prisma.flow.findFirst({
     where: { id, organizationId },
   });
   if (!flow) throw new AppError('Flow not found.', 404, 'FLOW_NOT_FOUND');
@@ -30,7 +30,7 @@ export async function getFlowById(organizationId: string, id: string) {
 }
 
 export async function createFlow(organizationId: string, input: CreateFlowInput) {
-  return (prisma as any).flow.create({
+  return prisma.flow.create({
     data: {
       organizationId,
       name: input.name.trim(),
@@ -44,7 +44,7 @@ export async function createFlow(organizationId: string, input: CreateFlowInput)
 export async function updateFlow(organizationId: string, id: string, input: UpdateFlowInput) {
   await getFlowById(organizationId, id);
 
-  return (prisma as any).flow.update({
+  return prisma.flow.update({
     where: { id },
     data: {
       ...(input.name ? { name: input.name.trim() } : {}),
@@ -57,7 +57,7 @@ export async function updateFlow(organizationId: string, id: string, input: Upda
 
 export async function deleteFlow(organizationId: string, id: string) {
   await getFlowById(organizationId, id);
-  await (prisma as any).flow.delete({ where: { id } });
+  await prisma.flow.delete({ where: { id } });
   return { message: 'Flow deleted successfully.' };
 }
 
@@ -65,7 +65,7 @@ export async function evaluateInboundFlow(organizationId: string, text: string) 
   if (!text || !text.trim()) return null;
   const cleanText = text.trim().toLowerCase();
 
-  const activeFlows = await (prisma as any).flow.findMany({
+  const activeFlows = await prisma.flow.findMany({
     where: { organizationId, isActive: true },
   });
 

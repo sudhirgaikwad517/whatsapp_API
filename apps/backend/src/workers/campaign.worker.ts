@@ -2,7 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { createRedisConnection } from '../config/redis.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import { sendMetaOutboundMessage } from '../services/meta-whatsapp.service.js';
+import { sendMetaOutboundMessage, isRetryableMetaError } from '../services/meta-whatsapp.service.js';
 
 interface CampaignMessageJobData {
   campaignId: string;
@@ -20,6 +20,9 @@ interface CampaignMessageJobData {
 export const campaignWorker = new Worker(
   'marketing-campaign',
   async (job: Job) => {
+    const maxAttempts = job.opts.attempts ?? 1;
+    const isFinalAttempt = job.attemptsMade + 1 >= maxAttempts;
+
     const data = job.data as CampaignMessageJobData;
     logger.info({ jobId: job.id, campaignId: data.campaignId, phone: data.phoneNumber }, 'Processing campaign broadcast job');
 
@@ -29,7 +32,7 @@ export const campaignWorker = new Worker(
         where: { organizationId: data.organizationId, name: data.templateName },
       });
 
-      const campaign = await (prisma as any).campaign.findUnique({
+      const campaign = await prisma.campaign.findUnique({
         where: { id: data.campaignId },
       });
       const variableMapping = (campaign?.variableMapping as Record<string, string>) || {};
@@ -211,7 +214,17 @@ export const campaignWorker = new Worker(
 
       logger.info({ campaignId: data.campaignId, wamid: metaRes.wamid }, 'Campaign message dispatched successfully');
     } catch (err: any) {
-      logger.error({ campaignId: data.campaignId, err: err.message }, 'Failed to dispatch campaign message');
+      const retryable = isRetryableMetaError(err);
+
+      if (retryable && !isFinalAttempt) {
+        logger.warn(
+          { campaignId: data.campaignId, attempt: job.attemptsMade + 1, maxAttempts, err: err.message },
+          'Transient failure dispatching campaign message — will retry via BullMQ backoff.'
+        );
+        throw err; // rethrow so BullMQ's configured attempts/backoff actually retries
+      }
+
+      logger.error({ campaignId: data.campaignId, retryable, err: err.message }, 'Failed to dispatch campaign message');
 
       // Update recipient log status to FAILED
       await prisma.campaignRecipient.updateMany({

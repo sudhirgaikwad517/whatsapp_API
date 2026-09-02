@@ -37,7 +37,7 @@ export async function getDashboardOverview(organizationId: string) {
 
 export async function getSlaAndAgentAnalytics(organizationId: string) {
   const [conversationsRaw, members] = await Promise.all([
-    (prisma as any).conversation.findMany({
+    prisma.conversation.findMany({
       where: { organizationId },
       select: {
         id: true,

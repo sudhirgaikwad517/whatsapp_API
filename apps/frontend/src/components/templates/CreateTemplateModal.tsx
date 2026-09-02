@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, FileCode2, Plus, Trash2, CheckCircle2, Phone, ExternalLink, MessageSquare, Send, HelpCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '../../services/api.client';
 
 interface CreateTemplateModalProps {
@@ -57,7 +58,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['templates-list'] });
-      alert('🎉 Success! Template submitted to Meta for review.');
+      toast.success('Template submitted to Meta for review!');
       setName('');
       setHeaderType('NONE');
       setHeaderText('');
@@ -80,7 +81,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
 
   const addButton = (type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL') => {
     if (buttons.length >= 3) {
-      alert('Meta allows maximum 3 buttons per template.');
+      toast.error('Meta allows maximum 3 buttons per template.');
       return;
     }
     if (type === 'QUICK_REPLY') {

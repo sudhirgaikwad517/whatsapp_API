@@ -2,6 +2,8 @@ import axios from 'axios';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { sendOutboundTextMessage } from './inbox.service.js';
+import { safeDecryptToken } from '../utils/encryption.js';
+import { logger } from '../utils/logger.js';
 
 export async function createRazorpayInChatPaymentLink(
   organizationId: string,
@@ -14,7 +16,7 @@ export async function createRazorpayInChatPaymentLink(
       where: { id: conversationId, organizationId },
       include: { contact: true },
     }),
-    (prisma as any).organization.findUnique({
+    prisma.organization.findUnique({
       where: { id: organizationId },
       select: { razorpayKeyId: true, razorpayKeySecret: true },
     }),
@@ -25,7 +27,7 @@ export async function createRazorpayInChatPaymentLink(
   }
 
   const razorpayKeyId = org?.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
-  const razorpayKeySecret = org?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+  const razorpayKeySecret = safeDecryptToken(org?.razorpayKeySecret) || process.env.RAZORPAY_KEY_SECRET;
 
   if (!razorpayKeyId || !razorpayKeySecret) {
     throw new AppError(
@@ -38,9 +40,9 @@ export async function createRazorpayInChatPaymentLink(
   const amountInPaise = Math.round(amountInINR * 100);
   const authHeader = Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString('base64');
 
-  let paymentLink = `https://rzp.io/i/demo_${Date.now()}`;
-  let shortUrl = paymentLink;
-  let gatewayOrderId = `plink_${Date.now()}`;
+  let paymentLink: string;
+  let shortUrl: string;
+  let gatewayOrderId: string;
 
   try {
     const rzpResponse = await axios.post(
@@ -73,13 +75,21 @@ export async function createRazorpayInChatPaymentLink(
     paymentLink = rzpResponse.data.short_url || rzpResponse.data.url;
     shortUrl = paymentLink;
   } catch (err: any) {
-    // If test credentials fail or mock mode active, generate fallback payment link
-    paymentLink = `https://rzp.io/l/prowexa_pay_${Date.now()}`;
-    shortUrl = paymentLink;
+    // The gateway call genuinely failed — surface it rather than fabricating a
+    // fake rzp.io link that would silently never actually collect payment.
+    logger.error(
+      { organizationId, conversationId, err: err.response?.data || err.message },
+      'Razorpay payment link creation failed.'
+    );
+    throw new AppError(
+      `Failed to create payment link: ${err.response?.data?.error?.description || err.message}`,
+      502,
+      'RAZORPAY_PAYMENT_LINK_FAILED'
+    );
   }
 
   // Create PaymentOrder record in database
-  const paymentOrder = await (prisma as any).paymentOrder.create({
+  const paymentOrder = await prisma.paymentOrder.create({
     data: {
       organizationId,
       contactId: conversation.contact.id,

@@ -2,12 +2,13 @@ import { GoogleGenAI } from '@google/genai';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { redis } from '../config/redis.js';
+import { safeDecryptToken } from '../utils/encryption.js';
 import crypto from 'crypto';
 
 export async function suggestReply(organizationId: string, conversationId: string): Promise<string> {
   try {
     const [org, messagesDesc, conversation] = await Promise.all([
-      (prisma as any).organization.findUnique({
+      prisma.organization.findUnique({
         where: { id: organizationId },
         select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
       }),
@@ -25,8 +26,8 @@ export async function suggestReply(organizationId: string, conversationId: strin
     const messages = (messagesDesc || []).reverse();
     const customerName = conversation?.contact?.firstName || 'Customer';
     const orgName = org?.name || 'Prowexa Business';
-    const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
-    const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
+    const knowledgeBase = org?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
+    const effectiveApiKey = (safeDecryptToken(org?.geminiApiKey) || process.env.GEMINI_API_KEY || '').trim();
 
     const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
     const lastInboundText = typeof lastInboundMsg?.content === 'object'
@@ -58,7 +59,7 @@ export async function suggestReply(organizationId: string, conversationId: strin
       }));
       
       try {
-        products = await (prisma as any).productCatalog.findMany({
+        products = await prisma.productCatalog.findMany({
           where: { 
             organizationId, 
             isActive: true,
@@ -197,7 +198,7 @@ Return ONLY the template text body.`;
 
 export async function processAutonomousAiResponse(organizationId: string, conversationId: string): Promise<void> {
   try {
-    const org = await (prisma as any).organization.findUnique({
+    const org = await prisma.organization.findUnique({
       where: { id: organizationId },
       select: { name: true, aiCreditsBalance: true, aiKnowledgeBase: true, isAiAutoRespondEnabled: true },
     });
@@ -283,7 +284,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
 async function evaluateAiAutonomousReply(organizationId: string, conversationId: string): Promise<{ replyText?: string; isEscalated: boolean; reason?: string }> {
   let lastError = 'No API Error';
   const [org, messagesDesc, conversation] = await Promise.all([
-    (prisma as any).organization.findUnique({
+    prisma.organization.findUnique({
       where: { id: organizationId },
       select: { name: true, aiKnowledgeBase: true, geminiApiKey: true },
     }),
@@ -335,7 +336,7 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
     }));
     
     try {
-      products = await (prisma as any).productCatalog.findMany({
+      products = await prisma.productCatalog.findMany({
         where: { 
           organizationId, 
           isActive: true,

@@ -73,6 +73,7 @@ export const SendTemplateModal: React.FC<SendTemplateModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-all"
           >
             <X className="w-5 h-5" />

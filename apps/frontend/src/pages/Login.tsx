@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { MessageSquare, Lock, Mail } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
@@ -8,25 +8,51 @@ export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendStatus, setResendStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [searchParams] = useSearchParams();
+  const verifiedParam = searchParams.get('verified');
 
   const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const { isAuthenticated, setAuth } = useAuthStore((state) => ({
+    isAuthenticated: state.isAuthenticated,
+    setAuth: state.setAuth
+  }));
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNeedsVerification(false);
+    setResendStatus('');
     setLoading(true);
 
     try {
       const res = await apiClient.post('/auth/login', { email, password });
-      const { user, accessToken, refreshToken } = res.data.data;
-      setAuth(user, accessToken, refreshToken);
+      const { user } = res.data.data;
+      setAuth(user);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to authenticate. Please check credentials.');
+      setNeedsVerification(err.response?.data?.error?.code === 'EMAIL_NOT_VERIFIED');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendStatus('Sending...');
+    try {
+      await apiClient.post('/auth/resend-verification', { email });
+      setResendStatus('Verification email sent — please check your inbox.');
+    } catch {
+      setResendStatus('Could not send the email right now — please try again shortly.');
     }
   };
 
@@ -41,20 +67,42 @@ export const Login: React.FC = () => {
           <p className="text-sm text-slate-400">Enterprise WhatsApp Cloud Platform</p>
         </div>
 
-        {error && (
+        {verifiedParam === '1' && !error && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-xl text-center">
+            Email verified successfully — you can now log in.
+          </div>
+        )}
+        {verifiedParam === '0' && !error && (
           <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl text-center">
-            {error}
+            That verification link is invalid or has expired.
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl text-center space-y-2">
+            <p>{error}</p>
+            {needsVerification && (
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                className="text-emerald-400 hover:underline font-semibold text-xs"
+              >
+                Resend verification email
+              </button>
+            )}
+            {resendStatus && <p className="text-xs text-slate-400">{resendStatus}</p>}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+            <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
               Email Address
             </label>
             <div className="relative">
               <Mail className="w-5 h-5 absolute left-3.5 top-3 text-slate-500" />
               <input
+                id="login-email"
                 type="email"
                 required
                 value={email}
@@ -66,12 +114,18 @@ export const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="login-password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Password
+              </label>
+              <Link to="/forgot-password" className="text-xs text-emerald-400 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="w-5 h-5 absolute left-3.5 top-3 text-slate-500" />
               <input
+                id="login-password"
                 type="password"
                 required
                 value={password}

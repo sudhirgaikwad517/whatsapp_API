@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { FileCode2, RefreshCw, CheckCircle2, MessageSquare, Plus } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateTemplateModal } from '../components/templates/CreateTemplateModal';
@@ -25,10 +26,10 @@ export const Templates: React.FC = () => {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['templates-list'] });
-      alert(`✅ Success! Synced ${data?.syncedCount || 0} template(s) from Meta Graph API!`);
+      toast.success(`Synced ${data?.syncedCount || 0} template(s) from Meta Graph API!`);
     },
     onError: (err: any) => {
-      alert(`❌ Sync Failed: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Sync failed', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 

@@ -1,12 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { Menu, X, MessageSquare, ShieldAlert } from 'lucide-react';
+import { Menu, X, MessageSquare, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../../services/api.client';
 
 export const Layout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isImpersonating, stopImpersonation, user } = useAuthStore();
+
+  const { data: creditsData } = useQuery({
+    queryKey: ['billing-credits-layout'],
+    queryFn: async () => {
+      const res = await apiClient.get('/billing/credits');
+      return res.data.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isPlanExpired = !creditsData?.planExpiryDate || new Date(creditsData.planExpiryDate) < new Date();
+  const location = useLocation();
+  const isRestrictedPage = isPlanExpired && user?.role !== 'SUPER_ADMIN' && !['/billing', '/profile', '/settings'].includes(location.pathname);
+
+  const getUpgradeUrl = () => {
+    const envUrl = (import.meta as any).env?.VITE_WEBSITE_URL;
+    if (envUrl) return `${envUrl}/?tab=pricing`;
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:3000/?tab=pricing';
+    }
+    return 'https://wabtic.com/?tab=pricing';
+  };
 
   // Reset scroll offset on mobile keyboard close (focusout) to prevent static whitespace gap at bottom
   useEffect(() => {
@@ -52,14 +76,32 @@ export const Layout: React.FC = () => {
             </span>
           </div>
           <button
-            onClick={() => {
-              stopImpersonation();
+            onClick={async () => {
+              await stopImpersonation();
               window.location.href = '/superadmin';
             }}
             className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
           >
             <span>Exit to SuperAdmin ERP ➔</span>
           </button>
+        </div>
+      )}
+
+      {/* No Active Plan Banner */}
+      {isPlanExpired && user?.role !== 'SUPER_ADMIN' && (
+        <div className="bg-gradient-to-r from-rose-950 via-rose-900 to-rose-950 border-b border-rose-500/40 px-4 py-2.5 flex items-center justify-between text-xs text-rose-200 font-semibold z-40 shrink-0 shadow-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>
+              <strong>No Active Plan:</strong> Your subscription has expired or you do not have an active plan. Please upgrade to continue using all services.
+            </span>
+          </div>
+          <a
+            href={getUpgradeUrl()}
+            className="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+          >
+            <span>Upgrade Now ➔</span>
+          </a>
         </div>
       )}
 
@@ -92,6 +134,7 @@ export const Layout: React.FC = () => {
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
             className="p-1 rounded-lg text-slate-400 hover:text-white"
           >
             <X className="w-5 h-5" />
@@ -109,6 +152,7 @@ export const Layout: React.FC = () => {
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open menu"
               className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:text-white border border-slate-700 active:scale-95 transition-all"
             >
               <Menu className="w-5 h-5" />
@@ -122,7 +166,7 @@ export const Layout: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-y-auto">
+        <div className={`flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-y-auto ${isRestrictedPage ? 'opacity-40 pointer-events-none select-none grayscale cursor-not-allowed' : ''}`}>
           <Outlet />
         </div>
       </main>

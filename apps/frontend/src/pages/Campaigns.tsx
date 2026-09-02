@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw, BarChart3, Eye } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateCampaignModal } from '../components/campaigns/CreateCampaignModal';
 import { CampaignAnalyticsModal } from '../components/campaigns/CampaignAnalyticsModal';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Campaigns: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -26,10 +28,10 @@ export const Campaigns: React.FC = () => {
     try {
       setRetryingId(id);
       const res = await apiClient.post(`/campaigns/${id}/retry`);
-      alert(res.data.data?.message || `Campaign "${name}" resumed! Re-queued messages for dispatch.`);
+      toast.success(res.data.data?.message || `Campaign "${name}" resumed!`, { description: 'Re-queued messages for dispatch.' });
       await queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (err: any) {
-      alert(`Failed to retry campaign: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Failed to retry campaign', { description: err?.response?.data?.error?.message || err.message });
     } finally {
       setRetryingId(null);
     }
@@ -37,16 +39,20 @@ export const Campaigns: React.FC = () => {
 
   const handleDeleteCampaign = async (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete campaign "${name}"? This action cannot be undone.`)) {
-      return;
-    }
+    const ok = await confirmAction({
+      title: `Delete campaign "${name}"?`,
+      message: 'This action cannot be undone.',
+      danger: true,
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
 
     try {
       setDeletingId(id);
       await apiClient.delete(`/campaigns/${id}`);
       await queryClient.invalidateQueries({ queryKey: ['campaigns'] });
     } catch (err: any) {
-      alert(`Failed to delete campaign: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Failed to delete campaign', { description: err?.response?.data?.error?.message || err.message });
     } finally {
       setDeletingId(null);
     }

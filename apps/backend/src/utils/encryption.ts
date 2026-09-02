@@ -40,3 +40,19 @@ export function decryptToken(cipherText: string): string {
   decrypted += decipher.final('utf8');
   return decrypted;
 }
+
+/**
+ * Like decryptToken, but tolerates values that were stored before a field
+ * started being encrypted (or aren't in the iv:authTag:ciphertext format for
+ * any other reason) by returning them as-is instead of throwing. Use this for
+ * fields that transitioned from plaintext to encrypted-at-rest, so old rows
+ * keep working until they're next written (and re-encrypted).
+ */
+export function safeDecryptToken(cipherText: string | null | undefined): string | null {
+  if (!cipherText) return cipherText ?? null;
+  try {
+    return decryptToken(cipherText);
+  } catch {
+    return cipherText;
+  }
+}

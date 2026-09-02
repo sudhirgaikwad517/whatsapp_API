@@ -7,6 +7,7 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 import { UserRole } from '@prowexa/shared-types';
 import type { RegisterInput, LoginInput } from '../validators/auth.schema.js';
+import { sendMail, buildVerificationEmail, buildPasswordResetEmail } from '../utils/mailer.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -20,7 +21,7 @@ function slugify(name: string): string {
 }
 
 async function generateUniqueSlug(base: string): Promise<string> {
-  let slug = slugify(base);
+  const slug = slugify(base);
   let suffix = 0;
   while (true) {
     const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
@@ -73,7 +74,7 @@ export async function registerUser(input: RegisterInput) {
         fullName: input.fullName,
         passwordHash,
         emailVerifyToken,
-        isEmailVerified: true,
+        isEmailVerified: false,
       },
     });
 
@@ -89,6 +90,19 @@ export async function registerUser(input: RegisterInput) {
   });
 
   logger.info({ userId: result.user.id, orgId: result.organization.id }, 'New user & organization registered');
+
+  try {
+    const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
+    await sendMail({
+      to: result.user.email,
+      subject: 'Verify your Prowexa account',
+      html: buildVerificationEmail(result.user.fullName, verifyUrl),
+    });
+  } catch (err) {
+    // Registration should still succeed even if the verification email fails
+    // to send — resendVerificationEmail() below lets them request it again.
+    logger.error({ userId: result.user.id, err }, 'Failed to send verification email after registration.');
+  }
 
   const tokenPayload = {
     userId: result.user.id,
@@ -181,7 +195,7 @@ export async function loginUser(input: LoginInput) {
 export async function refreshAccessToken(refreshToken: string) {
   let decoded: { userId: string };
   try {
-    decoded = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET) as { userId: string };
+    decoded = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET, { algorithms: ['HS256'] }) as { userId: string };
   } catch {
     throw new AppError('Invalid or expired refresh token.', 401, 'INVALID_REFRESH_TOKEN');
   }
@@ -214,6 +228,51 @@ export async function refreshAccessToken(refreshToken: string) {
   return { accessToken: newAccessToken };
 }
 
+/**
+ * Verifies that a pair of tokens handed off via the SSO redirect (from
+ * wabtic-website) were genuinely issued by this server, and returns the user
+ * they belong to. Used only to move the tokens into httpOnly cookies — never
+ * to mint new credentials.
+ */
+export async function verifySsoTokens(accessToken: string, refreshToken?: string) {
+  let decoded: { userId: string; organizationId: string };
+  try {
+    decoded = jwt.verify(accessToken, env.JWT_SECRET, { algorithms: ['HS256'] }) as typeof decoded;
+  } catch {
+    throw new AppError('Invalid or expired SSO access token.', 401, 'INVALID_TOKEN');
+  }
+
+  if (refreshToken) {
+    try {
+      jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET, { algorithms: ['HS256'] });
+    } catch {
+      throw new AppError('Invalid or expired SSO refresh token.', 401, 'INVALID_TOKEN');
+    }
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: decoded.userId, deletedAt: null } });
+  if (!user) {
+    throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
+  }
+
+  const membership = await prisma.organizationMember.findFirst({
+    where: { userId: user.id, organizationId: decoded.organizationId },
+  });
+  if (!membership) {
+    throw new AppError('User is not a member of this organization.', 403, 'NO_ORGANIZATION');
+  }
+
+  return {
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: membership.role,
+      organizationId: membership.organizationId,
+    },
+  };
+}
+
 export async function logoutUser(refreshToken: string) {
   const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   await prisma.refreshToken.updateMany({
@@ -234,11 +293,33 @@ export async function verifyEmail(token: string) {
   return { message: 'Email verified successfully. You may now log in.' };
 }
 
+export async function resendVerificationEmail(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  // Always respond generically to prevent email enumeration
+  const generic = { message: 'If this email is registered and unverified, a new verification link has been sent.' };
+  if (!user || user.isEmailVerified) {
+    return generic;
+  }
+
+  const emailVerifyToken = crypto.randomBytes(32).toString('hex');
+  await prisma.user.update({ where: { id: user.id }, data: { emailVerifyToken } });
+
+  const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
+  await sendMail({
+    to: user.email,
+    subject: 'Verify your Prowexa account',
+    html: buildVerificationEmail(user.fullName, verifyUrl),
+  });
+
+  return generic;
+}
+
 export async function forgotPassword(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   // Always respond generically to prevent email enumeration
+  const generic = { message: 'If this email is registered, a reset link has been sent.' };
   if (!user) {
-    return { message: 'If this email is registered, a reset link has been sent.' };
+    return generic;
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
@@ -249,8 +330,44 @@ export async function forgotPassword(email: string) {
     data: { resetToken, resetTokenExpiry },
   });
 
-  // TODO: Send reset email via email provider
-  logger.info({ userId: user.id }, 'Password reset requested (token generated)');
+  const resetUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/reset-password?token=${resetToken}`;
+  try {
+    await sendMail({
+      to: user.email,
+      subject: 'Reset your Prowexa password',
+      html: buildPasswordResetEmail(resetUrl),
+    });
+  } catch (err) {
+    logger.error({ userId: user.id, err }, 'Failed to send password reset email.');
+  }
 
-  return { message: 'If this email is registered, a reset link has been sent.' };
+  return generic;
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const user = await prisma.user.findFirst({
+    where: { resetToken: token, resetTokenExpiry: { gt: new Date() } },
+  });
+  if (!user) {
+    throw new AppError('Invalid or expired reset token.', 400, 'INVALID_RESET_TOKEN');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, resetToken: null, resetTokenExpiry: null },
+    }),
+    // Revoke every existing refresh token — a password reset should end all
+    // other sessions, not leave a stolen-credential session still valid.
+    prisma.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+
+  logger.info({ userId: user.id }, 'Password reset completed; all sessions revoked.');
+
+  return { message: 'Password has been reset successfully. Please log in with your new password.' };
 }

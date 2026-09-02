@@ -1,34 +1,17 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Prisma } from '@prisma/client';
+import { Prisma, PlanTier, SupportTicketStatus } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
+import { getTemplateSentCounts } from './usage-metrics.service.js';
+import { encryptToken, safeDecryptToken } from '../utils/encryption.js';
 
 export async function loginSuperAdmin(email: string, password: string) {
-  let superAdmin = await prisma.superAdminUser.findUnique({
+  const superAdmin = await prisma.superAdminUser.findUnique({
     where: { email },
   });
-
-  // Auto-seed default SuperAdmin user if database table is unseeded
-  if (!superAdmin) {
-    const totalSuperAdmins = await prisma.superAdminUser.count();
-    if (totalSuperAdmins === 0 || email === 'superadmin@prowexa.com') {
-      const passwordHash = await bcrypt.hash('Admin123!', 12);
-      superAdmin = await prisma.superAdminUser.upsert({
-        where: { email: 'superadmin@prowexa.com' },
-        update: { passwordHash, isActive: true },
-        create: {
-          email: 'superadmin@prowexa.com',
-          fullName: 'Chief Platform Architect',
-          passwordHash,
-          role: 'SUPER_ADMIN',
-          isActive: true,
-        },
-      });
-    }
-  }
 
   if (!superAdmin || !superAdmin.isActive) {
     throw new AppError('Invalid Super Admin credentials.', 401, 'INVALID_CREDENTIALS');
@@ -85,7 +68,8 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     totalUsers,
     totalMessages,
     walletsSum,
-    invoicesSum,
+    planInvoicesSum,
+    usageInvoicesSum,
     allLedgerDebits,
     supportTickets,
     auditLogs,
@@ -100,8 +84,15 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
       _sum: { availableBalance: true, reservedBalance: true },
     }),
     prisma.invoice.aggregate({
-      _sum: { grandTotal: true, subtotal: true, taxAmount: true },
-      where: { ...dateFilter },
+      _sum: { grandTotal: true },
+      where: { invoiceNumber: { startsWith: 'INV-PLAN-' }, ...dateFilter },
+    }),
+    prisma.invoice.aggregate({
+      _sum: { grandTotal: true },
+      where: { 
+        NOT: { invoiceNumber: { startsWith: 'INV-PLAN-' } }, 
+        ...dateFilter 
+      },
     }),
     prisma.walletLedger.aggregate({
       _sum: { amount: true },
@@ -133,7 +124,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   const actualPaidRecharges = Number(paidRechargesSum._sum?.amount || 0);
 
   // Fetch real-time Meta Graph API analytics & actual delivered charges
-  let metaAnalytics = {
+  const metaAnalytics = {
     metaDeliveredMarketing: 0,
     metaDeliveredUtility: 0,
     metaDeliveredService: 0,
@@ -157,20 +148,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
       prisma.message.count({ where: { direction: 'INBOUND', ...dateFilter } }),
     ]);
 
-    const exactTemplateCounts: any[] = await prisma.$queryRaw`
-      SELECT 
-        COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
-        COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
-      FROM "Message" m
-      INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
-      WHERE m."direction" = 'OUTBOUND'
-        AND m."type" = 'TEMPLATE'
-        AND m."status" != 'FAILED'
-        ${startDate ? Prisma.sql`AND m."createdAt" >= ${startDate}` : Prisma.empty}
-    `;
-
-    const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
-    const finalUtilityCount = Number(exactTemplateCounts[0]?.utility_sent || 0);
+    const { marketingSent, utilitySent: finalUtilityCount } = await getTemplateSentCounts(prisma, { startDate });
 
     metaAnalytics.metaDeliveredMarketing = marketingSent;
     metaAnalytics.metaDeliveredUtility = finalUtilityCount;
@@ -212,10 +190,16 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   // Calculate actual Gross Client Revenue from delivered messages (Marketing @ ₹1.00, Utility @ ₹0.20)
   const clientBilledCalculated = Number((metaAnalytics.metaDeliveredMarketing * 1.00 + metaAnalytics.metaDeliveredUtility * 0.20).toFixed(2));
   const totalBilledUsage = Math.max(billedUsageSum, clientBilledCalculated);
-  const paidInvoicesSum = Number(invoicesSum._sum.grandTotal || 0);
+  
+  const planRevenue = Number(planInvoicesSum._sum.grandTotal || 0);
+  const creditsRevenue = Number(usageInvoicesSum._sum.grandTotal || 0);
 
   // Gross Platform Revenue is max of (Client Paid Recharges, Total Billed Messaging Usage, Paid Invoices)
-  const grossRevenue = Number(Math.max(actualPaidRecharges, totalBilledUsage, paidInvoicesSum).toFixed(2));
+  const totalInvoicesSum = planRevenue + creditsRevenue;
+  const grossRevenue = Number(Math.max(actualPaidRecharges, totalBilledUsage, totalInvoicesSum).toFixed(2));
+  
+  const planGst = Number((planRevenue * 0.18 / 1.18).toFixed(2));
+  const creditsGst = Number((creditsRevenue * 0.18 / 1.18).toFixed(2));
   const totalGstTax = Number((grossRevenue * 0.18 / 1.18).toFixed(2));
   const netRevenue = Number((grossRevenue - totalGstTax).toFixed(2));
 
@@ -247,6 +231,8 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
       financials: {
         grossRevenue,
         netRevenue,
+        planRevenue,
+        creditsRevenue,
         totalGstTax,
         totalWalletBalance,
         totalReservedBalance,
@@ -321,20 +307,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
         }),
       ]);
 
-      const exactTemplateCounts: any[] = await prisma.$queryRaw`
-        SELECT 
-          COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
-          COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
-        FROM "Message" m
-        INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
-        WHERE m."organizationId" = ${org.id}::uuid
-          AND m."direction" = 'OUTBOUND'
-          AND m."type" = 'TEMPLATE'
-          AND m."status" != 'FAILED'
-      `;
-
-      const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
-      const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
+      const { marketingSent, utilitySent } = await getTemplateSentCounts(prisma, { organizationId: org.id });
 
       // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
       let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
@@ -342,7 +315,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
       // Client Billed: Use actual WalletLedger debit sum if available, else calculate at Prowexa Rates
       const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
       const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
-      let clientBilled = Math.max(ledgerDebits, calculatedCharges);
+      const clientBilled = Math.max(ledgerDebits, calculatedCharges);
 
       // Attempt live Meta Graph API telemetry fetch for this organization WABA
       if (waAccount && waAccount.wabaId) {
@@ -473,8 +446,8 @@ export async function toggleOrganizationSuspension(organizationId: string, isSus
   return updated;
 }
 
-export async function updateOrganizationPlanTier(organizationId: string, planTier: string) {
-  const updated = await (prisma as any).organization.update({
+export async function updateOrganizationPlanTier(organizationId: string, planTier: PlanTier) {
+  const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: { planTier },
   });
@@ -493,7 +466,7 @@ export async function updateOrganizationPlanTier(organizationId: string, planTie
 }
 
 export async function grantAiCreditsToOrganization(organizationId: string, creditsAmount: number) {
-  const updated = await (prisma as any).organization.update({
+  const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: {
       aiCreditsBalance: { increment: creditsAmount },
@@ -575,6 +548,14 @@ export async function superAdminReplyTicket(ticketId: string, message: string, s
     throw new AppError('Support ticket not found', 404, 'NOT_FOUND');
   }
 
+  if (status && !Object.values(SupportTicketStatus).includes(status as SupportTicketStatus)) {
+    throw new AppError(
+      `Invalid ticket status "${status}". Must be one of: ${Object.values(SupportTicketStatus).join(', ')}.`,
+      400,
+      'INVALID_STATUS'
+    );
+  }
+
   const msg = await prisma.ticketMessage.create({
     data: {
       ticketId,
@@ -587,7 +568,7 @@ export async function superAdminReplyTicket(ticketId: string, message: string, s
   const updatedTicket = await prisma.supportTicket.update({
     where: { id: ticketId },
     data: {
-      status: status || 'IN_PROGRESS',
+      status: (status as SupportTicketStatus) || 'IN_PROGRESS',
       updatedAt: new Date(),
     },
     include: { messages: true, organization: true },
@@ -634,21 +615,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     }),
   ]);
 
-  const exactTemplateCounts: any[] = await prisma.$queryRaw`
-    SELECT 
-      COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
-      COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
-    FROM "Message" m
-    INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
-    WHERE m."organizationId" = ${org.id}::uuid
-      AND m."direction" = 'OUTBOUND'
-      AND m."type" = 'TEMPLATE'
-      AND m."status" != 'FAILED'
-  `;
-
-  // Use the exact SQL counts. If SQL fails or returns 0, fallback to campaign recipients for marketing.
-  const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
-  const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
+  const { marketingSent, utilitySent } = await getTemplateSentCounts(prisma, { organizationId: org.id });
   const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
   const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
@@ -716,9 +683,9 @@ export async function saveMasterAiKey(apiKey: string) {
   process.env.GEMINI_API_KEY = trimmedKey;
 
   // Mass update all existing tenant organizations that don't have custom geminiApiKey set
-  await (prisma as any).organization.updateMany({
+  await prisma.organization.updateMany({
     data: {
-      geminiApiKey: trimmedKey,
+      geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null,
     },
   });
 
@@ -737,12 +704,33 @@ export async function getMasterAiKey() {
 
 export async function updateOrganizationAiKey(organizationId: string, apiKey: string) {
   const trimmedKey = (apiKey || '').trim();
-  const org = await (prisma as any).organization.update({
+  const org = await prisma.organization.update({
     where: { id: organizationId },
-    data: { geminiApiKey: trimmedKey },
+    data: { geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null },
     select: { id: true, name: true, geminiApiKey: true },
   });
 
-  return org;
+  return { ...org, geminiApiKey: safeDecryptToken(org.geminiApiKey) };
+}
+
+export async function getSystemSettings() {
+  let settings = await prisma.systemSettings.findFirst();
+  if (!settings) {
+    settings = await prisma.systemSettings.create({ data: {} });
+  }
+  return settings;
+}
+
+export async function updateSystemSettings(data: any) {
+  let settings = await prisma.systemSettings.findFirst();
+  if (!settings) {
+    settings = await prisma.systemSettings.create({ data });
+  } else {
+    settings = await prisma.systemSettings.update({
+      where: { id: settings.id },
+      data,
+    });
+  }
+  return settings;
 }
 

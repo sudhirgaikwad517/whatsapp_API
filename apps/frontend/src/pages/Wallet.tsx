@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Wallet as WalletIcon, ArrowUpRight, ArrowDownLeft, ShieldCheck, Lock, CreditCard, PlusCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
@@ -27,11 +28,11 @@ export const Wallet: React.FC = () => {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['wallet-details'] });
-      alert(`🎉 Success! Purchased ${rechargeAmount} Usage Credits. New Balance: ${data.wallet.availableBalance} Credits`);
+      toast.success(`Purchased ${rechargeAmount} usage credits!`, { description: `New balance: ${data.wallet.availableBalance} credits` });
       setIsRechargeOpen(false);
     },
     onError: (err: any) => {
-      alert(`❌ Recharge Failed: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Recharge failed', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 

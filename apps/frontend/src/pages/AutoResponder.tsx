@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Bot, Plus, Trash2, Tag, CheckCircle2, XCircle, X, Send, Sparkles } from 'lucide-react';
 import { apiClient } from '../services/api.client';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 interface Rule {
   id: string;
@@ -172,13 +174,18 @@ export const AutoResponder: React.FC = () => {
                     </td>
                     <td className="py-4 px-6 text-right">
                       <button
-                        onClick={() => {
-                          if (confirm(`Delete rule "${rule.name}"?`)) {
-                            deleteMutation.mutate(rule.id);
-                          }
+                        onClick={async () => {
+                          const ok = await confirmAction({
+                            title: `Delete rule "${rule.name}"?`,
+                            message: 'This auto-reply rule will be permanently removed.',
+                            danger: true,
+                            confirmLabel: 'Delete',
+                          });
+                          if (ok) deleteMutation.mutate(rule.id);
                         }}
                         className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
                         title="Delete Rule"
+                        aria-label="Delete rule"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -220,10 +227,10 @@ export const AutoResponder: React.FC = () => {
                 title,
                 message,
               }).then(() => {
-                alert('✅ Quick Reply Snippet Created Successfully!');
+                toast.success('Quick reply snippet created successfully!');
                 queryClient.invalidateQueries({ queryKey: ['canned-responses'] });
               }).catch((err: any) => {
-                alert('❌ Failed to create quick reply: ' + (err.response?.data?.error?.message || err.message));
+                toast.error('Failed to create quick reply', { description: err.response?.data?.error?.message || err.message });
               });
             }}
             className="w-full sm:w-auto justify-center bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center transition-all cursor-pointer shadow-lg shadow-purple-500/20 shrink-0"

@@ -17,9 +17,9 @@ export const SuperAdminLogin: React.FC = () => {
 
     try {
       const res = await apiClient.post('/superadmin/login', { email, password });
-      const { user, accessToken } = res.data.data;
+      const { user } = res.data.data;
 
-      setAuth(user, accessToken, accessToken);
+      setAuth(user);
       window.location.href = '/superadmin';
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Invalid Super Admin credentials');
@@ -53,12 +53,13 @@ export const SuperAdminLogin: React.FC = () => {
 
         <form onSubmit={handleLogin} className="space-y-5">
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="superadmin-email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Super Admin Email
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="superadmin-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -70,12 +71,13 @@ export const SuperAdminLogin: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            <label htmlFor="superadmin-password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Password
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
+                id="superadmin-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { ShoppingBag, Plus, Trash2, Edit3, Image as ImageIcon, Zap, Check, X } from 'lucide-react';
 import { apiClient } from '../services/api.client';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Catalog: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,10 +48,10 @@ export const Catalog: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
       closeModal();
-      alert('🎉 Product catalog item saved successfully!');
+      toast.success('Product catalog item saved successfully!');
     },
     onError: (err: any) => {
-      alert(`❌ Failed to save product: ${err.message}`);
+      toast.error('Failed to save product', { description: err.message });
     },
   });
 
@@ -60,7 +62,7 @@ export const Catalog: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
-      alert('✅ Product deleted from catalog.');
+      toast.success('Product deleted from catalog.');
     },
   });
 
@@ -111,7 +113,7 @@ export const Catalog: React.FC = () => {
         `⚡ Sharp.js WebP Saved: ${(originalSize / 1024).toFixed(0)} KB ➔ ${(compressedSize / 1024).toFixed(0)} KB (${compressionRatioPercent}% saved)`
       );
     } catch (err: any) {
-      alert(`Image Upload Failed: ${err.message}`);
+      toast.error('Image upload failed', { description: err.message });
     } finally {
       setIsUploading(false);
     }
@@ -204,13 +206,18 @@ export const Catalog: React.FC = () => {
                   Edit
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(`Delete product "${item.title}"?`)) {
-                      deleteMutation.mutate(item.id);
-                    }
+                  onClick={async () => {
+                    const ok = await confirmAction({
+                      title: `Delete product "${item.title}"?`,
+                      message: 'This will remove it from your WhatsApp product catalog.',
+                      danger: true,
+                      confirmLabel: 'Delete',
+                    });
+                    if (ok) deleteMutation.mutate(item.id);
                   }}
                   className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
                   title="Delete Product"
+                  aria-label="Delete product"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

@@ -1,10 +1,10 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Send, CheckCheck, Eye, AlertTriangle, Users, MessageSquare, Clock } from 'lucide-react';
+import { BarChart3, Send, CheckCheck, Eye, AlertTriangle, Users, MessageSquare, Clock, RefreshCw } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
 export const Analytics: React.FC = () => {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['analytics-overview'],
     queryFn: async () => {
       const res = await apiClient.get('/analytics/overview');
@@ -34,6 +34,18 @@ export const Analytics: React.FC = () => {
 
       {isLoading ? (
         <div className="text-center py-12 text-slate-500">Loading analytics metrics...</div>
+      ) : isError ? (
+        <div className="text-center py-12 space-y-3">
+          <p className="text-sm text-rose-400">Couldn't load analytics right now. Please check your connection and try again.</p>
+          <button
+            onClick={() => refetch()}
+            disabled={isRefetching}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold border border-slate-700 transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefetching ? 'animate-spin' : ''}`} />
+            {isRefetching ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
       ) : (
         <>
           {/* Key Stat Cards Grid */}

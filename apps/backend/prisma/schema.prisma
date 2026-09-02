@@ -103,6 +103,40 @@ enum PaymentGateway {
   STRIPE
 }
 
+enum ConversationStatus {
+  OPEN
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum InvoiceStatus {
+  PAID
+  PENDING
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketSenderType {
+  USER
+  SUPER_ADMIN
+}
+
 enum SuperAdminRole {
   SUPER_ADMIN
   FINANCE_ADMIN
@@ -120,12 +154,16 @@ model Organization {
   timezone          String             @default("UTC") @db.VarChar(100)
   billingMode       BillingMode        @default(WALLET)
   planTier          PlanTier           @default(PRO)
-  aiCreditsBalance  Int                @default(1000)
+  planExpiryDate    DateTime?
+  aiCreditsBalance  Int                @default(0)
   aiKnowledgeBase   String?            @db.Text
-  geminiApiKey      String?            @db.VarChar(255)
+  // Stored encrypted (AES-256-GCM via utils/encryption.ts), same as
+  // WhatsappAccount.encryptedAccessToken — @db.Text because ciphertext
+  // (iv:authTag:encrypted, hex) is longer than the plaintext key.
+  geminiApiKey      String?            @db.Text
   isAiAutoRespondEnabled Boolean       @default(false)
   razorpayKeyId     String?            @db.VarChar(255)
-  razorpayKeySecret String?            @db.VarChar(255)
+  razorpayKeySecret String?            @db.Text
   isSuspended       Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -133,11 +171,13 @@ model Organization {
 
   users             OrganizationMember[]
   whatsappAccounts  WhatsappAccount[]
+  templates         Template[]
   contacts          Contact[]
   tags              Tag[]
   segments          Segment[]
   campaigns         Campaign[]
   conversations     Conversation[]
+  messages          Message[]
   wallet            Wallet?
   walletReservations WalletReservation[]
   walletLedgers     WalletLedger[]
@@ -175,6 +215,7 @@ model User {
   notes             InternalNote[]
 
   @@index([email])
+  @@index([deletedAt])
 }
 
 model OrganizationMember {
@@ -228,6 +269,7 @@ model WhatsappAccount {
 
   @@index([organizationId])
   @@index([phoneNumberId])
+  @@index([deletedAt])
 }
 
 model Template {
@@ -238,12 +280,18 @@ model Template {
   name              String          @db.VarChar(255)
   language          String          @db.VarChar(10)
   category          String          @db.VarChar(100)
+  // Intentionally a plain String, not an enum: this mirrors whatever status
+  // value Meta's Template Management API returns (APPROVED, PENDING, REJECTED,
+  // PAUSED, DISABLED, IN_APPEAL, etc.) — a value space we don't control and
+  // that Meta can extend at any time. An enum here would risk sync failures
+  // the moment Meta introduces a new status.
   status            String          @db.VarChar(50)
   defaultMediaId    String?         @db.VarChar(255)
   components        Json
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   whatsappAccount   WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   campaigns         Campaign[]
 
@@ -273,6 +321,7 @@ model Contact {
 
   @@unique([organizationId, phoneNumber])
   @@index([organizationId, phoneNumber])
+  @@index([deletedAt])
 }
 
 model Tag {
@@ -322,7 +371,7 @@ model Conversation {
   lastMessageSnippet String?         @db.Text
   lastMessageAt      DateTime?       @default(now())
   windowExpiresAt    DateTime?
-  status             String          @default("OPEN") @db.VarChar(50)
+  status             ConversationStatus @default(OPEN)
   firstResponseTimeMs Int?
   resolvedAt         DateTime?
   createdAt          DateTime        @default(now())
@@ -356,10 +405,12 @@ model Message {
   readAt             DateTime?
   createdAt          DateTime         @default(now())
 
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation       Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([wamid])
+  @@index([conversationId, createdAt])
 }
 
 model InternalNote {
@@ -441,6 +492,8 @@ model CampaignRecipient {
 
   @@unique([campaignId, contactId])
   @@index([campaignId, status])
+  @@index([wamid])
+  @@index([contactId])
 }
 
 model ContactTimeline {
@@ -470,7 +523,10 @@ model AuditLog {
   ipAddress      String?      @db.VarChar(45)
   createdAt      DateTime     @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: the audit trail should block a hard org delete
+  // rather than silently disappear with it (orgs are soft-deleted via
+  // deletedAt in normal operation — nothing in the app ever hard-deletes one).
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
 }
@@ -521,7 +577,9 @@ model WalletLedger {
   createdAt       DateTime              @default(now())
 
   wallet          Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: the financial ledger should block a hard org
+  // delete rather than vanish with it (see AuditLog for the same rationale).
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
 }
@@ -587,10 +645,12 @@ model Invoice {
   currency        String       @default("INR") @db.VarChar(3)
   paymentId       String       @db.VarChar(255)
   gatewayName     String       @db.VarChar(50)
-  status          String       @default("PAID") @db.VarChar(50)
+  status          InvoiceStatus @default(PAID)
   createdAt       DateTime     @default(now())
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: invoices are financial/tax records that should
+  // block a hard org delete rather than vanish with it.
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
 }
@@ -616,8 +676,8 @@ model SupportTicket {
   organizationId  String          @db.Uuid
   assignedAdminId String?         @db.Uuid
   subject         String          @db.VarChar(255)
-  priority        String          @default("MEDIUM") @db.VarChar(20)
-  status          String          @default("OPEN") @db.VarChar(50)
+  priority        TicketPriority       @default(MEDIUM)
+  status          SupportTicketStatus  @default(OPEN)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
@@ -631,8 +691,11 @@ model SupportTicket {
 model TicketMessage {
   id              String        @id @default(uuid()) @db.Uuid
   ticketId        String        @db.Uuid
-  senderType      String        @db.VarChar(20)
-  senderId        String        @db.Uuid
+  senderType      TicketSenderType
+  // Not @db.Uuid: superadmin.service.ts's superAdminReplyTicket() writes the
+  // sentinel string 'SYSTEM_SUPER_ADMIN' here (no real SuperAdminUser id is
+  // threaded through yet) — a strict uuid column would reject that write.
+  senderId        String        @db.VarChar(255)
   message         String        @db.Text
   isInternalNote  Boolean       @default(false)
   createdAt       DateTime      @default(now())
@@ -685,4 +748,15 @@ model CannedResponse {
 
   @@unique([organizationId, shortcut])
   @@index([organizationId])
+}
+
+model SystemSettings {
+  id                    String   @id @default(uuid()) @db.Uuid
+  invoiceCompanyName    String?  @db.VarChar(255)
+  invoiceCin            String?  @db.VarChar(100)
+  invoiceAddress        String?  @db.Text
+  invoiceEmail          String?  @db.VarChar(255)
+  invoiceWebsite        String?  @db.VarChar(255)
+  invoicePhone          String?  @db.VarChar(50)
+  updatedAt             DateTime @updatedAt
 }

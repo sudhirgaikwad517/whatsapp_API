@@ -15,7 +15,10 @@ import {
   Send,
   DollarSign,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
+import { generateInvoicePdf } from '../utils/InvoiceGenerator';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Billing: React.FC = () => {
   const [rechargeAmount, setRechargeAmount] = useState('1000');
@@ -25,6 +28,22 @@ export const Billing: React.FC = () => {
     queryKey: ['wallet-balance'],
     queryFn: async () => {
       const res = await apiClient.get('/billing/wallet');
+      return res.data.data;
+    },
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['billing-settings'],
+    queryFn: async () => {
+      const res = await apiClient.get('/billing/settings');
+      return res.data.data;
+    },
+  });
+
+  const { data: currentOrg } = useQuery({
+    queryKey: ['org-details'],
+    queryFn: async () => {
+      const res = await apiClient.get('/organization');
       return res.data.data;
     },
   });
@@ -61,11 +80,11 @@ export const Billing: React.FC = () => {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['ai-credits-balance'] });
       queryClient.invalidateQueries({ queryKey: ['billing-invoices'] });
-      alert(`🪙 ${data.message || 'AI Credits Bundle added successfully!'}`);
+      toast.success(data.message || 'AI Credits Bundle added successfully!');
     },
     onError: (err: any) => {
       const errorMsg = err.response?.data?.error?.message || err.message;
-      alert(`Top-up failed: ${errorMsg}`);
+      toast.error('Top-up failed', { description: errorMsg });
     },
   });
 
@@ -74,10 +93,13 @@ export const Billing: React.FC = () => {
       const res = await apiClient.post('/billing/create-razorpay-order', { amount });
       return res.data.data;
     },
-    onSuccess: (data, amount) => {
+    onSuccess: async (data, amount) => {
       if (data.isMock) {
-        const confirmMock = window.confirm('Razorpay Keys are missing on server .env file. Proceed with dev simulated AI Credits purchase?');
-        if (confirmMock) {
+        const ok = await confirmAction({
+          title: 'Razorpay keys are missing on the server',
+          message: 'Proceed with a dev-only simulated AI credits purchase instead?',
+        });
+        if (ok) {
           topupCreditsMutation.mutate({ amount, isMock: true });
         }
         return;
@@ -112,7 +134,7 @@ export const Billing: React.FC = () => {
     },
     onError: (err: any) => {
       const errorMsg = err.response?.data?.error?.message || err.message;
-      alert(`Failed to initiate Razorpay order: ${errorMsg}`);
+      toast.error('Failed to initiate Razorpay order', { description: errorMsg });
     },
   });
 
@@ -124,22 +146,23 @@ export const Billing: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-ledger'] });
-      alert('💳 Wallet Balance recharged successfully!');
+      queryClient.invalidateQueries({ queryKey: ['billing-invoices'] });
+      toast.success('Wallet balance recharged successfully!');
     },
     onError: (err: any) => {
       const errorMsg = err.response?.data?.error?.message || err.message;
-      alert(`Recharge failed: ${errorMsg}`);
+      toast.error('Recharge failed', { description: errorMsg });
     },
   });
 
   const createRazorpayOrderMutation = useMutation({
-    mutationFn: async (amount: number) => {
-      const res = await apiClient.post('/billing/create-razorpay-order', { amount });
+    mutationFn: async ({ baseAmount, finalAmount }: { baseAmount: number; finalAmount: number }) => {
+      const res = await apiClient.post('/billing/create-razorpay-order', { amount: finalAmount });
       return res.data.data;
     },
-    onSuccess: (data, amount) => {
+    onSuccess: (data, variables) => {
       if (data.isMock) {
-        alert('Razorpay Keys are missing on the server! Cannot process real payments. Please configure RAZORPAY_KEY_ID in your .env file.');
+        toast.error('Razorpay keys are missing on the server', { description: 'Cannot process real payments. Configure RAZORPAY_KEY_ID in your .env file.' });
         return;
       }
 
@@ -152,7 +175,7 @@ export const Billing: React.FC = () => {
         order_id: data.id,
         handler: function (response: any) {
           walletRechargeMutation.mutate({
-            amount,
+            amount: variables.baseAmount,
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
@@ -172,7 +195,7 @@ export const Billing: React.FC = () => {
     },
     onError: (err: any) => {
       const errorMsg = err.response?.data?.error?.message || err.message;
-      alert(`Failed to initiate recharge: ${errorMsg}`);
+      toast.error('Failed to initiate recharge', { description: errorMsg });
     },
   });
 
@@ -191,8 +214,10 @@ export const Billing: React.FC = () => {
   };
 
   const isNegative = rawBalance < 0;
-  const aiCredits = creditsData?.aiCreditsBalance ?? 1000;
-  const planTier = creditsData?.planTier ?? 'PRO';
+  const aiCredits = creditsData?.aiCreditsBalance ?? 0;
+  const planExpiryDate = creditsData?.planExpiryDate ? new Date(creditsData.planExpiryDate).toLocaleDateString() : null;
+  const isPlanExpired = !creditsData?.planExpiryDate || new Date(creditsData.planExpiryDate) < new Date();
+  const planTier = isPlanExpired ? 'INACTIVE' : (creditsData?.planTier ?? 'PRO');
 
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 text-slate-100 w-full">
@@ -209,7 +234,7 @@ export const Billing: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-emerald-400 shadow-lg">
           <ShieldCheck className="w-4 h-4" />
-          <span>Active Plan: {planTier} TIER</span>
+          <span>Active Plan: {planTier} TIER {planExpiryDate ? `(Valid till ${planExpiryDate})` : ''}</span>
         </div>
       </div>
 
@@ -254,11 +279,15 @@ export const Billing: React.FC = () => {
                 placeholder="Credits Qty"
               />
               <button
-                onClick={() => createRazorpayOrderMutation.mutate(Number(rechargeAmount))}
+                onClick={() => {
+                  const baseAmount = Number(rechargeAmount);
+                  const finalAmount = Math.round(baseAmount * 1.18);
+                  createRazorpayOrderMutation.mutate({ baseAmount, finalAmount });
+                }}
                 disabled={createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
               >
-                {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Buy Credits'}
+                {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Buy Credits (+18% GST)'}
               </button>
             </div>
           </div>
@@ -278,12 +307,12 @@ export const Billing: React.FC = () => {
           </div>
           <div className="pt-2">
             <button
-              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(590)}
               disabled={createRazorpayAiCreditsOrderMutation.isPending || topupCreditsMutation.isPending}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-purple-500/20 cursor-pointer flex items-center justify-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>{createRazorpayAiCreditsOrderMutation.isPending ? 'Initiating Razorpay...' : 'Buy 1,000 Credits (₹500)'}</span>
+              <span>{createRazorpayAiCreditsOrderMutation.isPending ? 'Initiating Razorpay...' : 'Buy 1,000 Credits (₹590 with GST)'}</span>
             </button>
           </div>
         </div>
@@ -382,10 +411,10 @@ export const Billing: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3 hover:border-purple-500/50 transition-all">
             <div className="text-xs font-bold text-purple-400 uppercase">Mini Credit Pack</div>
-            <div className="text-2xl font-black text-white">₹500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
+            <div className="text-2xl font-black text-white">₹500 <span className="text-[10px] font-normal text-emerald-400">+ 18% GST</span></div>
             <p className="text-xs text-slate-400">Includes 1,000 AI Credits (₹0.50 per credit)</p>
             <button
-              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(500 * 1.18))}
               disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
             >
@@ -396,10 +425,10 @@ export const Billing: React.FC = () => {
           <div className="bg-slate-950 border border-purple-500/50 rounded-xl p-5 space-y-3 relative shadow-lg shadow-purple-500/10">
             <div className="absolute -top-3 right-4 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Most Popular</div>
             <div className="text-xs font-bold text-purple-400 uppercase">Growth Credit Pack</div>
-            <div className="text-2xl font-black text-white">₹1,500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
+            <div className="text-2xl font-black text-white">₹1,500 <span className="text-[10px] font-normal text-emerald-400">+ 18% GST</span></div>
             <p className="text-xs text-slate-400">Includes 3,500 AI Credits (₹0.42 per credit)</p>
             <button
-              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(1500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(1500 * 1.18))}
               disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg text-xs transition-all cursor-pointer shadow-lg shadow-purple-500/20"
             >
@@ -409,10 +438,10 @@ export const Billing: React.FC = () => {
 
           <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-3 hover:border-purple-500/50 transition-all">
             <div className="text-xs font-bold text-purple-400 uppercase">Power Credit Pack</div>
-            <div className="text-2xl font-black text-white">₹3,500 <span className="text-xs font-normal text-slate-400">/ one-time</span></div>
+            <div className="text-2xl font-black text-white">₹3,500 <span className="text-[10px] font-normal text-emerald-400">+ 18% GST</span></div>
             <p className="text-xs text-slate-400">Includes 10,000 AI Credits (₹0.35 per credit)</p>
             <button
-              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(3500)}
+              onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(3500 * 1.18))}
               disabled={createRazorpayAiCreditsOrderMutation.isPending}
               className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
             >
@@ -490,7 +519,7 @@ export const Billing: React.FC = () => {
           <div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-400" />
-              <span>Tax Invoices & Official Billing Receipts</span>
+              <span>Tax Invoices & Purchases (Plans & Credits)</span>
             </h3>
             <p className="text-xs text-slate-400 mt-1">Download official GST tax invoices for wallet top-ups and subscriptions.</p>
           </div>
@@ -518,7 +547,7 @@ export const Billing: React.FC = () => {
                       {new Date(inv.createdAt).toLocaleDateString()}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap font-bold text-emerald-400 font-mono">
-                      ₹{Number(inv.totalAmount || inv.amount || 0).toFixed(2)}
+                      ₹{Number(inv.grandTotal || inv.totalAmount || inv.amount || 0).toFixed(2)}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -527,7 +556,10 @@ export const Billing: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() => alert(`📄 Downloading Official GST Invoice ${inv.invoiceNumber || 'INV-001'}...`)}
+                        onClick={() => {
+                          if (!currentOrg) return toast.error('Organization data missing');
+                          generateInvoicePdf(inv, settingsData || {}, currentOrg);
+                        }}
                         className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
                       >
                         <Download className="w-3.5 h-3.5" />

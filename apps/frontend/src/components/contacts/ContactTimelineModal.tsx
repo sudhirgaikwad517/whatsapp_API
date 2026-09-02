@@ -62,7 +62,7 @@ export const ContactTimelineModal: React.FC<ContactTimelineModalProps> = ({
               <p className="text-xs text-slate-400 font-mono">{contact?.phoneNumber}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800/50">
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800/50">
             <X className="w-5 h-5" />
           </button>
         </div>

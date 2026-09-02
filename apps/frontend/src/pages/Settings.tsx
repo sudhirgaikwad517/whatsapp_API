@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Settings as SettingsIcon, Link2, ShieldCheck, CheckCircle, RefreshCw, Bot, Plus, Trash2, Tag, CreditCard } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 
@@ -64,10 +65,10 @@ export const Settings: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-details'] });
-      alert('🤖 AI Knowledgebase & Auto-Responder Settings saved successfully!');
+      toast.success('AI knowledgebase & auto-responder settings saved successfully!');
     },
     onError: (err: any) => {
-      alert(`Failed to save AI settings: ${err.message}`);
+      toast.error('Failed to save AI settings', { description: err.message });
     },
   });
 
@@ -81,10 +82,10 @@ export const Settings: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['org-details'] });
-      alert('💳 Razorpay API Credentials stored securely!');
+      toast.success('Razorpay API credentials stored securely!');
     },
     onError: (err: any) => {
-      alert(`Failed to save Razorpay Credentials: ${err.message}`);
+      toast.error('Failed to save Razorpay credentials', { description: err.message });
     },
   });
 
@@ -112,7 +113,7 @@ export const Settings: React.FC = () => {
       return res.data.data;
     },
     onSuccess: async () => {
-      alert('Meta Connected Successfully!');
+      toast.success('Meta connected successfully!');
       try {
         await apiClient.post('/whatsapp/templates/sync');
         queryClient.invalidateQueries({ queryKey: ['whatsapp-health'] });
@@ -121,7 +122,7 @@ export const Settings: React.FC = () => {
       }
     },
     onError: (err: any) => {
-      alert(`Embedded Signup Failed: ${err.message}`);
+      toast.error('Embedded signup failed', { description: err.message });
     },
   });
 
@@ -142,14 +143,14 @@ export const Settings: React.FC = () => {
         await apiClient.post('/whatsapp/templates/sync');
         queryClient.invalidateQueries({ queryKey: ['whatsapp-health'] });
         queryClient.invalidateQueries({ queryKey: ['templates-list'] });
-        alert('✅ Success! Credentials saved & Meta Templates automatically synced and purged!');
+        toast.success('Credentials saved & Meta templates synced!');
       } catch {
-        alert('✅ Success! Meta Credentials saved successfully!');
+        toast.success('Meta credentials saved successfully!');
       }
       setAccessToken('');
     },
     onError: (err: any) => {
-      alert(`❌ Failed to save: ${err.response?.data?.error?.message || err.message}`);
+      toast.error('Failed to save', { description: err.response?.data?.error?.message || err.message });
     },
   });
 
@@ -266,7 +267,7 @@ export const Settings: React.FC = () => {
           <button
             onClick={() => {
               if (!window.FB) {
-                alert('Facebook SDK is still loading. Please try again in a few seconds.');
+                toast.error('Facebook SDK is still loading — please try again in a few seconds.');
                 return;
               }
 
@@ -288,7 +289,7 @@ export const Settings: React.FC = () => {
                       displayPhoneNumber: 'YOUR_DISPLAY_PHONE',
                     });
                   } else {
-                    alert('Facebook login was cancelled or failed.');
+                    toast.error('Facebook login was cancelled or failed.');
                   }
                 },
                 {

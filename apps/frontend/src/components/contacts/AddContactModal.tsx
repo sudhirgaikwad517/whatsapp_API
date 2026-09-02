@@ -51,7 +51,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             <UserPlus className="w-5 h-5 mr-2 text-emerald-400" />
             Add New WhatsApp Contact
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -70,10 +70,11 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
           className="space-y-4"
         >
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+            <label htmlFor="contact-phone" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
               Phone Number (E.164 format with country code)
             </label>
             <input
+              id="contact-phone"
               type="text"
               required
               placeholder="+919876543210"
@@ -85,10 +86,11 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <label htmlFor="contact-first-name" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
                 First Name
               </label>
               <input
+                id="contact-first-name"
                 type="text"
                 placeholder="Rahul"
                 value={firstName}
@@ -98,10 +100,11 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <label htmlFor="contact-last-name" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
                 Last Name
               </label>
               <input
+                id="contact-last-name"
                 type="text"
                 placeholder="Sharma"
                 value={lastName}
@@ -112,10 +115,11 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+            <label htmlFor="contact-email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
               Email Address
             </label>
             <input
+              id="contact-email"
               type="email"
               placeholder="rahul@example.com"
               value={email}

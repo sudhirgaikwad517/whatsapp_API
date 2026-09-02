@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
+import { getTemplateSentCounts } from './usage-metrics.service.js';
 
 export async function getOrCreateWallet(organizationId: string) {
   let wallet = await prisma.wallet.findUnique({
@@ -241,24 +242,12 @@ export async function rechargeWallet(
     }
 
     // 1. Calculate and auto-commit any pending unbilled charges BEFORE recharge
-    const exactTemplateCounts: any[] = await tx.$queryRaw`
-      SELECT 
-        COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
-        COUNT(*) FILTER (WHERE t."category" ILIKE 'utility') as utility_sent
-      FROM "Message" m
-      INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
-      WHERE m."organizationId" = ${organizationId}::uuid
-        AND m."direction" = 'OUTBOUND'
-        AND m."type" = 'TEMPLATE'
-        AND m."status" != 'FAILED'
-    `;
+    const { marketingSent, utilitySent } = await getTemplateSentCounts(tx, { organizationId });
 
     const campaignRecipients = await tx.campaignRecipient.count({
       where: { campaign: { organizationId: organizationId }, status: { not: 'FAILED' } },
     });
 
-    const marketingSent = Number(exactTemplateCounts[0]?.marketing_sent || 0);
-    const utilitySent = Number(exactTemplateCounts[0]?.utility_sent || 0);
     const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
     
     const ledgerDebitsSum = await tx.walletLedger.aggregate({

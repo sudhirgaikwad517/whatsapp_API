@@ -1,6 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
 import { env } from './config/env.js';
 import { errorHandler } from './middlewares/error-handler.middleware.js';
@@ -9,6 +10,7 @@ import { logger } from './utils/logger.js';
 // Routes
 import authRoutes from './routes/auth.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+import paymentWebhooksRoutes from './routes/payment-webhooks.routes.js';
 import organizationRoutes from './routes/organization.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
 import contactRoutes from './routes/contact.routes.js';
@@ -31,18 +33,37 @@ export function createApp(): Application {
 
   // ── Security Headers & Production CORS ─────────────────────────────────────
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+  const ALLOWED_HOSTNAMES = new Set([
+    'wabtic.com',
+    'app.wabtic.com',
+    'api.wabtic.com',
+    'localhost',
+    '127.0.0.1',
+    ...env.ALLOWED_ORIGINS.split(',').map((h) => h.trim()).filter(Boolean),
+    ...(() => {
+      try {
+        return [new URL(env.FRONTEND_URL).hostname];
+      } catch {
+        return [];
+      }
+    })(),
+  ]);
+
   app.use(
     cors({
       origin: (origin, callback) => {
         // Allow requests with no origin (like webhooks, curl, postman, mobile apps)
         if (!origin) return callback(null, true);
-        if (
-          origin === env.FRONTEND_URL ||
-          origin.includes('wabtic.com') ||
-          origin.includes('localhost') ||
-          origin.includes('127.0.0.1')
-        ) {
-          return callback(null, true);
+        try {
+          const hostname = new URL(origin).hostname;
+          // Exact hostname match only — a substring check here would also match
+          // an attacker-controlled domain like "wabtic.com.evil.com".
+          if (ALLOWED_HOSTNAMES.has(hostname)) {
+            return callback(null, true);
+          }
+        } catch {
+          // Malformed Origin header — fall through to reject.
         }
         return callback(null, false);
       },
@@ -91,6 +112,7 @@ export function createApp(): Application {
     }
   });
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
 
   // ── Request ID Injection ──────────────────────────────────────────────────
   app.use((req, _res, next) => {
@@ -106,11 +128,22 @@ export function createApp(): Application {
   });
 
   // ── Static Public Uploads Route ───────────────────────────────────────────
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // Deliberately public (not behind `authenticate`): WhatsApp campaign/template
+  // header images and catalog product images stored here must be fetchable by
+  // Meta's servers directly, which carry no tenant JWT. Access control instead
+  // relies on filenames being unguessable crypto.randomUUID() values (see
+  // media-compression.service.ts) — there is no directory listing, and no
+  // customer-uploaded or otherwise sensitive content is stored in this
+  // directory today. `dotfiles`/`index` are locked down as defense in depth.
+  app.use(
+    '/uploads',
+    express.static(path.join(process.cwd(), 'uploads'), { dotfiles: 'deny', index: false })
+  );
 
   // ── API Routes ────────────────────────────────────────────────────────────
   app.use('/api/v1/auth', authLimiter, authRoutes);
   app.use('/api/v1/webhooks', webhookRoutes);
+  app.use('/api/v1/webhooks/payments', paymentWebhooksRoutes);
   app.use('/api/v1/organization', organizationRoutes);
   app.use('/api/v1/whatsapp', whatsappRoutes);
   app.use('/api/v1/contacts', contactRoutes);

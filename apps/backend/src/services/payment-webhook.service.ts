@@ -7,15 +7,18 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 
 export async function processRazorpayWebhook(rawBody: string, signature: string) {
-  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || 'prowexa_razorpay_secret_123';
+  const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    throw new AppError('Razorpay webhook secret not configured on server.', 500, 'SERVER_MISCONFIGURATION');
+  }
 
-  // Verify HMAC SHA256 Signature
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(rawBody)
-    .digest('hex');
+  // Verify HMAC SHA256 Signature — always, regardless of environment.
+  const expectedSignature = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+  const expected = Buffer.from(expectedSignature, 'hex');
+  const received = Buffer.from(signature || '', 'hex');
+  const isValid = expected.length === received.length && crypto.timingSafeEqual(expected, received);
 
-  if (signature !== expectedSignature && process.env.NODE_ENV === 'production') {
+  if (!isValid) {
     throw new AppError('Invalid Razorpay Webhook HMAC Signature', 400, 'INVALID_SIGNATURE');
   }
 
@@ -26,7 +29,12 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
     const payment = payload.payload.payment.entity;
     const paymentId = payment.id;
     const amountPaid = payment.amount / 100; // Razorpay amounts are in paise
-    const organizationId = payment.notes?.organizationId || '3139c8ac-9b48-4d35-ad70-b6ff8db7addb';
+    const organizationId = payment.notes?.organizationId;
+
+    if (!organizationId) {
+      logger.error({ paymentId }, 'Razorpay webhook payment carries no organizationId in notes — rejecting rather than guessing a tenant.');
+      throw new AppError('Payment notes missing organizationId; cannot attribute this payment to a tenant.', 400, 'MISSING_ORGANIZATION_ID');
+    }
 
     // Idempotency Check: Prevent duplicate wallet recharges
     const existingInvoice = await prisma.invoice.findFirst({
@@ -70,57 +78,6 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       { organizationId, paymentId, invoiceNumber, amountPaid, walletBalance: wallet.availableBalance.toString() },
       '✅ Razorpay Payment Processed: Wallet Credited & Invoice Generated!'
     );
-
-    return { success: true, invoice, wallet };
-  }
-
-  return { success: true, processed: false };
-}
-
-export async function processStripeWebhook(rawBody: string, signature: string) {
-  const payload = JSON.parse(rawBody);
-  logger.info({ event: payload.type }, 'Received Stripe Payment Webhook Event');
-
-  if (payload.type === 'checkout.session.completed' || payload.type === 'payment_intent.succeeded') {
-    const session = payload.data.object;
-    const paymentId = session.id;
-    const amountPaid = session.amount_total ? session.amount_total / 100 : session.amount / 100;
-    const organizationId = session.metadata?.organizationId || '3139c8ac-9b48-4d35-ad70-b6ff8db7addb';
-
-    // Idempotency Check: Prevent duplicate wallet recharges
-    const existingInvoice = await prisma.invoice.findFirst({
-      where: { paymentId },
-    });
-
-    if (existingInvoice) {
-      logger.info({ paymentId }, 'Stripe webhook already processed. Skipping duplicate.');
-      return { success: true, processed: false, reason: 'ALREADY_PROCESSED' };
-    }
-
-    const subtotal = Number((amountPaid / 1.18).toFixed(2));
-    const taxAmount = Number((amountPaid - subtotal).toFixed(2));
-
-    const wallet = await rechargeWallet(
-      organizationId,
-      subtotal,
-      paymentId,
-      `Stripe Wallet Top-Up (${paymentId})`
-    );
-
-    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
-    const invoice = await prisma.invoice.create({
-      data: {
-        organizationId,
-        invoiceNumber,
-        subtotal: new Prisma.Decimal(subtotal),
-        taxAmount: new Prisma.Decimal(taxAmount),
-        grandTotal: new Prisma.Decimal(amountPaid),
-        currency: session.currency?.toUpperCase() || 'INR',
-        paymentId,
-        gatewayName: 'STRIPE',
-        status: 'PAID',
-      },
-    });
 
     return { success: true, invoice, wallet };
   }

@@ -26,16 +26,13 @@ export const webhookWorker = new Worker(
       const { value } = change;
       const phoneNumberId = value.metadata.phone_number_id;
 
-      // Resolve the WhatsApp account for this phone number (with fallback to first active account)
-      let waAccount = await prisma.whatsappAccount.findUnique({
+      // Resolve the WhatsApp account for this phone number. Deliberately no
+      // fallback to "any connected account" — guessing a tenant here would
+      // attribute a message (and any auto-reply/billing it triggers) to the
+      // wrong organization.
+      const waAccount = await prisma.whatsappAccount.findUnique({
         where: { phoneNumberId },
       });
-
-      if (!waAccount) {
-        waAccount = await prisma.whatsappAccount.findFirst({
-          where: { status: 'CONNECTED', deletedAt: null },
-        });
-      }
 
       if (!waAccount) {
         logger.warn({ phoneNumberId }, 'Received webhook for unknown phoneNumberId — skipping.');
@@ -97,7 +94,7 @@ export const webhookWorker = new Worker(
             },
           });
 
-          const orgInfo = await (prisma as any).organization.findUnique({
+          const orgInfo = await prisma.organization.findUnique({
             where: { id: waAccount.organizationId },
             select: { aiKnowledgeBase: true, isAiAutoRespondEnabled: true },
           });
@@ -251,7 +248,7 @@ export const webhookWorker = new Worker(
             const cleanTextLower = textBody.toLowerCase();
 
             // 0. Autonomous Commerce Engine (Auto-Product & Auto-Payment Bot)
-            const matchedProduct = await (prisma as any).productCatalog.findFirst({
+            const matchedProduct = await prisma.productCatalog.findFirst({
               where: {
                 organizationId: waAccount.organizationId,
                 isActive: true,
@@ -300,7 +297,7 @@ export const webhookWorker = new Worker(
               }
             } else {
               // 2. Autonomous AI Auto-Responder Engine OR Keyword Auto-Responder
-              const org = await (prisma as any).organization.findUnique({
+              const org = await prisma.organization.findUnique({
                 where: { id: waAccount.organizationId },
                 select: { name: true, isAiAutoRespondEnabled: true },
               });
@@ -327,17 +324,19 @@ export const webhookWorker = new Worker(
                 }
 
                 if (autoReplyText) {
-                  const orgId = waAccount.organizationId;
-                  const convId = conversation.id;
-                  const replyText = autoReplyText;
-                  setTimeout(async () => {
-                    try {
-                      const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
-                      await sendOutboundTextMessage(orgId, convId, replyText);
-                    } catch (err) {
-                      logger.error({ err }, 'Auto-responder dispatch failed');
-                    }
-                  }, 1000);
+                  // Dispatched as a durable, delayed BullMQ job (not a detached
+                  // setTimeout) so a process restart within the delay window
+                  // doesn't silently drop the reply.
+                  await autoResponderQueue.add(
+                    'keyword-reply',
+                    {
+                      type: 'flow',
+                      organizationId: waAccount.organizationId,
+                      conversationId: conversation.id,
+                      text: autoReplyText,
+                    },
+                    { delay: 1000 }
+                  );
                 }
               }
             }

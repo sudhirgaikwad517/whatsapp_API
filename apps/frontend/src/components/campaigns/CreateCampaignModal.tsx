@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { apiClient } from '../../services/api.client';
 
 interface CreateCampaignModalProps {
@@ -52,7 +53,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit for Meta Media Upload.');
+      toast.error('File size exceeds 5MB limit for Meta Media Upload.');
       return;
     }
 
@@ -70,7 +71,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setHeaderMediaUrl(mediaId);
       setMediaCompressStats(`⚡ Uploaded securely to Meta. Media ID: ${mediaId}`);
     } catch (err: any) {
-      alert(`Meta Media Upload Error: ${err.response?.data?.error?.message || err.message}`);
+      toast.error('Meta media upload failed', { description: err.response?.data?.error?.message || err.message });
     } finally {
       setIsUploadingMedia(false);
     }

@@ -8,7 +8,7 @@ export interface CreateCannedResponseInput {
 }
 
 export async function listCannedResponses(organizationId: string) {
-  return (prisma as any).cannedResponse.findMany({
+  return prisma.cannedResponse.findMany({
     where: { organizationId },
     orderBy: { shortcut: 'asc' },
   });
@@ -26,7 +26,7 @@ export async function createCannedResponse(organizationId: string, input: Create
     throw new AppError('Message body cannot be empty.', 400, 'INVALID_MESSAGE');
   }
 
-  const existing = await (prisma as any).cannedResponse.findUnique({
+  const existing = await prisma.cannedResponse.findUnique({
     where: {
       organizationId_shortcut: {
         organizationId,
@@ -39,7 +39,7 @@ export async function createCannedResponse(organizationId: string, input: Create
     throw new AppError(`A canned response with shortcut "/${cleanShortcut}" already exists.`, 400, 'DUPLICATE_SHORTCUT');
   }
 
-  return (prisma as any).cannedResponse.create({
+  return prisma.cannedResponse.create({
     data: {
       organizationId,
       shortcut: cleanShortcut,
@@ -50,7 +50,7 @@ export async function createCannedResponse(organizationId: string, input: Create
 }
 
 export async function deleteCannedResponse(organizationId: string, id: string) {
-  const item = await (prisma as any).cannedResponse.findFirst({
+  const item = await prisma.cannedResponse.findFirst({
     where: { id, organizationId },
   });
 
@@ -58,7 +58,7 @@ export async function deleteCannedResponse(organizationId: string, id: string) {
     throw new AppError('Canned response snippet not found.', 404, 'NOT_FOUND');
   }
 
-  await (prisma as any).cannedResponse.delete({
+  await prisma.cannedResponse.delete({
     where: { id },
   });
 

@@ -86,7 +86,7 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({ isOpen, onClose 
             <Upload className="w-5 h-5 mr-2 text-emerald-400" />
             Import CSV Audience Contacts
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -119,10 +119,11 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({ isOpen, onClose 
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              <label htmlFor="csv-file-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Select CSV File (Format: phoneNumber, firstName, lastName, email)
               </label>
               <input
+                id="csv-file-input"
                 type="file"
                 accept=".csv,.txt"
                 onChange={handleFileUpload}
@@ -131,10 +132,11 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({ isOpen, onClose 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              <label htmlFor="csv-paste-textarea" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
                 Or Paste Raw CSV Data
               </label>
               <textarea
+                id="csv-paste-textarea"
                 rows={5}
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}

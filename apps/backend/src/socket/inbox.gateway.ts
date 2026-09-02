@@ -2,7 +2,17 @@ import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { COOKIE_NAMES } from '../utils/auth-cookies.js';
 import type { UserRole } from '@prowexa/shared-types';
+
+function extractAccessTokenFromCookieHeader(cookieHeader: string | undefined): string | undefined {
+  if (!cookieHeader) return undefined;
+  const match = cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${COOKIE_NAMES.ACCESS_TOKEN}=`));
+  return match ? decodeURIComponent(match.slice(COOKIE_NAMES.ACCESS_TOKEN.length + 1)) : undefined;
+}
 
 export interface SocketUser {
   userId: string;
@@ -34,14 +44,17 @@ export function initSocketServer(httpServer: any): Server {
 
   // Socket Authentication Middleware
   io.use((socket: AuthenticatedSocket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.split(' ')[1] ||
+      extractAccessTokenFromCookieHeader(socket.handshake.headers?.cookie);
 
     if (!token) {
       return next(new Error('Authentication error: Token required.'));
     }
 
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET) as SocketUser;
+      const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as SocketUser;
       socket.user = decoded;
       next();
     } catch {

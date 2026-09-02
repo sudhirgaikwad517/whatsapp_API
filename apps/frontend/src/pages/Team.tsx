@@ -1,13 +1,23 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Users2, UserPlus, Shield, Trash2, Mail, CheckCircle2, UserCheck } from 'lucide-react';
 import { apiClient } from '../services/api.client';
+import { confirmAction } from '../components/ui/ConfirmDialog';
+
+// Generates a random initial password per invite — a fixed default here would
+// be a standing, publicly-known password for every newly-invited team member
+// across every tenant, unless the admin remembers to change it every time.
+function generateRandomPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, '').slice(0, 12) + '!A1';
+}
 
 export const Team: React.FC = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('Prowexa123!');
+  const [password, setPassword] = useState(generateRandomPassword);
   const [role, setRole] = useState<'MANAGER' | 'AGENT'>('AGENT');
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; pass: string; name: string; role: string } | null>(null);
 
@@ -42,10 +52,10 @@ export const Team: React.FC = () => {
       setIsInviteOpen(false);
       setFullName('');
       setEmail('');
-      setPassword('Prowexa123!');
+      setPassword(generateRandomPassword());
     },
     onError: (err: any) => {
-      alert(`❌ Failed to create member: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Failed to create member', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 
@@ -56,10 +66,10 @@ export const Team: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
-      alert('✅ Team member removed successfully.');
+      toast.success('Team member removed successfully.');
     },
     onError: (err: any) => {
-      alert(`❌ Removal Failed: ${err?.response?.data?.error?.message || err.message}`);
+      toast.error('Removal failed', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 
@@ -146,10 +156,14 @@ export const Team: React.FC = () => {
                   <td className="py-4 px-6 text-right">
                     {m.role !== 'BUSINESS_OWNER' && (
                       <button
-                        onClick={() => {
-                          if (window.confirm(`Are you sure you want to remove ${m.user?.fullName}?`)) {
-                            removeMutation.mutate(m.user?.id);
-                          }
+                        onClick={async () => {
+                          const ok = await confirmAction({
+                            title: `Remove ${m.user?.fullName}?`,
+                            message: 'They will immediately lose access to this organization.',
+                            danger: true,
+                            confirmLabel: 'Remove',
+                          });
+                          if (ok) removeMutation.mutate(m.user?.id);
                         }}
                         title="Remove Member"
                         className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
@@ -176,6 +190,7 @@ export const Team: React.FC = () => {
               </h3>
               <button
                 onClick={() => setIsInviteOpen(false)}
+                aria-label="Close"
                 className="text-slate-400 hover:text-white text-lg font-bold"
               >
                 ✕
@@ -184,10 +199,11 @@ export const Team: React.FC = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label htmlFor="team-invite-fullname" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Full Name
                 </label>
                 <input
+                  id="team-invite-fullname"
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -197,10 +213,11 @@ export const Team: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label htmlFor="team-invite-email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Email Address
                 </label>
                 <input
+                  id="team-invite-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -210,14 +227,15 @@ export const Team: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label htmlFor="team-invite-password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Initial Login Password
                 </label>
                 <input
+                  id="team-invite-password"
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Prowexa123!"
+                  placeholder="Auto-generated — feel free to change it"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono"
                 />
                 <span className="text-[10px] text-slate-500 mt-1 block">
@@ -226,10 +244,11 @@ export const Team: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                <label htmlFor="team-invite-role" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Assign System Role
                 </label>
                 <select
+                  id="team-invite-role"
                   value={role}
                   onChange={(e) => setRole(e.target.value as any)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -262,6 +281,7 @@ export const Team: React.FC = () => {
               </h3>
               <button
                 onClick={() => setCreatedCredentials(null)}
+                aria-label="Close"
                 className="text-slate-400 hover:text-white text-lg font-bold"
               >
                 ✕
@@ -275,7 +295,7 @@ export const Team: React.FC = () => {
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 font-mono text-xs text-slate-300">
               <div>
                 <span className="text-slate-500 block uppercase text-[10px]">Login Page URL</span>
-                <span className="text-emerald-400 select-all font-semibold">http://localhost:5173/login</span>
+                <span className="text-emerald-400 select-all font-semibold">{window.location.origin}/login</span>
               </div>
               <div>
                 <span className="text-slate-500 block uppercase text-[10px]">Email Address</span>
@@ -289,8 +309,8 @@ export const Team: React.FC = () => {
 
             <button
               onClick={() => {
-                navigator.clipboard.writeText(`Prowexa Login Credentials:\nURL: http://localhost:5173/login\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.pass}`);
-                alert('📋 Login details copied to clipboard!');
+                navigator.clipboard.writeText(`Prowexa Login Credentials:\nURL: ${window.location.origin}/login\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.pass}`);
+                toast.success('Login details copied to clipboard.');
               }}
               className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center cursor-pointer border border-slate-700"
             >

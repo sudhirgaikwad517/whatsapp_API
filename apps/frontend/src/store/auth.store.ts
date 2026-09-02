@@ -10,86 +10,99 @@ export interface User {
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
   isImpersonating: boolean;
-  originalSuperAdmin: { user: User; token: string } | null;
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
-  startImpersonation: (tenantUser: User, tenantToken: string) => void;
-  stopImpersonation: () => void;
-  logout: () => void;
+  setAuth: (user: User) => void;
+  startImpersonation: (tenantUser: User) => void;
+  stopImpersonation: () => Promise<void>;
+  logout: () => Promise<void>;
+  syncUser: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null,
-  token: localStorage.getItem('access_token'),
-  isAuthenticated: !!localStorage.getItem('access_token'),
-  isImpersonating: localStorage.getItem('is_impersonating') === 'true',
-  originalSuperAdmin: localStorage.getItem('superadmin_backup')
-    ? JSON.parse(localStorage.getItem('superadmin_backup')!)
-    : null,
+// The auth tokens themselves live only in httpOnly cookies set by the server —
+// this store keeps just the non-sensitive user object, for instant UI state on
+// reload (a stale copy is harmless; syncUser() below refreshes it from /auth/me).
+const STORED_USER_KEY = 'auth_user';
+const STORED_IMPERSONATING_KEY = 'is_impersonating';
 
-  setAuth: (user: User, accessToken: string, refreshToken: string) => {
-    localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('refresh_token', refreshToken);
-    localStorage.setItem('auth_user', JSON.stringify(user));
-    localStorage.removeItem('is_impersonating');
-    localStorage.removeItem('superadmin_backup');
-    set({ user, token: accessToken, isAuthenticated: true, isImpersonating: false, originalSuperAdmin: null });
+function readStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(STORED_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: readStoredUser(),
+  isAuthenticated: !!readStoredUser(),
+  isImpersonating: localStorage.getItem(STORED_IMPERSONATING_KEY) === 'true',
+
+  setAuth: (user: User) => {
+    localStorage.setItem(STORED_USER_KEY, JSON.stringify(user));
+    localStorage.removeItem(STORED_IMPERSONATING_KEY);
+    set({ user, isAuthenticated: true, isImpersonating: false });
   },
 
-  startImpersonation: (tenantUser: User, tenantToken: string) => {
-    const currentState = get();
-    if (currentState.user && currentState.token) {
-      const backup = { user: currentState.user, token: currentState.token };
-      localStorage.setItem('superadmin_backup', JSON.stringify(backup));
-    }
-    localStorage.setItem('access_token', tenantToken);
-    localStorage.setItem('auth_user', JSON.stringify(tenantUser));
-    localStorage.setItem('is_impersonating', 'true');
-    set({
-      user: tenantUser,
-      token: tenantToken,
-      isAuthenticated: true,
-      isImpersonating: true,
-    });
+  startImpersonation: (tenantUser: User) => {
+    // The backend has already swapped the session cookie to the impersonation
+    // token (and stashed the super admin's own token) as a side effect of the
+    // /superadmin/impersonate call — this only updates local UI state.
+    localStorage.setItem(STORED_USER_KEY, JSON.stringify(tenantUser));
+    localStorage.setItem(STORED_IMPERSONATING_KEY, 'true');
+    set({ user: tenantUser, isAuthenticated: true, isImpersonating: true });
   },
 
-  stopImpersonation: () => {
-    const backupStr = localStorage.getItem('superadmin_backup');
-    if (backupStr) {
-      try {
-        const backup = JSON.parse(backupStr);
-        localStorage.setItem('access_token', backup.token);
-        localStorage.setItem('auth_user', JSON.stringify(backup.user));
-        localStorage.removeItem('is_impersonating');
-        localStorage.removeItem('superadmin_backup');
-        set({
-          user: backup.user,
-          token: backup.token,
-          isAuthenticated: true,
-          isImpersonating: false,
-          originalSuperAdmin: null,
-        });
+  stopImpersonation: async () => {
+    try {
+      const { apiClient } = await import('../services/api.client');
+      const res = await apiClient.post('/superadmin/stop-impersonation');
+      const restoredUser = res.data?.data?.user;
+      if (restoredUser) {
+        localStorage.setItem(STORED_USER_KEY, JSON.stringify(restoredUser));
+        localStorage.removeItem(STORED_IMPERSONATING_KEY);
+        set({ user: restoredUser, isAuthenticated: true, isImpersonating: false });
         return;
-      } catch {
-        // fallback
       }
+    } catch (err) {
+      console.warn('Failed to restore super admin session:', err);
     }
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('is_impersonating');
-    localStorage.removeItem('superadmin_backup');
-    set({ user: null, token: null, isAuthenticated: false, isImpersonating: false, originalSuperAdmin: null });
+    localStorage.removeItem(STORED_USER_KEY);
+    localStorage.removeItem(STORED_IMPERSONATING_KEY);
+    set({ user: null, isAuthenticated: false, isImpersonating: false });
   },
 
-  logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('is_impersonating');
-    localStorage.removeItem('superadmin_backup');
-    set({ user: null, token: null, isAuthenticated: false, isImpersonating: false, originalSuperAdmin: null });
+  logout: async () => {
+    try {
+      const { apiClient } = await import('../services/api.client');
+      await apiClient.post('/auth/logout');
+    } catch {
+      // Best-effort: even if the revoke call fails, still clear local state below.
+    }
+    localStorage.removeItem(STORED_USER_KEY);
+    localStorage.removeItem(STORED_IMPERSONATING_KEY);
+    set({ user: null, isAuthenticated: false, isImpersonating: false });
+
+    // Unified Logout: Redirect back to website with logout flag
+    const isProduction = typeof window !== 'undefined' && (window.location.hostname.includes('wabtic.com') || window.location.protocol === 'https:');
+    const websiteUrl = (import.meta as any).env?.VITE_FRONTEND_URL || (isProduction ? 'https://wabtic.com' : 'http://localhost:3000');
+    window.location.href = `${websiteUrl}?logout=true`;
+  },
+
+  syncUser: async () => {
+    try {
+      const { apiClient } = await import('../services/api.client');
+      const res = await apiClient.get('/auth/me');
+      if (res.data?.data?.user) {
+        const freshUser = res.data.data.user;
+        localStorage.setItem(STORED_USER_KEY, JSON.stringify(freshUser));
+        set({ user: freshUser });
+      }
+    } catch (err) {
+      // If unauthorized, the cookie is invalid/expired — leave state as-is;
+      // the next authenticated API call's 401 handling will redirect to login.
+      console.warn('Failed to sync user profile:', err);
+    }
   },
 }));

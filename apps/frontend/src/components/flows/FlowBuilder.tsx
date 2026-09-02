@@ -14,6 +14,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { ArrowLeft, Save, Zap, MessageSquare, List, GitBranch, UserCheck, Plus, CheckCircle2, Trash2, X, Layers } from 'lucide-react';
 import { apiClient } from '../../services/api.client';
 
@@ -32,7 +33,7 @@ const initialNodes: Node[] = [
   },
   {
     id: '2',
-    data: { label: '💬 Send Message: "Welcome to Shrishti Dairy Farm! How can we help you today?"' },
+    data: { label: '💬 Send Message: "Welcome to our business! How can we help you today?"' },
     position: { x: 250, y: 180 },
     style: { background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: '12px', padding: '12px', fontSize: '12px' },
   },
@@ -95,11 +96,11 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
       }
     },
     onSuccess: () => {
-      alert('🎉 Success! Chatbot Flow saved successfully.');
+      toast.success('Chatbot flow saved successfully!');
       onClose();
     },
     onError: (err: any) => {
-      alert(`❌ Failed to save flow: ${err.message}`);
+      toast.error('Failed to save flow', { description: err.message });
     },
   });
 
@@ -130,7 +131,7 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
         return node;
       })
     );
-    alert('✅ Node content updated!');
+    toast.success('Node content updated.');
   };
 
   const deleteSelectedNode = () => {

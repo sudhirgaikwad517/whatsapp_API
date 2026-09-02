@@ -156,7 +156,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   const batchIntervalMinutes = Math.max(1, Number(input.batchIntervalMinutes) || 20);
 
   // Create campaign record with recipient snapshots
-  const campaign = await (prisma as any).campaign.create({
+  const campaign = await prisma.campaign.create({
     data: {
       organizationId,
       templateId: template.id,

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { User, Building, LifeBuoy, Plus, Send, ShieldCheck, Key, CheckCircle2, Clock, MessageSquare, AlertCircle } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
@@ -53,10 +54,10 @@ export const Profile: React.FC = () => {
       setIsNewTicketModalOpen(false);
       setTicketSubject('');
       setTicketDesc('');
-      alert('🎫 Support Ticket raised successfully! Our support engineering team will respond shortly.');
+      toast.success('Support ticket raised successfully!', { description: 'Our support engineering team will respond shortly.' });
     },
     onError: (err: any) => {
-      alert(`Ticket error: ${err.message}`);
+      toast.error('Failed to raise ticket', { description: err.message });
     },
   });
 
@@ -72,7 +73,7 @@ export const Profile: React.FC = () => {
       setReplyMessage('');
     },
     onError: (err: any) => {
-      alert(`Reply error: ${err.message}`);
+      toast.error('Failed to send reply', { description: err.message });
     },
   });
 
@@ -195,7 +196,7 @@ export const Profile: React.FC = () => {
 
               <div className="pt-2 flex justify-end">
                 <button
-                  onClick={() => alert('Profile details updated successfully!')}
+                  onClick={() => toast.success('Profile details updated successfully!')}
                   className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 text-xs transition-all cursor-pointer"
                 >
                   Save Profile Changes

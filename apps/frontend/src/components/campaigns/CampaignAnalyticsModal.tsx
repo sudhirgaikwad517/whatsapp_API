@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   X,
   BarChart3,
@@ -94,7 +95,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
 
       const exportRecipients = res.data?.data?.recipients || [];
       if (exportRecipients.length === 0) {
-        alert('No records available to export for this tab.');
+        toast.error('No records available to export for this tab.');
         return;
       }
 
@@ -137,7 +138,7 @@ export const CampaignAnalyticsModal: React.FC<CampaignAnalyticsModalProps> = ({
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Failed to export campaign recipients:', err);
-      alert('Failed to export data. Please try again.');
+      toast.error('Failed to export data. Please try again.');
     } finally {
       setIsExporting(false);
     }

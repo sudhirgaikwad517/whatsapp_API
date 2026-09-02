@@ -12,12 +12,17 @@ export function verifyMetaWebhookSignature(
   rawBody: Buffer,
   signatureHeader: string
 ): boolean {
-  // If META_APP_SECRET is not configured or uses placeholder, allow webhooks to process
-  if (
+  const secretIsUnconfigured =
     !env.META_APP_SECRET ||
     env.META_APP_SECRET.includes('your_meta_app_secret') ||
-    env.META_APP_SECRET.trim() === ''
-  ) {
+    env.META_APP_SECRET.trim() === '';
+
+  if (secretIsUnconfigured) {
+    if (env.NODE_ENV === 'production') {
+      logger.error('META_APP_SECRET is not configured in production — rejecting webhook rather than accepting it unverified.');
+      return false;
+    }
+    // Dev/test convenience only: allow local webhook simulation without a real Meta app secret.
     return true;
   }
 

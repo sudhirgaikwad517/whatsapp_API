@@ -24,6 +24,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 import { SendTemplateModal } from '../components/inbox/SendTemplateModal';
@@ -74,9 +75,9 @@ export const Inbox: React.FC = () => {
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentDesc('');
-      alert('💳 Razorpay Payment Link dispatched to WhatsApp chat!');
+      toast.success('Razorpay payment link dispatched to WhatsApp chat!');
     } catch (err: any) {
-      alert(`Payment Request Error: ${err.message}`);
+      toast.error('Payment request failed', { description: err.message });
     } finally {
       setIsRequestingPayment(false);
     }
@@ -93,7 +94,7 @@ export const Inbox: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setIsCatalogModalOpen(false);
     } catch (err: any) {
-      alert(`Send Product Error: ${err.message}`);
+      toast.error('Failed to send product', { description: err.message });
     }
   };
 
@@ -204,14 +205,16 @@ export const Inbox: React.FC = () => {
   }, [activeConversationId]);
 
   // Realtime Socket.IO Connection
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
+    if (!isAuthenticated) return;
 
     const isProduction = (import.meta as any).env.MODE === 'production';
     const apiUrl = (import.meta as any).env.VITE_API_URL || (isProduction ? 'https://api.wabtic.com' : 'http://localhost:5050');
+    // No token is passed explicitly — the httpOnly auth cookie is sent
+    // automatically with the connection handshake (withCredentials: true).
     const socket = io(apiUrl, {
-      auth: { token },
+      withCredentials: true,
       transports: ['websocket', 'polling'],
     });
 
@@ -231,7 +234,7 @@ export const Inbox: React.FC = () => {
     return () => {
       socket.disconnect();
     };
-  }, [queryClient]);
+  }, [queryClient, isAuthenticated]);
 
   // Outbound message mutation
   const sendMutation = useMutation({
@@ -248,7 +251,7 @@ export const Inbox: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (err: any) => {
-      alert(`❌ Failed to send message: ${err.response?.data?.error?.message || err.message}`);
+      toast.error('Failed to send message', { description: err.response?.data?.error?.message || err.message });
     },
   });
 
@@ -313,7 +316,7 @@ export const Inbox: React.FC = () => {
         setMessageText(res.data.data.suggestedText);
       }
     } catch (err: any) {
-      alert(`AI Suggestion Error: ${err.message}`);
+      toast.error('AI suggestion failed', { description: err.message });
     } finally {
       setIsAiSuggesting(false);
     }
@@ -837,7 +840,7 @@ export const Inbox: React.FC = () => {
                           queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
                           queryClient.invalidateQueries({ queryKey: ['conversations'] });
                         } catch (err: any) {
-                          alert(`Failed to attach media: ${err.message}`);
+                          toast.error('Failed to attach media', { description: err.message });
                         }
                       }}
                       className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs shrink-0"

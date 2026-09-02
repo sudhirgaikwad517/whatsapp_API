@@ -9,41 +9,37 @@ export const API_BASE_URL =
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true, // send/receive the httpOnly auth cookies automatically
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor: Attach JWT Bearer Token to outgoing requests
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// Interceptor: Handle 401 Unauthorized by refreshing the (cookie-based) session.
+// A single in-flight refresh is shared across concurrent 401s so they don't
+// race each other into issuing multiple refresh calls.
+let refreshPromise: Promise<void> | null = null;
 
-// Interceptor: Handle 401 Unauthorized token refresh
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: any) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('refresh_token');
 
-      if (refreshToken) {
-        try {
-          const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
-          const newAccessToken = res.data.data.accessToken;
-          localStorage.setItem('access_token', newAccessToken);
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-          return apiClient(originalRequest);
-        } catch {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
+      try {
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+            .then(() => undefined)
+            .finally(() => {
+              refreshPromise = null;
+            });
         }
+        await refreshPromise;
+        return apiClient(originalRequest);
+      } catch {
+        window.location.href = '/login';
       }
     }
     return Promise.reject(error);

@@ -19,14 +19,14 @@ export interface UpdateProductInput {
 }
 
 export async function listProducts(organizationId: string) {
-  return (prisma as any).productCatalog.findMany({
+  return prisma.productCatalog.findMany({
     where: { organizationId },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 export async function getProductById(organizationId: string, id: string) {
-  const product = await (prisma as any).productCatalog.findFirst({
+  const product = await prisma.productCatalog.findFirst({
     where: { id, organizationId },
   });
   if (!product) throw new AppError('Product not found in catalog.', 404, 'PRODUCT_NOT_FOUND');
@@ -34,7 +34,7 @@ export async function getProductById(organizationId: string, id: string) {
 }
 
 export async function createProduct(organizationId: string, input: CreateProductInput) {
-  return (prisma as any).productCatalog.create({
+  return prisma.productCatalog.create({
     data: {
       organizationId,
       title: input.title.trim(),
@@ -50,7 +50,7 @@ export async function createProduct(organizationId: string, input: CreateProduct
 export async function updateProduct(organizationId: string, id: string, input: UpdateProductInput) {
   await getProductById(organizationId, id);
 
-  return (prisma as any).productCatalog.update({
+  return prisma.productCatalog.update({
     where: { id },
     data: {
       ...(input.title ? { title: input.title.trim() } : {}),
@@ -65,6 +65,6 @@ export async function updateProduct(organizationId: string, id: string, input: U
 
 export async function deleteProduct(organizationId: string, id: string) {
   await getProductById(organizationId, id);
-  await (prisma as any).productCatalog.delete({ where: { id } });
+  await prisma.productCatalog.delete({ where: { id } });
   return { message: 'Product deleted from catalog.' };
 }

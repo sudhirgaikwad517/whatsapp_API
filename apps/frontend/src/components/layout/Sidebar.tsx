@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
   ];
 
   return (
-    <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none ${isMobile ? 'w-full' : 'w-64 h-screen'}`}>
+    <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none ${isMobile ? 'w-full' : 'w-64'}`}>
       {/* Brand Header */}
       {!isMobile && (
         <div className="h-16 flex items-center px-6 border-b border-slate-800 space-x-3">
