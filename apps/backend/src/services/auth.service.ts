@@ -330,7 +330,9 @@ export async function forgotPassword(email: string) {
     data: { resetToken, resetTokenExpiry },
   });
 
-  const resetUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/reset-password?token=${resetToken}`;
+  // FRONTEND_URL is the marketing site (wabtic.com), which uses tab/query-param
+  // routing rather than real paths — see wabtic-website's App.tsx.
+  const resetUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/?tab=reset-password&token=${resetToken}`;
   try {
     await sendMail({
       to: user.email,

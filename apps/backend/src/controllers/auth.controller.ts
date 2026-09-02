@@ -90,15 +90,17 @@ export async function verifyEmail(req: Request, res: Response, next: NextFunctio
  */
 export async function verifyEmailViaLink(req: Request, res: Response) {
   const token = req.query.token as string | undefined;
+  // FRONTEND_URL is the marketing site (wabtic.com), which uses tab/query-param
+  // routing rather than real paths — see wabtic-website's App.tsx.
   const frontendBase = env.FRONTEND_URL.replace(/\/$/, '');
   if (!token) {
-    return res.redirect(`${frontendBase}/login?verified=0`);
+    return res.redirect(`${frontendBase}/?tab=login&verified=0`);
   }
   try {
     await AuthService.verifyEmail(token);
-    res.redirect(`${frontendBase}/login?verified=1`);
+    res.redirect(`${frontendBase}/?tab=login&verified=1`);
   } catch {
-    res.redirect(`${frontendBase}/login?verified=0`);
+    res.redirect(`${frontendBase}/?tab=login&verified=0`);
   }
 }
 
