@@ -371,3 +371,85 @@ export async function resetPassword(token: string, newPassword: string) {
 
   return { message: 'Password has been reset successfully. Please log in with your new password.' };
 }
+
+export async function updateProfile(userId: string, data: { fullName?: string; phoneNumber?: string }) {
+  const updateData: Record<string, any> = {};
+  if (data.fullName !== undefined) updateData.fullName = data.fullName.trim();
+  if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber?.trim() || null;
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: updateData,
+    select: { id: true, email: true, fullName: true, phoneNumber: true, isEmailVerified: true },
+  });
+
+  return user;
+}
+
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
+
+  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isValid) {
+    throw new AppError('Current password is incorrect.', 400, 'INVALID_CURRENT_PASSWORD');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+    // Same as a forgot-password reset — revoke every session so a stolen
+    // credential can't keep using an old refresh token after the change.
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+
+  logger.info({ userId }, 'User changed their own password.');
+
+  return { message: 'Password updated successfully.' };
+}
+
+export async function changeEmail(userId: string, currentPassword: string, newEmail: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
+
+  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isValid) {
+    throw new AppError('Current password is incorrect.', 400, 'INVALID_CURRENT_PASSWORD');
+  }
+
+  const normalizedEmail = newEmail.trim().toLowerCase();
+  if (normalizedEmail === user.email.toLowerCase()) {
+    throw new AppError('This is already your current email address.', 400, 'EMAIL_UNCHANGED');
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (existing) {
+    throw new AppError('An account with this email already exists.', 409, 'EMAIL_IN_USE');
+  }
+
+  const emailVerifyToken = crypto.randomBytes(32).toString('hex');
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { email: normalizedEmail, isEmailVerified: false, emailVerifyToken },
+    select: { id: true, email: true, fullName: true, isEmailVerified: true },
+  });
+
+  const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
+  try {
+    await sendMail({
+      to: updated.email,
+      subject: 'Verify your new email address',
+      html: buildVerificationEmail(updated.fullName, verifyUrl),
+    });
+  } catch (err) {
+    logger.error({ userId, err }, 'Failed to send new-email verification mail.');
+  }
+
+  logger.info({ userId, newEmail: updated.email }, 'User changed their account email; re-verification required.');
+
+  return updated;
+}

@@ -6,11 +6,12 @@ import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 
 export const Profile: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, setAuth, logout } = useAuthStore();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<'profile' | 'support'>('profile');
   const [fullName, setFullName] = useState(user?.fullName || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isNewTicketModalOpen, setIsNewTicketModalOpen] = useState(false);
@@ -76,6 +77,75 @@ export const Profile: React.FC = () => {
       toast.error('Failed to send reply', { description: err.message });
     },
   });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.put('/auth/profile', { fullName });
+      return res.data.data;
+    },
+    onSuccess: (data) => {
+      if (user) setAuth({ ...user, fullName: data.fullName });
+      toast.success('Profile updated successfully!');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update profile', { description: err?.response?.data?.message || err.message });
+    },
+  });
+
+  const changeEmailMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.put('/auth/change-email', { currentPassword, newEmail: email });
+      return res.data.data;
+    },
+    onSuccess: (data) => {
+      if (user) setAuth({ ...user, email: data.email });
+      setCurrentPassword('');
+      toast.success('Email updated! Please verify your new address.', {
+        description: 'We sent a verification link to your new email inbox.',
+      });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update email', { description: err?.response?.data?.message || err.message });
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.put('/auth/change-password', { currentPassword, newPassword });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      toast.success('Password changed successfully!', { description: 'Please log in again with your new password.' });
+      setCurrentPassword('');
+      setNewPassword('');
+      logout();
+    },
+    onError: (err: any) => {
+      toast.error('Failed to change password', { description: err?.response?.data?.message || err.message });
+    },
+  });
+
+  const handleSaveProfile = () => {
+    const isSaving = updateProfileMutation.isPending || changeEmailMutation.isPending || changePasswordMutation.isPending;
+    if (isSaving) return;
+
+    const nameChanged = fullName.trim() && fullName.trim() !== user?.fullName;
+    const emailChanged = email.trim() && email.trim() !== user?.email;
+    const wantsPasswordChange = !!newPassword;
+
+    if ((emailChanged || wantsPasswordChange) && !currentPassword) {
+      toast.error('Current password required', { description: 'Enter your current password to change email or password.' });
+      return;
+    }
+
+    if (nameChanged) updateProfileMutation.mutate();
+    if (emailChanged) changeEmailMutation.mutate();
+    if (wantsPasswordChange) changePasswordMutation.mutate();
+
+    if (!nameChanged && !emailChanged && !wantsPasswordChange) {
+      toast.info('Nothing to save', { description: 'Make a change first.' });
+    }
+  };
 
   const selectedTicket = Array.isArray(ticketsData)
     ? ticketsData.find((t: any) => t.id === activeTicketId)
@@ -152,10 +222,13 @@ export const Profile: React.FC = () => {
                   </label>
                   <input
                     type="email"
-                    value={user?.email || ''}
-                    disabled
-                    className="w-full bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-xs text-slate-400 cursor-not-allowed"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500"
                   />
+                  {user?.email && email.trim() !== user.email && (
+                    <p className="text-[10px] text-amber-400 mt-1">Changing this requires your current password and re-verification.</p>
+                  )}
                 </div>
               </div>
 
@@ -164,6 +237,9 @@ export const Profile: React.FC = () => {
                   <Key className="w-4 h-4 text-amber-400" />
                   <span>Security & Password</span>
                 </h3>
+                <p className="text-[10px] text-slate-500 -mt-2">
+                  Required only when changing your email or setting a new password.
+                </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -196,10 +272,13 @@ export const Profile: React.FC = () => {
 
               <div className="pt-2 flex justify-end">
                 <button
-                  onClick={() => toast.success('Profile details updated successfully!')}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 text-xs transition-all cursor-pointer"
+                  onClick={handleSaveProfile}
+                  disabled={updateProfileMutation.isPending || changeEmailMutation.isPending || changePasswordMutation.isPending}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 text-xs transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Save Profile Changes
+                  {updateProfileMutation.isPending || changeEmailMutation.isPending || changePasswordMutation.isPending
+                    ? 'Saving...'
+                    : 'Save Profile Changes'}
                 </button>
               </div>
             </div>

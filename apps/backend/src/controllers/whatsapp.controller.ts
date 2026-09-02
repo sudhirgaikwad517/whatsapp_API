@@ -2,10 +2,22 @@ import { Response, NextFunction } from 'express';
 import * as MetaService from '../services/meta-whatsapp.service.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { prisma } from '../config/database.js';
+import { checkWabaLimit, checkPlanNotExpired } from '../middlewares/plan-limits.middleware.js';
 
 export async function connectAccount(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
+    await checkPlanNotExpired(orgId);
+    // connectWhatsAppAccount updates the org's existing account in place if one
+    // exists (see meta-whatsapp.service.ts), so only a brand-new connection
+    // needs to respect the plan's WABA-count limit.
+    const hasExisting = await prisma.whatsappAccount.findFirst({
+      where: { organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!hasExisting) {
+      await checkWabaLimit(orgId);
+    }
     const result = await MetaService.connectWhatsAppAccount(orgId, req.body);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
@@ -59,6 +71,16 @@ export async function getTemplates(req: AuthenticatedRequest, res: Response, nex
 export async function embeddedSignup(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
+    await checkPlanNotExpired(orgId);
+    const existingByPhoneNumberId = req.body?.phoneNumberId
+      ? await prisma.whatsappAccount.findUnique({
+          where: { phoneNumberId: req.body.phoneNumberId },
+          select: { id: true, organizationId: true },
+        })
+      : null;
+    if (!existingByPhoneNumberId || existingByPhoneNumberId.organizationId !== orgId) {
+      await checkWabaLimit(orgId);
+    }
     const result = await MetaService.processEmbeddedSignup(orgId, req.body);
     res.status(200).json({ success: true, data: result });
   } catch (err) {

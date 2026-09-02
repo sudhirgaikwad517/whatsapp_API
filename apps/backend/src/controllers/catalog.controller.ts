@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import * as CatalogService from '../services/catalog.service.js';
 import * as PaymentService from '../services/in-chat-payment.service.js';
+import { checkCatalogLimit, checkPlanNotExpired } from '../middlewares/plan-limits.middleware.js';
 
 export async function listProducts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -27,6 +28,8 @@ export async function getProduct(req: AuthenticatedRequest, res: Response, next:
 export async function createProduct(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
+    await checkPlanNotExpired(orgId);
+    await checkCatalogLimit(orgId);
     const data = await CatalogService.createProduct(orgId, req.body);
     res.status(201).json({ success: true, data });
   } catch (err) {

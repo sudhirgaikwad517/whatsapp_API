@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import * as OrgService from '../services/organization.service.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import { checkAgentLimit, checkPlanNotExpired } from '../middlewares/plan-limits.middleware.js';
 
 export async function getOrganization(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -47,6 +48,8 @@ export async function removeMember(req: AuthenticatedRequest, res: Response, nex
 export async function inviteMember(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
+    await checkPlanNotExpired(orgId);
+    await checkAgentLimit(orgId);
     const data = await OrgService.inviteMember(orgId, req.body);
     res.status(201).json({ success: true, data });
   } catch (err) {

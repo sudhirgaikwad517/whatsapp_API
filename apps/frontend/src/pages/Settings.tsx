@@ -12,6 +12,9 @@ declare global {
 }
 
 export const Settings: React.FC = () => {
+  const [orgName, setOrgName] = useState('');
+  const [timezone, setTimezone] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [wabaId, setWabaId] = useState('2251442372294214');
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
@@ -47,12 +50,29 @@ export const Settings: React.FC = () => {
 
   React.useEffect(() => {
     if (orgData) {
+      if (orgData.name) setOrgName(orgData.name);
+      if (orgData.timezone) setTimezone(orgData.timezone);
+      if (orgData.logoUrl) setLogoUrl(orgData.logoUrl);
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
       if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
       if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
       if (orgData.razorpayKeyId) setRazorpayKeyId(orgData.razorpayKeyId);
     }
   }, [orgData]);
+
+  const saveBusinessDetailsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.patch('/organization', { name: orgName, timezone, logoUrl });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-details'] });
+      toast.success('Business details updated successfully!');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update business details', { description: err?.response?.data?.message || err.message });
+    },
+  });
 
   const saveKbMutation = useMutation({
     mutationFn: async () => {
@@ -203,6 +223,54 @@ export const Settings: React.FC = () => {
           {(connectMutation.error as any)?.response?.data?.error?.message || 'Failed to save Meta credentials.'}
         </div>
       )}
+
+      {/* Business Details Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <h3 className="font-semibold text-white flex items-center gap-2">
+          <SettingsIcon className="w-5 h-5 text-emerald-400" />
+          Business Details
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Organization Name</label>
+            <input
+              type="text"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Timezone</label>
+            <input
+              type="text"
+              placeholder="e.g. Asia/Kolkata"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Logo URL</label>
+            <input
+              type="text"
+              placeholder="https://..."
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button
+            onClick={() => saveBusinessDetailsMutation.mutate()}
+            disabled={saveBusinessDetailsMutation.isPending}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+          >
+            {saveBusinessDetailsMutation.isPending ? 'Saving...' : 'Save Business Details'}
+          </button>
+        </div>
+      </div>
 
       {/* Account Status Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">

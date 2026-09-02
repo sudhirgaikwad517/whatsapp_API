@@ -1,10 +1,12 @@
 import { Response, NextFunction } from 'express';
 import * as CampaignService from '../services/campaign.service.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import { checkPlanNotExpired } from '../middlewares/plan-limits.middleware.js';
 
 export async function createCampaign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
+    await checkPlanNotExpired(orgId);
     const data = await CampaignService.createCampaign(orgId, req.body);
     res.status(201).json({ success: true, data });
   } catch (err) {

@@ -136,3 +136,36 @@ export async function getMe(req: AuthenticatedRequest, res: Response, next: Next
     next(err);
   }
 }
+
+export async function updateProfile(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const data = await AuthService.updateProfile(userId, req.body);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changePassword(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const { currentPassword, newPassword } = req.body;
+    const data = await AuthService.changePassword(userId, currentPassword, newPassword);
+    clearAuthCookies(res);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function changeEmail(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.userId;
+    const { currentPassword, newEmail } = req.body;
+    const data = await AuthService.changeEmail(userId, currentPassword, newEmail);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

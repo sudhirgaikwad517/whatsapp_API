@@ -8,6 +8,9 @@ import {
   forgotPasswordSchema,
   verifyEmailSchema,
   resetPasswordSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  changeEmailSchema,
 } from '../validators/auth.schema.js';
 
 const router = Router();
@@ -89,5 +92,26 @@ router.post('/reset-password', validate(resetPasswordSchema), AuthController.res
  * @access  Bearer
  */
 router.get('/me', authenticate, AuthController.getMe);
+
+/**
+ * @route   PUT /api/v1/auth/profile
+ * @desc    Update the current user's own name/phone number
+ * @access  Bearer
+ */
+router.put('/profile', authenticate, validate(updateProfileSchema), AuthController.updateProfile);
+
+/**
+ * @route   PUT /api/v1/auth/change-password
+ * @desc    Change the current user's own password (requires current password)
+ * @access  Bearer
+ */
+router.put('/change-password', authenticate, validate(changePasswordSchema), AuthController.changePassword);
+
+/**
+ * @route   PUT /api/v1/auth/change-email
+ * @desc    Change the current user's own email (requires current password; re-verification required)
+ * @access  Bearer
+ */
+router.put('/change-email', authenticate, validate(changeEmailSchema), AuthController.changeEmail);
 
 export default router;

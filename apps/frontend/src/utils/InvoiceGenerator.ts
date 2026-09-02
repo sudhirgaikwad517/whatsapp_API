@@ -1,6 +1,16 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// The Invoice model stores a single GST-inclusive grandTotal, not a line-item
+// breakdown — derive a human-readable description from the invoice number's
+// prefix (set in invoice.service.ts's createInvoiceRecord) instead.
+function describeInvoice(invoiceNumber: string): string {
+  if (invoiceNumber?.startsWith('INV-PLAN')) return 'Subscription Plan Purchase';
+  if (invoiceNumber?.startsWith('INV-AI')) return 'AI Credits Top-up';
+  if (invoiceNumber?.startsWith('INV-USG')) return 'Wallet Recharge';
+  return 'Service Charge';
+}
+
 export const generateInvoicePdf = (invoice: any, settings: any, organization: any) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -54,13 +64,13 @@ export const generateInvoicePdf = (invoice: any, settings: any, organization: an
   // 4. Line Items Table
   currentY += 10;
   
-  const itemsList = invoice.items as any[];
-  const tableData = itemsList.map(item => [
-    item.description,
-    item.quantity?.toString() || '1',
-    `Rs. ${Number(item.unitPrice).toFixed(2)}`,
-    `Rs. ${Number(item.amount).toFixed(2)}`
-  ]);
+  const subtotal = Number(invoice.subtotal);
+  const tableData = [[
+    describeInvoice(invoice.invoiceNumber),
+    '1',
+    `Rs. ${subtotal.toFixed(2)}`,
+    `Rs. ${subtotal.toFixed(2)}`,
+  ]];
 
   autoTable(doc, {
     startY: currentY,
