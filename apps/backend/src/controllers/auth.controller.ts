@@ -133,7 +133,24 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 
 export async function getMe(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    res.status(200).json({ success: true, data: { user: req.user } });
+    // req.user only carries the JWT's own claims (userId, email, organizationId,
+    // role) — no fullName, and the frontend's User shape expects `id` not
+    // `userId`. Look up the DB row so this endpoint returns a complete,
+    // correctly-shaped user object instead of a partial one.
+    const dbUser = await AuthService.getUserById(req.user!.userId);
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: req.user!.userId,
+          email: req.user!.email,
+          fullName: dbUser?.fullName || '',
+          organizationId: req.user!.organizationId,
+          role: req.user!.role,
+          isSuperAdmin: req.user!.isSuperAdmin,
+        },
+      },
+    });
   } catch (err) {
     next(err);
   }

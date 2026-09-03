@@ -278,7 +278,7 @@ export const Wallet: React.FC = () => {
 
                               <div class="footer">
                                 This is a computer-generated tax invoice and requires no physical signature.<br/>
-                                Prowexa Technologies Pvt. Ltd. • https://prowexa.com • support@prowexa.com
+                                <a href="https://www.prowexa.com" target="_blank" rel="noopener noreferrer">Prowexa Technologies Pvt. Ltd.</a> • <a href="https://www.prowexa.com" target="_blank" rel="noopener noreferrer">www.prowexa.com</a> • <a href="mailto:support@prowexa.com">support@prowexa.com</a>
                               </div>
 
                               <script>

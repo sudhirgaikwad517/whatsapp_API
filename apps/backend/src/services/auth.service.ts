@@ -374,6 +374,13 @@ export async function resetPassword(token: string, newPassword: string) {
   return { message: 'Password has been reset successfully. Please log in with your new password.' };
 }
 
+export async function getUserById(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, fullName: true, phoneNumber: true, isEmailVerified: true },
+  });
+}
+
 export async function updateProfile(userId: string, data: { fullName?: string; phoneNumber?: string }) {
   const updateData: Record<string, any> = {};
   if (data.fullName !== undefined) updateData.fullName = data.fullName.trim();

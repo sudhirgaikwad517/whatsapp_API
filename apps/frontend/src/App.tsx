@@ -83,6 +83,7 @@ export const App: React.FC = () => {
   const setAuth = useAuthStore(state => state.setAuth);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const [ssoResolved, setSsoResolved] = React.useState(!pendingSsoTokens);
+  const [sessionChecked, setSessionChecked] = React.useState(false);
 
   React.useEffect(() => {
     if (!pendingSsoTokens) return;
@@ -99,13 +100,24 @@ export const App: React.FC = () => {
     })();
   }, [setAuth]);
 
+  // `isAuthenticated` only reflects THIS origin's localStorage, which is empty
+  // on a first-ever visit — even when a valid session cookie already exists
+  // (e.g. the user just logged in on wabtic.com, which shares the cookie via
+  // Domain=.wabtic.com). So the cookie must be checked unconditionally once,
+  // not gated behind isAuthenticated, or a cookie-only session never gets
+  // picked up and ProtectedRoute bounces straight to /login.
+  React.useEffect(() => {
+    if (!ssoResolved) return;
+    syncUser().finally(() => setSessionChecked(true));
+  }, [ssoResolved, syncUser]);
+
   React.useEffect(() => {
     if (isAuthenticated) {
       syncUser();
     }
   }, [isAuthenticated, syncUser]);
 
-  if (!ssoResolved) {
+  if (!ssoResolved || !sessionChecked) {
     return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>;
   }
 

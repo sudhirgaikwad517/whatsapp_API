@@ -97,7 +97,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (res.data?.data?.user) {
         const freshUser = res.data.data.user;
         localStorage.setItem(STORED_USER_KEY, JSON.stringify(freshUser));
-        set({ user: freshUser });
+        set({ user: freshUser, isAuthenticated: true });
       }
     } catch (err) {
       // If unauthorized, the cookie is invalid/expired — leave state as-is;

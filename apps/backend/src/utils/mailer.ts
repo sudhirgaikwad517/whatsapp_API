@@ -45,14 +45,23 @@ export async function sendMail({ to, subject, html }: SendMailInput): Promise<vo
   }
 }
 
+const EMAIL_FOOTER = `
+  <p style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;">
+    <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa Technologies Pvt. Ltd.</a>
+    &nbsp;•&nbsp;
+    <a href="mailto:support@prowexa.com" style="color:#059669;text-decoration:none;">support@prowexa.com</a>
+  </p>
+`;
+
 export function buildVerificationEmail(fullName: string, verifyUrl: string): SendMailInput['html'] {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Welcome to Prowexa, ${fullName}!</h2>
+      <h2>Welcome to <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa</a>, ${fullName}!</h2>
       <p>Please verify your email address to activate your account.</p>
       <p><a href="${verifyUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Verify Email</a></p>
       <p>If the button doesn't work, copy this link into your browser:<br>${verifyUrl}</p>
       <p>If you didn't create this account, you can safely ignore this email.</p>
+      ${EMAIL_FOOTER}
     </div>
   `;
 }
@@ -60,11 +69,12 @@ export function buildVerificationEmail(fullName: string, verifyUrl: string): Sen
 export function buildPasswordResetEmail(resetUrl: string): SendMailInput['html'] {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>Reset your Prowexa password</h2>
+      <h2>Reset your <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa</a> password</h2>
       <p>We received a request to reset your password. This link expires in 1 hour.</p>
       <p><a href="${resetUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Reset Password</a></p>
       <p>If the button doesn't work, copy this link into your browser:<br>${resetUrl}</p>
       <p>If you didn't request this, you can safely ignore this email — your password won't change.</p>
+      ${EMAIL_FOOTER}
     </div>
   `;
 }
