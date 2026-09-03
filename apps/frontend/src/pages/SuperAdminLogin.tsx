@@ -100,7 +100,7 @@ export const SuperAdminLogin: React.FC = () => {
 
         <div className="text-center pt-2">
           <p className="text-[11px] text-slate-500">
-            Prowexa Technologies Pvt. Ltd. • Restricted Enterprise System
+            <a href="https://www.prowexa.com" target="_blank" rel="noopener noreferrer" className="hover:text-slate-300 underline decoration-dotted">Prowexa Technologies Pvt. Ltd.</a> • Restricted Enterprise System
           </p>
         </div>
       </div>
