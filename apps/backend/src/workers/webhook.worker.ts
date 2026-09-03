@@ -303,16 +303,26 @@ export const webhookWorker = new Worker(
               });
 
               if (org?.isAiAutoRespondEnabled) {
-                // Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog)
-                await autoResponderQueue.add(
-                  'ai-reply',
-                  {
-                    type: 'ai',
-                    organizationId: waAccount.organizationId,
-                    conversationId: conversation.id,
-                  },
-                  { delay: 1000 }
-                );
+                // Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog).
+                // Debounce per conversation: if several inbound messages land close together
+                // (e.g. a burst of retried/delayed webhooks, or a customer sending "hi" then
+                // "hello" seconds apart), only queue ONE ai-reply job — it fires after a short
+                // delay and reads the latest message history, so it still answers the newest
+                // message. Without this, each message queued its own reply, producing several
+                // near-duplicate greetings back to back.
+                const aiDebounceKey = `ai-pending:${conversation.id}`;
+                const shouldEnqueue = await redis.set(aiDebounceKey, '1', 'EX', 8, 'NX');
+                if (shouldEnqueue) {
+                  await autoResponderQueue.add(
+                    'ai-reply',
+                    {
+                      type: 'ai',
+                      organizationId: waAccount.organizationId,
+                      conversationId: conversation.id,
+                    },
+                    { delay: 1000 }
+                  );
+                }
               } else {
                 // Keyword Auto-Responder Engine (Fallback when AI Auto-Responder is OFF)
                 const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
