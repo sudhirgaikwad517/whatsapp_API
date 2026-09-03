@@ -205,7 +205,11 @@ export async function updateConversationStatus(organizationId: string, conversat
     where: { id: conversationId },
     data: {
       status: validatedStatus,
-      ...(isResolved ? { resolvedAt: new Date(), assignedAgentId: null } : {}),
+      // Keep assignedAgentId intact on resolve — every round-robin/open-chat
+      // count query already scopes by status:'OPEN', so clearing it here
+      // served no purpose except erasing which agent resolved the chat,
+      // which broke the analytics leaderboard's per-agent resolved count.
+      ...(isResolved ? { resolvedAt: new Date() } : {}),
     },
   });
 
