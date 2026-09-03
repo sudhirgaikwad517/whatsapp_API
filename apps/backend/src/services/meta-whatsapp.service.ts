@@ -156,7 +156,14 @@ export async function syncMetaTemplates(organizationId: string) {
 export async function sendMetaOutboundMessage(
   organizationId: string,
   toPhoneNumber: string,
-  messagePayload: { type: 'text' | 'template'; text?: string; template?: any }
+  messagePayload: {
+    type: 'text' | 'template' | 'image' | 'document' | 'audio' | 'video';
+    text?: string;
+    template?: any;
+    mediaUrl?: string;
+    filename?: string;
+    caption?: string;
+  }
 ) {
   const waAccount = await prisma.whatsappAccount.findFirst({
     where: { organizationId, deletedAt: null },
@@ -183,6 +190,12 @@ export async function sendMetaOutboundMessage(
     body.text = { preview_url: false, body: messagePayload.text };
   } else if (messagePayload.type === 'template' && messagePayload.template) {
     body.template = messagePayload.template;
+  } else if (['image', 'video', 'audio', 'document'].includes(messagePayload.type) && messagePayload.mediaUrl) {
+    body[messagePayload.type] = {
+      link: messagePayload.mediaUrl,
+      ...(messagePayload.caption ? { caption: messagePayload.caption } : {}),
+      ...(messagePayload.type === 'document' && messagePayload.filename ? { filename: messagePayload.filename } : {}),
+    };
   }
 
   const response = await fetch(url, {

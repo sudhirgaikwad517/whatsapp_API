@@ -320,13 +320,22 @@ export async function sendOutboundMediaMessage(
 
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
 
+  // Actually dispatch via the Meta Graph API — this previously just wrote a
+  // Message row with a fabricated wamid and never sent anything to WhatsApp.
+  const metaRes = await sendMetaOutboundMessage(organizationId, conversation.contact.phoneNumber, {
+    type: mediaPayload.type.toLowerCase() as 'image' | 'document' | 'audio' | 'video',
+    mediaUrl: mediaPayload.mediaUrl,
+    filename: mediaPayload.filename,
+    caption: mediaPayload.caption,
+  });
+
   const extendedWindow = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const message = await prisma.message.create({
     data: {
       organizationId,
       conversationId,
-      wamid: `wamid.outbound_media_${Date.now()}`,
+      wamid: metaRes.wamid,
       direction: 'OUTBOUND',
       type: mediaPayload.type,
       content: {

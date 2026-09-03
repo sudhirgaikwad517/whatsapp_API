@@ -62,3 +62,19 @@ export const autoResponderQueue = new Queue('autoresponder-processing', {
     attempts: 3,
   },
 });
+
+/**
+ * Payment Order Poll Queue — in-chat commerce (Razorpay Payment Links) has no
+ * webhook back to us, since each organization uses its OWN Razorpay account
+ * (not the platform's), so we can't verify a single shared webhook secret for
+ * every org. Instead a repeating job polls pending orders directly against
+ * Razorpay's API using that org's own stored key/secret.
+ */
+export const paymentOrderPollQueue = new Queue('payment-order-poll', {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 200,
+    attempts: 2,
+  },
+});

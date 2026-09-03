@@ -86,10 +86,21 @@ export const Inbox: React.FC = () => {
   const handleSendCatalogProduct = async (product: any) => {
     if (!activeConversationId) return;
     try {
-      const msgText = `🛍️ *${product.title}*\n\n📌 ${product.description || ''}\n💰 *Price:* ₹${Number(product.priceInINR).toFixed(2)}${product.imageUrl ? `\n\n📸 Image: ${product.imageUrl}` : ''}`;
-      await apiClient.post(`/inbox/conversations/${activeConversationId}/messages`, {
-        text: msgText,
-      });
+      const caption = `🛍️ *${product.title}*\n\n📌 ${product.description || ''}\n💰 *Price:* ₹${Number(product.priceInINR).toFixed(2)}`;
+      if (product.imageUrl) {
+        // Send as a real WhatsApp image message (with the product details as
+        // the caption) rather than pasting the image URL as plain text —
+        // customers get an actual photo card, not a raw link.
+        await apiClient.post(`/inbox/conversations/${activeConversationId}/media`, {
+          type: 'IMAGE',
+          mediaUrl: product.imageUrl,
+          caption,
+        });
+      } else {
+        await apiClient.post(`/inbox/conversations/${activeConversationId}/messages`, {
+          text: caption,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setIsCatalogModalOpen(false);
