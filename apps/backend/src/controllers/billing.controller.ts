@@ -8,6 +8,24 @@ import { getTemplateSentCounts } from '../services/usage-metrics.service.js';
 import { createInvoiceRecord } from '../services/invoice.service.js';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { sendMail, buildPurchaseConfirmationEmail } from '../utils/mailer.js';
+import { logger } from '../utils/logger.js';
+
+// Best-effort — a purchase must never fail because the confirmation email
+// couldn't be sent, so this always swallows its own errors.
+async function sendPurchaseEmail(userId: string, description: string, amount: number, invoiceNumber: string) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, email: true } });
+    if (!user) return;
+    await sendMail({
+      to: user.email,
+      subject: 'Payment Confirmation — Prowexa',
+      html: buildPurchaseConfirmationEmail({ fullName: user.fullName, description, amount, invoiceNumber }),
+    });
+  } catch (err) {
+    logger.error({ userId, err }, 'Failed to send purchase confirmation email.');
+  }
+}
 
 export async function getWalletDetails(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
@@ -126,7 +144,7 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
 
     const newBalance = await addAiCredits(orgId, creditsToAdd);
 
-    await createInvoiceRecord({
+    const aiInvoice = await createInvoiceRecord({
       organizationId: orgId,
       invoicePrefix: 'INV-AI',
       grandTotal: amount,
@@ -134,6 +152,7 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
       gatewayName: 'RAZORPAY',
       description: `AI Credits Top-up (${creditsToAdd.toLocaleString()} credits)`,
     });
+    void sendPurchaseEmail(req.user!.userId, aiInvoice.description!, amount, aiInvoice.invoiceNumber);
 
     res.status(200).json({
       success: true,
@@ -208,7 +227,7 @@ export async function purchasePlan(req: AuthenticatedRequest, res: Response, nex
       },
     });
 
-    await createInvoiceRecord({
+    const planInvoice = await createInvoiceRecord({
       organizationId: orgId,
       invoicePrefix: 'INV-PLAN',
       grandTotal: amount,
@@ -216,6 +235,7 @@ export async function purchasePlan(req: AuthenticatedRequest, res: Response, nex
       gatewayName: 'RAZORPAY',
       description: `${planTier} Plan Subscription — ${billingCycle === 'ANNUAL' ? 'Annual' : 'Monthly'} Billing`,
     });
+    void sendPurchaseEmail(req.user!.userId, planInvoice.description!, amount, planInvoice.invoiceNumber);
 
     res.status(200).json({
       success: true,
@@ -338,7 +358,7 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
 
     const wallet = await BillingService.rechargeWallet(orgId, subtotal, referenceId, description);
 
-    await createInvoiceRecord({
+    const usgInvoice = await createInvoiceRecord({
       organizationId: orgId,
       invoicePrefix: 'INV-USG',
       grandTotal,
@@ -346,6 +366,7 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
       gatewayName: gateway || 'RAZORPAY',
       description: 'Credits Purchased via Razorpay',
     });
+    void sendPurchaseEmail(req.user!.userId, usgInvoice.description!, grandTotal, usgInvoice.invoiceNumber);
 
     res.status(200).json({
       success: true,

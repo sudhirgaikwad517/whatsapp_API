@@ -2,12 +2,14 @@ import { Router } from 'express';
 import * as ContactController from '../controllers/contact.controller.js';
 import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
+import { requirePageAccess } from '../middlewares/page-access.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requirePageAccess('contacts'));
 
 /**
  * @route   GET /api/v1/contacts

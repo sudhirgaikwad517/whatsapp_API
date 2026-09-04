@@ -138,6 +138,9 @@ export async function getMe(req: AuthenticatedRequest, res: Response, next: Next
     // `userId`. Look up the DB row so this endpoint returns a complete,
     // correctly-shaped user object instead of a partial one.
     const dbUser = await AuthService.getUserById(req.user!.userId);
+    const allowedPages = req.user!.isSuperAdmin
+      ? []
+      : (await AuthService.getMemberAllowedPages(req.user!.organizationId, req.user!.userId)) || [];
     res.status(200).json({
       success: true,
       data: {
@@ -148,6 +151,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response, next: Next
           organizationId: req.user!.organizationId,
           role: req.user!.role,
           isSuperAdmin: req.user!.isSuperAdmin,
+          allowedPages,
         },
       },
     });

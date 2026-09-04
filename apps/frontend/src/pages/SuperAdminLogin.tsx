@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ShieldAlert, Lock, Mail, ArrowRight } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
@@ -71,9 +72,14 @@ export const SuperAdminLogin: React.FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="superadmin-password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="superadmin-password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Password
+              </label>
+              <Link to="/superadmin/forgot-password" className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input

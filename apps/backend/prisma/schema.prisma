@@ -172,6 +172,9 @@ model Organization {
   billingPan        String?            @db.VarChar(20)
   billingEmail      String?            @db.VarChar(255)
   billingPhone      String?            @db.VarChar(50)
+  // Approved WhatsApp template (by Template.id) used to notify a human agent
+  // via WhatsApp when the AI Copilot hands a conversation off to them.
+  escalationTemplateId String?         @db.Uuid
   isSuspended       Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -231,6 +234,14 @@ model OrganizationMember {
   organizationId  String       @db.Uuid
   userId          String       @db.Uuid
   role            UserRole     @default(AGENT)
+  // Org admin (BUSINESS_OWNER) can suspend a member's access without
+  // removing them outright — checked at login and on every tenant request.
+  isActive        Boolean      @default(true)
+  // Which sidebar pages this member may access, by page key (see
+  // Sidebar.tsx / requirePageAccess middleware). Empty = unrestricted
+  // (full role-default access) — this keeps every existing member's access
+  // unchanged until an admin explicitly opts a member into a restricted set.
+  allowedPages    String[]     @default([])
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -676,6 +687,8 @@ model SuperAdminUser {
   role            SuperAdminRole @default(SUPER_ADMIN)
   mfaEnabled      Boolean        @default(false)
   isActive        Boolean        @default(true)
+  resetToken       String?       @db.VarChar(255)
+  resetTokenExpiry DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 

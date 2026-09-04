@@ -21,6 +21,25 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function forgotPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await SuperAdminService.forgotSuperAdminPassword(req.body.email);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { token, newPassword } = req.body;
+    const data = await SuperAdminService.resetSuperAdminPassword(token, newPassword);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getDashboardKpi(req: Request, res: Response, next: NextFunction) {
   try {
     const timeRange = (req.query.timeRange as string) || 'all';

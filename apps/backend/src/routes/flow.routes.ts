@@ -2,11 +2,13 @@ import { Router } from 'express';
 import * as FlowController from '../controllers/flow.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
+import { requirePageAccess } from '../middlewares/page-access.middleware.js';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requirePageAccess('flows'));
 
 router.get('/', FlowController.listFlows);
 router.get('/:id', FlowController.getFlow);

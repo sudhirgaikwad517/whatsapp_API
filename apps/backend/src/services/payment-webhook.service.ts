@@ -5,6 +5,24 @@ import { env } from '../config/env.js';
 import { rechargeWallet } from './billing-wallet.service.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
+import { sendMail, buildPurchaseConfirmationEmail } from '../utils/mailer.js';
+
+async function sendPurchaseEmailToOwner(organizationId: string, description: string, amount: number, invoiceNumber: string) {
+  try {
+    const owner = await prisma.organizationMember.findFirst({
+      where: { organizationId, role: 'BUSINESS_OWNER' },
+      include: { user: { select: { fullName: true, email: true } } },
+    });
+    if (!owner) return;
+    await sendMail({
+      to: owner.user.email,
+      subject: 'Payment Confirmation — Prowexa',
+      html: buildPurchaseConfirmationEmail({ fullName: owner.user.fullName, description, amount, invoiceNumber }),
+    });
+  } catch (err) {
+    logger.error({ organizationId, err }, 'Failed to send purchase confirmation email.');
+  }
+}
 
 export async function processRazorpayWebhook(rawBody: string, signature: string) {
   const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET;
@@ -79,6 +97,8 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       { organizationId, paymentId, invoiceNumber, amountPaid, walletBalance: wallet.availableBalance.toString() },
       '✅ Razorpay Payment Processed: Wallet Credited & Invoice Generated!'
     );
+
+    void sendPurchaseEmailToOwner(organizationId, invoice.description!, amountPaid, invoiceNumber);
 
     return { success: true, invoice, wallet };
   }

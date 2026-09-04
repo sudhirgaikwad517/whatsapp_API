@@ -1,9 +1,26 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Users2, UserPlus, Shield, Trash2, Mail, CheckCircle2, UserCheck } from 'lucide-react';
+import { Users2, UserPlus, Shield, Trash2, Mail, CheckCircle2, UserCheck, UserX, Pencil, Lock } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { confirmAction } from '../components/ui/ConfirmDialog';
+
+// Kept in sync with apps/backend/src/middlewares/page-access.middleware.ts PAGE_KEYS.
+const PAGE_OPTIONS: { key: string; label: string }[] = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'inbox', label: 'Live Inbox' },
+  { key: 'campaigns', label: 'Campaigns' },
+  { key: 'contacts', label: 'Contacts CRM' },
+  { key: 'templates', label: 'Meta Templates' },
+  { key: 'auto-reply', label: 'Auto Reply Bot' },
+  { key: 'flows', label: 'Chatbot Flows' },
+  { key: 'catalog', label: 'Product Catalog' },
+  { key: 'billing', label: 'Billing & Credits' },
+  { key: 'team', label: 'Team & Agents' },
+  { key: 'analytics', label: 'Analytics' },
+  { key: 'settings', label: 'Organization Settings' },
+  { key: 'profile', label: 'Profile & Support Portal' },
+];
 
 // Generates a random initial password per invite — a fixed default here would
 // be a standing, publicly-known password for every newly-invited team member
@@ -20,6 +37,11 @@ export const Team: React.FC = () => {
   const [password, setPassword] = useState(generateRandomPassword);
   const [role, setRole] = useState<'MANAGER' | 'AGENT'>('AGENT');
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; pass: string; name: string; role: string } | null>(null);
+  const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editFullAccess, setEditFullAccess] = useState(true);
+  const [editAllowedPages, setEditAllowedPages] = useState<string[]>([]);
 
   const queryClient = useQueryClient();
 
@@ -58,6 +80,52 @@ export const Team: React.FC = () => {
       toast.error('Failed to create member', { description: err?.response?.data?.error?.message || err.message });
     },
   });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
+      const res = await apiClient.patch(`/organization/members/${userId}`, { isActive });
+      return res.data.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      toast.success(variables.isActive ? 'Member reactivated.' : 'Member deactivated — their access is suspended immediately.');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update status', { description: err?.response?.data?.error?.message || err.message });
+    },
+  });
+
+  const updateMemberMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingMember) return;
+      const res = await apiClient.patch(`/organization/members/${editingMember.user.id}`, {
+        fullName: editFullName.trim(),
+        phoneNumber: editPhoneNumber.trim(),
+        allowedPages: editFullAccess ? [] : editAllowedPages,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      toast.success('Member details updated.');
+      setEditingMember(null);
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update member', { description: err?.response?.data?.error?.message || err.message });
+    },
+  });
+
+  const openEditModal = (m: any) => {
+    setEditingMember(m);
+    setEditFullName(m.user?.fullName || '');
+    setEditPhoneNumber(m.user?.phoneNumber || '');
+    setEditFullAccess(!m.allowedPages || m.allowedPages.length === 0);
+    setEditAllowedPages(m.allowedPages || []);
+  };
+
+  const togglePageOption = (key: string) => {
+    setEditAllowedPages((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+  };
 
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -145,31 +213,71 @@ export const Team: React.FC = () => {
                     </span>
                   </td>
                   <td className="py-4 px-6">
-                    <span className="inline-flex items-center text-xs font-semibold text-emerald-400">
-                      <UserCheck className="w-3.5 h-3.5 mr-1" />
-                      Active
-                    </span>
+                    {m.isActive !== false ? (
+                      <span className="inline-flex items-center text-xs font-semibold text-emerald-400">
+                        <UserCheck className="w-3.5 h-3.5 mr-1" />
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-xs font-semibold text-slate-500">
+                        <UserX className="w-3.5 h-3.5 mr-1" />
+                        Deactivated
+                      </span>
+                    )}
+                    {m.allowedPages?.length > 0 && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-amber-400" title={`Restricted to: ${m.allowedPages.join(', ')}`}>
+                        <Lock className="w-3 h-3" />
+                        Restricted
+                      </span>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-slate-400 text-xs">
                     {new Date(m.createdAt).toLocaleDateString()}
                   </td>
                   <td className="py-4 px-6 text-right">
                     {m.role !== 'BUSINESS_OWNER' && (
-                      <button
-                        onClick={async () => {
-                          const ok = await confirmAction({
-                            title: `Remove ${m.user?.fullName}?`,
-                            message: 'They will immediately lose access to this organization.',
-                            danger: true,
-                            confirmLabel: 'Remove',
-                          });
-                          if (ok) removeMutation.mutate(m.user?.id);
-                        }}
-                        title="Remove Member"
-                        className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditModal(m)}
+                          title="Edit Member & Permissions"
+                          className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const activating = m.isActive === false;
+                            const ok = await confirmAction({
+                              title: `${activating ? 'Reactivate' : 'Deactivate'} ${m.user?.fullName}?`,
+                              message: activating
+                                ? 'They will regain access to this organization immediately.'
+                                : 'Their access to this organization will be suspended immediately, without deleting their account.',
+                              danger: !activating,
+                              confirmLabel: activating ? 'Reactivate' : 'Deactivate',
+                            });
+                            if (ok) toggleActiveMutation.mutate({ userId: m.user?.id, isActive: activating });
+                          }}
+                          title={m.isActive === false ? 'Reactivate Member' : 'Deactivate Member'}
+                          className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-all cursor-pointer"
+                        >
+                          {m.isActive === false ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const ok = await confirmAction({
+                              title: `Remove ${m.user?.fullName}?`,
+                              message: 'They will immediately lose access to this organization.',
+                              danger: true,
+                              confirmLabel: 'Remove',
+                            });
+                            if (ok) removeMutation.mutate(m.user?.id);
+                          }}
+                          title="Remove Member"
+                          className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -316,6 +424,89 @@ export const Team: React.FC = () => {
             >
               Copy Credentials to Clipboard
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member & Permissions Modal */}
+      {editingMember && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center">
+                <Pencil className="w-5 h-5 mr-2 text-emerald-400" />
+                Edit {editingMember.user?.fullName}
+              </h3>
+              <button
+                onClick={() => setEditingMember(null)}
+                aria-label="Close"
+                className="text-slate-400 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Full Name</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Phone Number</label>
+                <input
+                  type="text"
+                  value={editPhoneNumber}
+                  onChange={(e) => setEditPhoneNumber(e.target.value)}
+                  placeholder="+91-XXXXXXXXXX"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Used to notify this agent on WhatsApp when a chat is assigned to them.</p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800/80">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editFullAccess}
+                    onChange={(e) => setEditFullAccess(e.target.checked)}
+                    className="accent-emerald-500"
+                  />
+                  Full access (no page restrictions)
+                </label>
+
+                {!editFullAccess && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Visible Pages</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAGE_OPTIONS.map((p) => (
+                        <label key={p.key} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={editAllowedPages.includes(p.key)}
+                            onChange={() => togglePageOption(p.key)}
+                            className="accent-emerald-500"
+                          />
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => updateMemberMutation.mutate()}
+                disabled={updateMemberMutation.isPending}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm cursor-pointer disabled:opacity-50"
+              >
+                {updateMemberMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </div>
       )}

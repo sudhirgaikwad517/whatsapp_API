@@ -28,21 +28,31 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
   const { user, logout } = useAuthStore();
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/inbox', label: 'Live Inbox', icon: MessageSquare },
-    { to: '/campaigns', label: 'Campaigns', icon: Megaphone },
-    { to: '/contacts', label: 'Contacts CRM', icon: Users },
-    { to: '/templates', label: 'Meta Templates', icon: FileCode2 },
-    { to: '/auto-reply', label: 'Auto Reply Bot', icon: Bot },
-    { to: '/flows', label: 'Chatbot Flows', icon: GitFork },
-    { to: '/catalog', label: 'Product Catalog', icon: ShoppingBag },
-    { to: '/billing', label: 'Billing & Credits', icon: CreditCard },
-    { to: '/team', label: 'Team & Agents', icon: Users2 },
-    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { to: '/settings', label: 'Organization Settings', icon: Settings },
-    { to: '/profile', label: 'Profile & Support Portal', icon: User },
+  const allNavItems = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
+    { to: '/inbox', label: 'Live Inbox', icon: MessageSquare, page: 'inbox' },
+    { to: '/campaigns', label: 'Campaigns', icon: Megaphone, page: 'campaigns' },
+    { to: '/contacts', label: 'Contacts CRM', icon: Users, page: 'contacts' },
+    { to: '/templates', label: 'Meta Templates', icon: FileCode2, page: 'templates' },
+    { to: '/auto-reply', label: 'Auto Reply Bot', icon: Bot, page: 'auto-reply' },
+    { to: '/flows', label: 'Chatbot Flows', icon: GitFork, page: 'flows' },
+    { to: '/catalog', label: 'Product Catalog', icon: ShoppingBag, page: 'catalog' },
+    { to: '/billing', label: 'Billing & Credits', icon: CreditCard, page: 'billing' },
+    { to: '/team', label: 'Team & Agents', icon: Users2, page: 'team' },
+    { to: '/analytics', label: 'Analytics', icon: BarChart3, page: 'analytics' },
+    { to: '/settings', label: 'Organization Settings', icon: Settings, page: 'settings' },
+    { to: '/profile', label: 'Profile & Support Portal', icon: User, page: 'profile' },
   ];
+
+  // The org owner always sees everything; an empty allowedPages list means
+  // "unrestricted" (the default for every member until an admin opts them
+  // into a restricted set) — this is a UI convenience only, the backend's
+  // requirePageAccess middleware is what actually enforces it per request.
+  const allowedPages = user?.allowedPages || [];
+  const navItems =
+    user?.role === 'BUSINESS_OWNER' || allowedPages.length === 0
+      ? allNavItems
+      : allNavItems.filter((item) => allowedPages.includes(item.page));
 
   return (
     <aside className={`bg-slate-900 border-r border-slate-800 flex flex-col h-full select-none ${isMobile ? 'w-full' : 'w-64'}`}>

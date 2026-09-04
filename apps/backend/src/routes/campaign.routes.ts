@@ -2,12 +2,14 @@ import { Router } from 'express';
 import * as CampaignController from '../controllers/campaign.controller.js';
 import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
+import { requirePageAccess } from '../middlewares/page-access.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requirePageAccess('campaigns'));
 
 /**
  * @route   POST /api/v1/campaigns

@@ -158,6 +158,50 @@ export async function removeMember(organizationId: string, targetUserId: string,
   return { message: 'Member removed successfully.' };
 }
 
+export async function updateMember(
+  organizationId: string,
+  targetUserId: string,
+  requestingUserId: string,
+  data: { isActive?: boolean; allowedPages?: string[]; role?: 'MANAGER' | 'AGENT'; fullName?: string; phoneNumber?: string }
+) {
+  if (targetUserId === requestingUserId && data.isActive === false) {
+    throw new AppError('You cannot deactivate your own access.', 400, 'CANNOT_DEACTIVATE_SELF');
+  }
+
+  const member = await prisma.organizationMember.findFirst({
+    where: { organizationId, userId: targetUserId },
+  });
+  if (!member) {
+    throw new AppError('Member not found in this organization.', 404, 'MEMBER_NOT_FOUND');
+  }
+
+  const memberUpdate: Record<string, any> = {};
+  if (data.isActive !== undefined) memberUpdate.isActive = data.isActive;
+  if (data.allowedPages !== undefined) memberUpdate.allowedPages = data.allowedPages;
+  if (data.role !== undefined) memberUpdate.role = data.role;
+
+  const userUpdate: Record<string, any> = {};
+  if (data.fullName !== undefined) userUpdate.fullName = data.fullName.trim();
+  if (data.phoneNumber !== undefined) userUpdate.phoneNumber = data.phoneNumber?.trim() || null;
+
+  const [updatedMember] = await prisma.$transaction([
+    prisma.organizationMember.update({
+      where: { id: member.id },
+      data: memberUpdate,
+    }),
+    ...(Object.keys(userUpdate).length > 0
+      ? [prisma.user.update({ where: { id: targetUserId }, data: userUpdate })]
+      : []),
+  ]);
+
+  return prisma.organizationMember.findUnique({
+    where: { id: updatedMember.id },
+    include: {
+      user: { select: { id: true, fullName: true, email: true, phoneNumber: true, isEmailVerified: true, createdAt: true } },
+    },
+  });
+}
+
 export async function inviteMember(
   organizationId: string,
   input: { email: string; fullName: string; role: 'MANAGER' | 'AGENT'; password?: string }

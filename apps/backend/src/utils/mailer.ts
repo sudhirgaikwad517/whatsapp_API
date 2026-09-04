@@ -78,3 +78,33 @@ export function buildPasswordResetEmail(resetUrl: string): SendMailInput['html']
     </div>
   `;
 }
+
+export function buildPurchaseConfirmationEmail(input: {
+  fullName: string;
+  description: string;
+  amount: number;
+  invoiceNumber: string;
+}): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Payment Received — Thank you, ${input.fullName}!</h2>
+      <p>We've successfully processed your payment on <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa</a>.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr>
+          <td style="padding:8px 0;color:#6b7280;">Description</td>
+          <td style="padding:8px 0;text-align:right;font-weight:bold;">${input.description}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#6b7280;">Amount Paid</td>
+          <td style="padding:8px 0;text-align:right;font-weight:bold;">₹${input.amount.toFixed(2)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#6b7280;">Invoice Number</td>
+          <td style="padding:8px 0;text-align:right;font-weight:bold;">${input.invoiceNumber}</td>
+        </tr>
+      </table>
+      <p>You can download the full tax invoice anytime from your Billing page.</p>
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}

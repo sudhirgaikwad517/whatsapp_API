@@ -27,6 +27,18 @@ const router = Router();
 router.post('/login', credentialLimiter, SuperAdminController.login);
 
 /**
+ * @route   POST /api/v1/superadmin/forgot-password
+ * @desc    Trigger a Super Admin password reset email
+ */
+router.post('/forgot-password', credentialLimiter, SuperAdminController.forgotPassword);
+
+/**
+ * @route   POST /api/v1/superadmin/reset-password
+ * @desc    Complete a Super Admin password reset using the emailed token
+ */
+router.post('/reset-password', credentialLimiter, SuperAdminController.resetPassword);
+
+/**
  * @route   POST /api/v1/superadmin/stop-impersonation
  * @desc    Restore the original Super Admin session after impersonating a tenant.
  * Deliberately before `requireSuperAdmin`: while impersonating, the active

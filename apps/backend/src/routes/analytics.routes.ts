@@ -2,11 +2,13 @@ import { Router } from 'express';
 import * as AnalyticsController from '../controllers/analytics.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
+import { requirePageAccess } from '../middlewares/page-access.middleware.js';
 
 const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requirePageAccess('analytics'));
 
 /**
  * @route   GET /api/v1/analytics/overview

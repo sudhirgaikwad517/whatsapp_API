@@ -60,6 +60,7 @@ services:
       NODE_ENV: production
       FRONTEND_URL: ${FRONTEND_URL:-https://wabtic.com}
       API_BASE_URL: ${API_BASE_URL:-https://api.wabtic.com}
+      ADMIN_PANEL_URL: ${ADMIN_PANEL_URL:-https://app.wabtic.com}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-.wabtic.com}
       DATABASE_URL: ${DATABASE_URL}

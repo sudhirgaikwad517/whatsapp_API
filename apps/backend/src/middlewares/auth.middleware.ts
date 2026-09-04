@@ -13,6 +13,12 @@ export interface AuthenticatedRequest extends Request {
     role: UserRole;
     isSuperAdmin?: boolean;
   };
+  // Populated by tenantContext — the caller's OrganizationMember row, so
+  // downstream middleware/controllers don't each re-query it.
+  membership?: {
+    isActive: boolean;
+    allowedPages: string[];
+  };
 }
 
 /**

@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: string;
   organizationId: string;
+  allowedPages?: string[];
 }
 
 interface AuthState {

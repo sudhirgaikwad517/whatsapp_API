@@ -134,6 +134,7 @@ export async function loginUser(input: LoginInput) {
     where: { email: input.email, deletedAt: null },
     include: {
       memberships: {
+        where: { isActive: true },
         take: 1,
         orderBy: { createdAt: 'asc' },
       },
@@ -155,6 +156,10 @@ export async function loginUser(input: LoginInput) {
 
   const membership = user.memberships[0];
   if (!membership) {
+    const anyMembership = await prisma.organizationMember.findFirst({ where: { userId: user.id } });
+    if (anyMembership) {
+      throw new AppError('Your access to this organization has been deactivated. Contact your admin.', 403, 'MEMBER_DEACTIVATED');
+    }
     throw new AppError('User has no associated organization.', 403, 'NO_ORGANIZATION');
   }
 
@@ -208,13 +213,13 @@ export async function refreshAccessToken(refreshToken: string) {
   }
 
   const membership = await prisma.organizationMember.findFirst({
-    where: { userId: decoded.userId },
+    where: { userId: decoded.userId, isActive: true },
     include: { user: true },
     orderBy: { createdAt: 'asc' },
   });
 
   if (!membership) {
-    throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
+    throw new AppError('User not found or access has been deactivated.', 404, 'USER_NOT_FOUND');
   }
 
   const tokenPayload = {
@@ -379,6 +384,16 @@ export async function getUserById(userId: string) {
     where: { id: userId },
     select: { id: true, email: true, fullName: true, phoneNumber: true, isEmailVerified: true },
   });
+}
+
+export async function getMemberAllowedPages(organizationId: string, userId: string): Promise<string[]> {
+  const membership = await prisma.organizationMember.findUnique({
+    where: { organizationId_userId: { organizationId, userId } },
+    select: { allowedPages: true, role: true },
+  });
+  // The org owner is never restricted, regardless of what's stored.
+  if (!membership || membership.role === 'BUSINESS_OWNER') return [];
+  return membership.allowedPages;
 }
 
 export async function updateProfile(userId: string, data: { fullName?: string; phoneNumber?: string }) {

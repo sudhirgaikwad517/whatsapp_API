@@ -10,6 +10,11 @@ const envSchema = z.object({
   PORT: z.string().transform(Number).default('5000'),
   FRONTEND_URL: z.string().default('http://localhost:5173'),
   API_BASE_URL: z.string().default('http://localhost:5050'),
+  // The admin panel/dashboard's own URL — distinct from FRONTEND_URL, which
+  // in production points at the marketing site (wabtic.com) that tenant
+  // users log in through. Superadmin only ever logs in at the admin panel
+  // itself, so its password-reset link must point here instead.
+  ADMIN_PANEL_URL: z.string().default('http://localhost:5173'),
   ALLOWED_ORIGINS: z.string().optional().default(''),
   COOKIE_DOMAIN: z.string().optional().default(''),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),

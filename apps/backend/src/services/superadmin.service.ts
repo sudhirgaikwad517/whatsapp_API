@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { Prisma, PlanTier, SupportTicketStatus } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
@@ -7,6 +8,9 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 import { getTemplateSentCounts } from './usage-metrics.service.js';
 import { encryptToken, safeDecryptToken } from '../utils/encryption.js';
+import { sendMail, buildPasswordResetEmail } from '../utils/mailer.js';
+
+const BCRYPT_ROUNDS = 12;
 
 export async function loginSuperAdmin(email: string, password: string) {
   const superAdmin = await prisma.superAdminUser.findUnique({
@@ -43,6 +47,57 @@ export async function loginSuperAdmin(email: string, password: string) {
     },
     accessToken,
   };
+}
+
+export async function forgotSuperAdminPassword(email: string) {
+  const superAdmin = await prisma.superAdminUser.findUnique({ where: { email } });
+  // Always respond generically to prevent email enumeration
+  const generic = { message: 'If this email is registered, a reset link has been sent.' };
+  if (!superAdmin || !superAdmin.isActive) {
+    return generic;
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await prisma.superAdminUser.update({
+    where: { id: superAdmin.id },
+    data: { resetToken, resetTokenExpiry },
+  });
+
+  const resetUrl = `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/superadmin/reset-password?token=${resetToken}`;
+  try {
+    await sendMail({
+      to: superAdmin.email,
+      subject: 'Reset your Prowexa Super Admin password',
+      html: buildPasswordResetEmail(resetUrl),
+    });
+  } catch (err) {
+    logger.error({ superAdminId: superAdmin.id, err }, 'Failed to send super admin password reset email.');
+  }
+
+  return generic;
+}
+
+export async function resetSuperAdminPassword(token: string, newPassword: string) {
+  const superAdmin = await prisma.superAdminUser.findFirst({
+    where: { resetToken: token, resetTokenExpiry: { gt: new Date() } },
+  });
+  if (!superAdmin) {
+    throw new AppError('Invalid or expired reset token.', 400, 'INVALID_RESET_TOKEN');
+  }
+  if (!newPassword || newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    throw new AppError('Password must be at least 12 characters and include an uppercase letter and a number.', 400, 'WEAK_PASSWORD');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await prisma.superAdminUser.update({
+    where: { id: superAdmin.id },
+    data: { passwordHash, resetToken: null, resetTokenExpiry: null },
+  });
+
+  logger.info({ superAdminId: superAdmin.id }, 'Super Admin password reset completed.');
+  return { message: 'Password has been reset successfully. Please log in with your new password.' };
 }
 
 export async function getExecutiveDashboardKpi(timeRange: string = 'all') {

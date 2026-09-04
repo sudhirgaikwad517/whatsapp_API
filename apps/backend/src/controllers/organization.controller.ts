@@ -45,6 +45,18 @@ export async function removeMember(req: AuthenticatedRequest, res: Response, nex
   }
 }
 
+export async function updateMember(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const targetUserId = req.params.userId;
+    const requestingUserId = req.user!.userId;
+    const data = await OrgService.updateMember(orgId, targetUserId, requestingUserId, req.body);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function inviteMember(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

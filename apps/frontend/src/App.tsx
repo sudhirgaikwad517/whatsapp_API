@@ -23,6 +23,8 @@ const Wallet = lazy(() => import('./pages/Wallet').then(m => ({ default: m.Walle
 const Team = lazy(() => import('./pages/Team').then(m => ({ default: m.Team })));
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard').then(m => ({ default: m.SuperAdminDashboard })));
 const SuperAdminLogin = lazy(() => import('./pages/SuperAdminLogin').then(m => ({ default: m.SuperAdminLogin })));
+const SuperAdminForgotPassword = lazy(() => import('./pages/SuperAdminForgotPassword').then(m => ({ default: m.SuperAdminForgotPassword })));
+const SuperAdminResetPassword = lazy(() => import('./pages/SuperAdminResetPassword').then(m => ({ default: m.SuperAdminResetPassword })));
 const Flows = lazy(() => import('./pages/Flows').then(m => ({ default: m.Flows })));
 const Catalog = lazy(() => import('./pages/Catalog').then(m => ({ default: m.Catalog })));
 const Billing = lazy(() => import('./pages/Billing').then(m => ({ default: m.Billing })));
@@ -133,6 +135,8 @@ export const App: React.FC = () => {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/superadmin/login" element={<SuperAdminLogin />} />
+            <Route path="/superadmin/forgot-password" element={<SuperAdminForgotPassword />} />
+            <Route path="/superadmin/reset-password" element={<SuperAdminResetPassword />} />
 
             {/* Super Admin Dedicated Layout */}
             <Route
