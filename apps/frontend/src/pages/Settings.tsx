@@ -20,6 +20,7 @@ export const Settings: React.FC = () => {
   const [billingPan, setBillingPan] = useState('');
   const [billingEmail, setBillingEmail] = useState('');
   const [billingPhone, setBillingPhone] = useState('');
+  const [escalationTemplateId, setEscalationTemplateId] = useState('');
   const [wabaId, setWabaId] = useState('2251442372294214');
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
@@ -63,6 +64,7 @@ export const Settings: React.FC = () => {
       if (orgData.billingPan) setBillingPan(orgData.billingPan);
       if (orgData.billingEmail) setBillingEmail(orgData.billingEmail);
       if (orgData.billingPhone) setBillingPhone(orgData.billingPhone);
+      if (orgData.escalationTemplateId) setEscalationTemplateId(orgData.escalationTemplateId);
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
       if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
       if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
@@ -90,6 +92,29 @@ export const Settings: React.FC = () => {
     },
     onError: (err: any) => {
       toast.error('Failed to update business details', { description: err?.response?.data?.message || err.message });
+    },
+  });
+
+  const { data: templatesList } = useQuery({
+    queryKey: ['templates-list'],
+    queryFn: async () => {
+      const res = await apiClient.get('/whatsapp/templates');
+      return res.data.data;
+    },
+  });
+  const approvedTemplates = Array.isArray(templatesList) ? templatesList.filter((t: any) => t.status === 'APPROVED') : [];
+
+  const saveEscalationTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.patch('/organization', { escalationTemplateId: escalationTemplateId || null });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-details'] });
+      toast.success('Agent notification template saved!');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to save template', { description: err?.response?.data?.message || err.message });
     },
   });
 
@@ -344,6 +369,50 @@ export const Settings: React.FC = () => {
             className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
           >
             {saveBusinessDetailsMutation.isPending ? 'Saving...' : 'Save Business Details'}
+          </button>
+        </div>
+      </div>
+
+      {/* Agent Escalation Notification Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <h3 className="font-semibold text-white flex items-center gap-2">
+          <Bot className="w-5 h-5 text-emerald-400" />
+          Agent Chat-Assignment Notifications
+        </h3>
+        <p className="text-xs text-slate-400 -mt-2">
+          When the AI Copilot hands a conversation off to a human agent, they're emailed automatically. Pick an approved
+          WhatsApp template below to also notify them on WhatsApp — sent from your own connected number and billed at the
+          standard utility-message rate from your wallet.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              WhatsApp Notification Template
+            </label>
+            <select
+              value={escalationTemplateId}
+              onChange={(e) => setEscalationTemplateId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">Email only (no WhatsApp notification)</option>
+              {approvedTemplates.map((t: any) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.category}, {t.language})
+                </option>
+              ))}
+            </select>
+            {approvedTemplates.length === 0 && (
+              <p className="text-[10px] text-amber-400 mt-1">
+                No approved templates found yet — sync/create one from the Meta Templates page first.
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => saveEscalationTemplateMutation.mutate()}
+            disabled={saveEscalationTemplateMutation.isPending}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 h-fit"
+          >
+            {saveEscalationTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
           </button>
         </div>
       </div>

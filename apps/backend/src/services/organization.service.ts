@@ -26,6 +26,7 @@ export async function getOrganization(organizationId: string) {
         billingPan: true,
         billingEmail: true,
         billingPhone: true,
+        escalationTemplateId: true,
       },
     });
 
@@ -69,6 +70,7 @@ export async function updateOrganization(
     billingPan?: string;
     billingEmail?: string;
     billingPhone?: string;
+    escalationTemplateId?: string | null;
   }
 ) {
   const updateData: Record<string, any> = {};
@@ -85,6 +87,7 @@ export async function updateOrganization(
   if (data.billingPan !== undefined) updateData.billingPan = data.billingPan;
   if (data.billingEmail !== undefined) updateData.billingEmail = data.billingEmail;
   if (data.billingPhone !== undefined) updateData.billingPhone = data.billingPhone;
+  if (data.escalationTemplateId !== undefined) updateData.escalationTemplateId = data.escalationTemplateId || null;
 
   try {
     const updated = await prisma.organization.update({
@@ -105,6 +108,7 @@ export async function updateOrganization(
         billingPan: true,
         billingEmail: true,
         billingPhone: true,
+        escalationTemplateId: true,
       },
     });
     return { ...updated, geminiApiKey: safeDecrypt(updated.geminiApiKey) };

@@ -230,6 +230,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
         where: {
           organizationId,
           role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
+          isActive: true,
         },
         select: { userId: true },
       });
@@ -270,6 +271,14 @@ export async function processAutonomousAiResponse(organizationId: string, conver
         reason: result.reason || 'Complex Query Escalation',
       });
       logger.info({ conversationId, organizationId }, 'Complex AI query escalated to Live Agent.');
+
+      // 4. Notify the assigned agent directly (email always; WhatsApp too if
+      // the org has configured an approved template) — the in-app socket
+      // event alone only reaches an agent who already has the Inbox open.
+      if (bestAgentId) {
+        const { notifyAgentOfEscalation } = await import('./agent-notification.service.js');
+        void notifyAgentOfEscalation(organizationId, bestAgentId, conversationId);
+      }
     } else if (result.replyText) {
       // Send automated AI response to customer on WhatsApp
       const { sendOutboundTextMessage } = await import('./inbox.service.js');

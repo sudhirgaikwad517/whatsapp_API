@@ -79,6 +79,18 @@ export function buildPasswordResetEmail(resetUrl: string): SendMailInput['html']
   `;
 }
 
+export function buildChatAssignedEmail(agentName: string, contactName: string, orgName: string): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>New Chat Assigned to You</h2>
+      <p>Hi ${agentName},</p>
+      <p>Our AI Copilot handed off a conversation with <strong>${contactName}</strong> to you at <strong>${orgName}</strong> — it needs a human touch. Please open your Live Inbox and resolve the customer's query.</p>
+      <p>We also sent you a WhatsApp message about this, if your organization has that enabled.</p>
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}
+
 export function buildPurchaseConfirmationEmail(input: {
   fullName: string;
   description: string;
