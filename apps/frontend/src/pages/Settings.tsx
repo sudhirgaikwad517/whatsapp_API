@@ -21,6 +21,7 @@ export const Settings: React.FC = () => {
   const [billingEmail, setBillingEmail] = useState('');
   const [billingPhone, setBillingPhone] = useState('');
   const [escalationTemplateId, setEscalationTemplateId] = useState('');
+  const [slaReassignMinutes, setSlaReassignMinutes] = useState('');
   const [wabaId, setWabaId] = useState('2251442372294214');
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
@@ -65,6 +66,7 @@ export const Settings: React.FC = () => {
       if (orgData.billingEmail) setBillingEmail(orgData.billingEmail);
       if (orgData.billingPhone) setBillingPhone(orgData.billingPhone);
       if (orgData.escalationTemplateId) setEscalationTemplateId(orgData.escalationTemplateId);
+      if (orgData.slaReassignMinutes) setSlaReassignMinutes(String(orgData.slaReassignMinutes));
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
       if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
       if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
@@ -115,6 +117,22 @@ export const Settings: React.FC = () => {
     },
     onError: (err: any) => {
       toast.error('Failed to save template', { description: err?.response?.data?.message || err.message });
+    },
+  });
+
+  const saveSlaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.patch('/organization', {
+        slaReassignMinutes: slaReassignMinutes.trim() ? Number(slaReassignMinutes) : null,
+      });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-details'] });
+      toast.success('Chat SLA setting saved!');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to save SLA setting', { description: err?.response?.data?.message || err.message });
     },
   });
 
@@ -413,6 +431,40 @@ export const Settings: React.FC = () => {
             className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 h-fit"
           >
             {saveEscalationTemplateMutation.isPending ? 'Saving...' : 'Save Template'}
+          </button>
+        </div>
+      </div>
+
+      {/* Chat SLA & Auto-Escalation Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4 shadow-xl">
+        <h3 className="font-semibold text-white flex items-center gap-2">
+          <Bot className="w-5 h-5 text-emerald-400" />
+          Chat SLA &amp; Auto-Escalation
+        </h3>
+        <p className="text-xs text-slate-400 -mt-2">
+          If an agent doesn't open a chat assigned to them within this many minutes, it's automatically reassigned to you
+          (the org owner) and you're notified the same way agents are. Leave blank to turn this off.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Auto-Reassign After (minutes)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={slaReassignMinutes}
+              onChange={(e) => setSlaReassignMinutes(e.target.value)}
+              placeholder="e.g. 30 (blank = disabled)"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <button
+            onClick={() => saveSlaMutation.mutate()}
+            disabled={saveSlaMutation.isPending}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 h-fit"
+          >
+            {saveSlaMutation.isPending ? 'Saving...' : 'Save SLA Setting'}
           </button>
         </div>
       </div>

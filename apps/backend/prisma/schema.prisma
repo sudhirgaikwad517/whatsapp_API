@@ -175,6 +175,9 @@ model Organization {
   // Approved WhatsApp template (by Template.id) used to notify a human agent
   // via WhatsApp when the AI Copilot hands a conversation off to them.
   escalationTemplateId String?         @db.Uuid
+  // If the agent a chat is assigned to doesn't open it within this many
+  // minutes, it's auto-reassigned to the org owner. Null = feature off.
+  slaReassignMinutes Int?
   isSuspended       Boolean            @default(false)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -386,6 +389,11 @@ model Conversation {
   whatsappAccountId  String          @db.Uuid
   contactId          String          @db.Uuid
   assignedAgentId    String?         @db.Uuid
+  // When the current assignedAgentId was set — the SLA reassignment clock
+  // starts here. agentOpenedAt records when that agent first viewed the
+  // chat afterwards; both reset to a fresh assignedAt/null on reassignment.
+  assignedAt         DateTime?
+  agentOpenedAt      DateTime?
   unreadCount        Int             @default(0)
   lastMessageSnippet String?         @db.Text
   lastMessageAt      DateTime?       @default(now())

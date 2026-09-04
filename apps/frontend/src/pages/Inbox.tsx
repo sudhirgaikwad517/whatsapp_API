@@ -340,6 +340,13 @@ export const Inbox: React.FC = () => {
 
   const currentConversation = msgData?.conversation || convData?.find((c: any) => c.id === activeConversationId);
   const isWindowExpired = currentConversation?.windowExpiresAt && new Date(currentConversation.windowExpiresAt) < new Date();
+  // A plain agent has no access to a chat assigned to someone else — the
+  // backend already rejects any send/resolve attempt with a 403, this just
+  // avoids showing them a working-looking input box that will only error.
+  const isLockedToOtherAgent =
+    user?.role === 'AGENT' &&
+    !!currentConversation?.assignedAgentId &&
+    currentConversation.assignedAgentId !== user?.id;
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] lg:h-full bg-slate-950 text-slate-100 overflow-hidden relative">
@@ -368,31 +375,35 @@ export const Inbox: React.FC = () => {
             />
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-            <button
-              onClick={() => {
-                setFilterTab('all');
-                setPage(1);
-              }}
-              className={`flex-1 py-1.5 rounded-lg transition-all ${
-                filterTab === 'all' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              All Chats
-            </button>
-            <button
-              onClick={() => {
-                setFilterTab('mine');
-                setPage(1);
-              }}
-              className={`flex-1 py-1.5 rounded-lg transition-all ${
-                filterTab === 'mine' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Assigned to Me
-            </button>
-          </div>
+          {/* Filter Tabs — a plain AGENT only ever sees their own assigned
+              chats (backend-enforced), so the All/Mine toggle would just
+              show the same list twice; hide it for that role. */}
+          {user?.role !== 'AGENT' && (
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+              <button
+                onClick={() => {
+                  setFilterTab('all');
+                  setPage(1);
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  filterTab === 'all' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                All Chats
+              </button>
+              <button
+                onClick={() => {
+                  setFilterTab('mine');
+                  setPage(1);
+                }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  filterTab === 'mine' ? 'bg-emerald-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Assigned to Me
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Chat List */}
@@ -529,24 +540,41 @@ export const Inbox: React.FC = () => {
               <div className="flex items-center justify-between sm:justify-end space-x-2 shrink-0 w-full sm:w-auto pt-1 sm:pt-0 border-t border-slate-800/60 sm:border-t-0">
                 <div className="flex items-center space-x-1.5 flex-1 sm:flex-initial min-w-0">
                   <span className="text-[11px] sm:text-xs text-slate-400 hidden sm:inline shrink-0">Agent:</span>
-                  <select
-                    value={currentConversation.assignedAgentId || ''}
-                    onChange={(e) => assignMutation.mutate(e.target.value || null)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium w-full sm:w-auto truncate"
-                  >
-                    <option value="">Unassigned (AI Active)</option>
-                    {teamMembers?.map((member: any) => (
-                      <option key={member.user.id} value={member.user.id}>
-                        {member.user.fullName}
-                      </option>
-                    ))}
-                  </select>
+                  {user?.role === 'BUSINESS_OWNER' || user?.role === 'MANAGER' ? (
+                    <select
+                      value={currentConversation.assignedAgentId || ''}
+                      onChange={(e) => assignMutation.mutate(e.target.value || null)}
+                      className="bg-slate-950 border border-slate-800 rounded-xl px-2 py-1 sm:px-2.5 sm:py-1.5 text-[11px] sm:text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-medium w-full sm:w-auto truncate"
+                    >
+                      <option value="">Unassigned (AI Active)</option>
+                      {teamMembers?.map((member: any) => (
+                        <option key={member.user.id} value={member.user.id}>
+                          {member.user.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    // A plain agent can't reassign chats — show who it's
+                    // assigned to as read-only text instead of a dropdown.
+                    <span className="text-[11px] sm:text-xs text-slate-300 font-medium truncate">
+                      {currentConversation.assignedAgent?.fullName || 'Unassigned (AI Active)'}
+                    </span>
+                  )}
                 </div>
 
                 {currentConversation.status === 'RESOLVED' || currentConversation.status === 'CLOSED' ? (
                   <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold px-2.5 py-1 sm:py-1.5 rounded-xl flex items-center space-x-1 shrink-0">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Resolved</span>
+                  </span>
+                ) : user?.role === 'AGENT' && currentConversation.assignedAgentId && currentConversation.assignedAgentId !== user?.id ? (
+                  // Assigned to a different agent — this agent has no access to act on it at all.
+                  <span
+                    className="bg-slate-800 border border-slate-700 text-slate-500 text-[11px] font-bold px-2.5 py-1 sm:py-1.5 rounded-xl flex items-center space-x-1 shrink-0"
+                    title="This chat is assigned to another agent."
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Assigned to Other Agent</span>
                   </span>
                 ) : (
                   <button
@@ -669,7 +697,14 @@ export const Inbox: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Static Fixed Bottom Input Bar */}
+                  {/* Static Fixed Bottom Input Bar — locked out entirely for
+                      an agent viewing a chat assigned to someone else. */}
+                  {isLockedToOtherAgent ? (
+                    <div className="p-4 bg-slate-900/95 border-t border-slate-800 sticky bottom-0 z-20 shrink-0 backdrop-blur-md flex items-center justify-center gap-2 text-xs text-slate-500 font-semibold">
+                      <UserCheck className="w-4 h-4" />
+                      <span>This chat is assigned to another agent — you can't reply here.</span>
+                    </div>
+                  ) : (
                   <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 flex items-center space-x-2 sm:space-x-3 sticky bottom-0 z-20 shrink-0 backdrop-blur-md relative">
                     {/* Quick Reply Autocomplete Popup Menu */}
                     {(showQuickReplies || (isTypingSlash && filteredCannedResponses.length > 0)) && (
@@ -881,6 +916,7 @@ export const Inbox: React.FC = () => {
                       <Send className="w-5 h-5" />
                     </button>
                   </form>
+                  )}
                 </>
               ) : (
                 <>
@@ -909,12 +945,13 @@ export const Inbox: React.FC = () => {
                       type="text"
                       value={noteText}
                       onChange={(e) => setNoteText(e.target.value)}
-                      placeholder="Add a private internal note for your team..."
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all"
+                      disabled={isLockedToOtherAgent}
+                      placeholder={isLockedToOtherAgent ? "This chat is assigned to another agent." : "Add a private internal note for your team..."}
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all disabled:opacity-50"
                     />
                     <button
                       type="submit"
-                      disabled={noteMutation.isPending || !noteText.trim()}
+                      disabled={isLockedToOtherAgent || noteMutation.isPending || !noteText.trim()}
                       className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all text-xs flex items-center shrink-0"
                     >
                       <Plus className="w-4 h-4 mr-1 stroke-[3]" />

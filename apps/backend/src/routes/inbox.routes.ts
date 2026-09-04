@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import * as InboxController from '../controllers/inbox.controller.js';
-import { authenticate } from '../middlewares/auth.middleware.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
 import { requirePageAccess } from '../middlewares/page-access.middleware.js';
+import { UserRole } from '@prowexa/shared-types';
 
 const router = Router();
 
@@ -34,9 +35,14 @@ router.post('/conversations/:id/messages', InboxController.sendMessage);
 /**
  * @route   PATCH /api/v1/inbox/conversations/:id/assign
  * @desc    Assign conversation to team agent
- * @access  Bearer
+ * @access  Bearer (Business Owner, Manager only — a plain agent has no
+ *          access to hand a chat to anyone, including themselves)
  */
-router.patch('/conversations/:id/assign', InboxController.assignAgent);
+router.patch(
+  '/conversations/:id/assign',
+  authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER),
+  InboxController.assignAgent
+);
 
 /**
  * @route   PATCH /api/v1/inbox/conversations/:id/status

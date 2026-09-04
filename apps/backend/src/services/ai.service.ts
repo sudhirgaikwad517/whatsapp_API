@@ -224,16 +224,27 @@ export async function processAutonomousAiResponse(organizationId: string, conver
     const result = await evaluateAiAutonomousReply(organizationId, conversationId);
 
     if (result.isEscalated) {
-      // Find best agent via Round-Robin for human handoff
+      // Find best agent via Round-Robin for human handoff. The owner is only
+      // a last-resort fallback (e.g. a solo org with no hired staff yet) —
+      // otherwise, with every agent starting at an open-chat count of 0, a
+      // plain tie-break would always hand every escalation to the owner
+      // (first row, stable sort) even while they're offline and staff are
+      // actively logged in.
       let bestAgentId: string | null = null;
-      const members = await prisma.organizationMember.findMany({
+      let members = await prisma.organizationMember.findMany({
         where: {
           organizationId,
-          role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
+          role: { in: ['MANAGER', 'AGENT'] },
           isActive: true,
         },
         select: { userId: true },
       });
+      if (members.length === 0) {
+        members = await prisma.organizationMember.findMany({
+          where: { organizationId, role: 'BUSINESS_OWNER', isActive: true },
+          select: { userId: true },
+        });
+      }
       if (members.length > 0) {
         const openCounts = await Promise.all(
           members.map(async (m: any) => ({
@@ -252,7 +263,7 @@ export async function processAutonomousAiResponse(organizationId: string, conver
         where: { id: conversationId },
         data: {
           status: 'ESCALATED',
-          ...(bestAgentId ? { assignedAgentId: bestAgentId } : {}),
+          ...(bestAgentId ? { assignedAgentId: bestAgentId, assignedAt: new Date(), agentOpenedAt: null } : {}),
         },
       });
 

@@ -78,3 +78,17 @@ export const paymentOrderPollQueue = new Queue('payment-order-poll', {
     attempts: 2,
   },
 });
+
+/**
+ * SLA Reassignment Queue — repeating sweep that hands a conversation back to
+ * the org owner if the agent it was assigned to never opened it within that
+ * org's configured SLA window (Organization.slaReassignMinutes).
+ */
+export const slaReassignQueue = new Queue('sla-reassignment', {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 200,
+    attempts: 2,
+  },
+});

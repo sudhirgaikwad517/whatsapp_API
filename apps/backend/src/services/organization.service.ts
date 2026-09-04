@@ -27,6 +27,7 @@ export async function getOrganization(organizationId: string) {
         billingEmail: true,
         billingPhone: true,
         escalationTemplateId: true,
+        slaReassignMinutes: true,
       },
     });
 
@@ -71,6 +72,7 @@ export async function updateOrganization(
     billingEmail?: string;
     billingPhone?: string;
     escalationTemplateId?: string | null;
+    slaReassignMinutes?: number | null;
   }
 ) {
   const updateData: Record<string, any> = {};
@@ -88,6 +90,10 @@ export async function updateOrganization(
   if (data.billingEmail !== undefined) updateData.billingEmail = data.billingEmail;
   if (data.billingPhone !== undefined) updateData.billingPhone = data.billingPhone;
   if (data.escalationTemplateId !== undefined) updateData.escalationTemplateId = data.escalationTemplateId || null;
+  if (data.slaReassignMinutes !== undefined) {
+    updateData.slaReassignMinutes =
+      data.slaReassignMinutes === null || data.slaReassignMinutes === 0 ? null : Math.max(1, Math.round(data.slaReassignMinutes));
+  }
 
   try {
     const updated = await prisma.organization.update({
@@ -109,6 +115,7 @@ export async function updateOrganization(
         billingEmail: true,
         billingPhone: true,
         escalationTemplateId: true,
+        slaReassignMinutes: true,
       },
     });
     return { ...updated, geminiApiKey: safeDecrypt(updated.geminiApiKey) };
