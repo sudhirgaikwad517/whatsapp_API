@@ -65,53 +65,19 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requireTenantAccess?
   return <>{children}</>;
 };
 
-// SSO handoff params (from wabtic-website) are read once at module load, before
-// they're stripped from the URL, but the actual exchange for httpOnly cookies
-// happens asynchronously in the App component below — the tokens never touch
-// localStorage on this side.
-const pendingSsoTokens = (() => {
-  if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  const ssoAccess = params.get('sso_access');
-  const ssoRefresh = params.get('sso_refresh');
-  if (!ssoAccess) return null;
-
-  window.history.replaceState({}, document.title, window.location.pathname);
-  return { accessToken: ssoAccess, refreshToken: ssoRefresh || undefined };
-})();
-
 export const App: React.FC = () => {
   const syncUser = useAuthStore(state => state.syncUser);
-  const setAuth = useAuthStore(state => state.setAuth);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
-  const [ssoResolved, setSsoResolved] = React.useState(!pendingSsoTokens);
   const [sessionChecked, setSessionChecked] = React.useState(false);
 
+  // The dashboard's own "app" session cookie is separate from wabtic-website's
+  // "website" cookie (different cookie names — see auth-cookies.ts) precisely
+  // so that logging in on the marketing site never silently authenticates the
+  // dashboard too. This check only ever succeeds if the user has actually
+  // logged in here, on app.wabtic.com, at least once.
   React.useEffect(() => {
-    if (!pendingSsoTokens) return;
-    (async () => {
-      try {
-        const { apiClient } = await import('./services/api.client');
-        const res = await apiClient.post('/auth/session', pendingSsoTokens);
-        setAuth(res.data.data.user);
-      } catch (e) {
-        console.error('Failed to exchange SSO handoff tokens', e);
-      } finally {
-        setSsoResolved(true);
-      }
-    })();
-  }, [setAuth]);
-
-  // `isAuthenticated` only reflects THIS origin's localStorage, which is empty
-  // on a first-ever visit — even when a valid session cookie already exists
-  // (e.g. the user just logged in on wabtic.com, which shares the cookie via
-  // Domain=.wabtic.com). So the cookie must be checked unconditionally once,
-  // not gated behind isAuthenticated, or a cookie-only session never gets
-  // picked up and ProtectedRoute bounces straight to /login.
-  React.useEffect(() => {
-    if (!ssoResolved) return;
     syncUser().finally(() => setSessionChecked(true));
-  }, [ssoResolved, syncUser]);
+  }, [syncUser]);
 
   React.useEffect(() => {
     if (isAuthenticated) {
@@ -119,7 +85,7 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated, syncUser]);
 
-  if (!ssoResolved || !sessionChecked) {
+  if (!sessionChecked) {
     return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>;
   }
 

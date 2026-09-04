@@ -34,8 +34,11 @@ export const Team: React.FC = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState(generateRandomPassword);
   const [role, setRole] = useState<'MANAGER' | 'AGENT'>('AGENT');
+  const [inviteFullAccess, setInviteFullAccess] = useState(true);
+  const [inviteAllowedPages, setInviteAllowedPages] = useState<string[]>([]);
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; pass: string; name: string; role: string } | null>(null);
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [editFullName, setEditFullName] = useState('');
@@ -58,8 +61,10 @@ export const Team: React.FC = () => {
       const res = await apiClient.post('/organization/members/invite', {
         fullName: fullName.trim(),
         email: email.trim(),
+        phoneNumber: phoneNumber.trim(),
         role,
         password: password.trim(),
+        allowedPages: inviteFullAccess ? [] : inviteAllowedPages,
       });
       return res.data.data;
     },
@@ -74,12 +79,20 @@ export const Team: React.FC = () => {
       setIsInviteOpen(false);
       setFullName('');
       setEmail('');
+      setPhoneNumber('');
       setPassword(generateRandomPassword());
+      setRole('AGENT');
+      setInviteFullAccess(true);
+      setInviteAllowedPages([]);
     },
     onError: (err: any) => {
       toast.error('Failed to create member', { description: err?.response?.data?.error?.message || err.message });
     },
   });
+
+  const toggleInvitePageOption = (key: string) => {
+    setInviteAllowedPages((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+  };
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
@@ -335,6 +348,21 @@ export const Team: React.FC = () => {
               </div>
 
               <div>
+                <label htmlFor="team-invite-phone" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Phone Number
+                </label>
+                <input
+                  id="team-invite-phone"
+                  type="text"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+91-XXXXXXXXXX"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Used to notify this agent on WhatsApp when a chat is assigned to them.</p>
+              </div>
+
+              <div>
                 <label htmlFor="team-invite-password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Initial Login Password
                 </label>
@@ -364,6 +392,37 @@ export const Team: React.FC = () => {
                   <option value="AGENT">AGENT (Live Inbox Chat Support)</option>
                   <option value="MANAGER">MANAGER (Campaigns, Templates & Inbox)</option>
                 </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800/80">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={inviteFullAccess}
+                    onChange={(e) => setInviteFullAccess(e.target.checked)}
+                    className="accent-emerald-500"
+                  />
+                  Full access (no page restrictions)
+                </label>
+
+                {!inviteFullAccess && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Visible Pages</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAGE_OPTIONS.map((p) => (
+                        <label key={p.key} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 cursor-pointer hover:border-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={inviteAllowedPages.includes(p.key)}
+                            onChange={() => toggleInvitePageOption(p.key)}
+                            className="accent-emerald-500"
+                          />
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -397,7 +456,8 @@ export const Team: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-300">
-              Account created for <strong className="text-white">{createdCredentials.name}</strong> ({createdCredentials.role}). Share these credentials with your team member:
+              Account created for <strong className="text-white">{createdCredentials.name}</strong> ({createdCredentials.role}). A welcome email with these
+              details has also been sent to {createdCredentials.email} — you can additionally share them directly below:
             </p>
 
             <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 font-mono text-xs text-slate-300">

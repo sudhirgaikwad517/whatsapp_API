@@ -4,6 +4,8 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { encryptToken, safeDecryptToken as safeDecrypt } from '../utils/encryption.js';
 import bcrypt from 'bcryptjs';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 export async function getOrganization(organizationId: string) {
   try {
@@ -181,6 +183,7 @@ export async function updateMember(
 
   const member = await prisma.organizationMember.findFirst({
     where: { organizationId, userId: targetUserId },
+    include: { user: { select: { fullName: true, email: true } } },
   });
   if (!member) {
     throw new AppError('Member not found in this organization.', 404, 'MEMBER_NOT_FOUND');
@@ -205,20 +208,79 @@ export async function updateMember(
       : []),
   ]);
 
-  return prisma.organizationMember.findUnique({
+  const result = await prisma.organizationMember.findUnique({
     where: { id: updatedMember.id },
     include: {
       user: { select: { id: true, fullName: true, email: true, phoneNumber: true, isEmailVerified: true, createdAt: true } },
     },
   });
+
+  // Notify the member by email about changes that affect what they can do —
+  // an activation/deactivation toggle and a role/access change are reported
+  // as separate notifications since they're conceptually distinct events
+  // (both can fire from the same request if an admin changed several things
+  // at once).
+  void notifyMemberOfAccountChange(organizationId, member, data).catch(() => {});
+
+  return result;
+}
+
+async function notifyMemberOfAccountChange(
+  organizationId: string,
+  member: { user: { fullName: string; email: string }; isActive: boolean; allowedPages: string[]; role: string },
+  data: { isActive?: boolean; allowedPages?: string[]; role?: 'MANAGER' | 'AGENT' }
+): Promise<void> {
+  const roleOrAccessChanged =
+    (data.role !== undefined && data.role !== member.role) ||
+    (data.allowedPages !== undefined && JSON.stringify(data.allowedPages) !== JSON.stringify(member.allowedPages));
+  const activeStatusChanged = data.isActive !== undefined && data.isActive !== member.isActive;
+
+  if (!roleOrAccessChanged && !activeStatusChanged) return;
+
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+    const orgName = org?.name || 'your organization';
+    const loginUrl = `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/login`;
+    const { sendMail, buildAccessUpdatedEmail, buildAccountStatusEmail } = await import('../utils/mailer.js');
+
+    if (activeStatusChanged) {
+      await sendMail({
+        to: member.user.email,
+        subject: data.isActive ? 'Your Prowexa Account Has Been Reactivated' : 'Your Prowexa Account Has Been Deactivated',
+        html: buildAccountStatusEmail({ fullName: member.user.fullName, isActive: data.isActive!, orgName, loginUrl }),
+      });
+    }
+    if (roleOrAccessChanged) {
+      await sendMail({
+        to: member.user.email,
+        subject: 'Your Prowexa Account Access Was Updated',
+        html: buildAccessUpdatedEmail({
+          fullName: member.user.fullName,
+          role: data.role ?? member.role,
+          allowedPages: data.allowedPages ?? member.allowedPages,
+          orgName,
+          loginUrl,
+        }),
+      });
+    }
+  } catch (err) {
+    logger.error({ organizationId, err }, 'Failed to send member account-change notification email.');
+  }
 }
 
 export async function inviteMember(
   organizationId: string,
-  input: { email: string; fullName: string; role: 'MANAGER' | 'AGENT'; password?: string }
+  input: {
+    email: string;
+    fullName: string;
+    role: 'MANAGER' | 'AGENT';
+    password?: string;
+    phoneNumber?: string;
+    allowedPages?: string[];
+  }
 ) {
   const email = input.email.trim().toLowerCase();
-
+  const isNewUser = !(await prisma.user.findUnique({ where: { email } }));
   let user = await prisma.user.findUnique({ where: { email } });
 
   // A fixed fallback password here would be a standing, publicly-known
@@ -234,6 +296,7 @@ export async function inviteMember(
         email,
         fullName: input.fullName.trim(),
         passwordHash,
+        phoneNumber: input.phoneNumber?.trim() || null,
         isEmailVerified: true,
       },
     });
@@ -241,8 +304,10 @@ export async function inviteMember(
     const passwordHash = await bcrypt.hash(input.password.trim(), 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: { passwordHash, ...(input.phoneNumber?.trim() ? { phoneNumber: input.phoneNumber.trim() } : {}) },
     });
+  } else if (input.phoneNumber?.trim()) {
+    await prisma.user.update({ where: { id: user.id }, data: { phoneNumber: input.phoneNumber.trim() } });
   }
 
   const existingMember = await prisma.organizationMember.findFirst({
@@ -258,18 +323,40 @@ export async function inviteMember(
       organizationId,
       userId: user.id,
       role: input.role,
+      allowedPages: input.allowedPages && input.allowedPages.length > 0 ? input.allowedPages : [],
     },
     include: {
       user: {
-        select: { id: true, fullName: true, email: true, isEmailVerified: true, createdAt: true },
+        select: { id: true, fullName: true, email: true, phoneNumber: true, isEmailVerified: true, createdAt: true },
       },
     },
   });
 
-  // Only surfaced when the caller didn't supply their own password, so the
-  // admin has something to hand the new member — never echoes back a
-  // caller-supplied password.
-  const generatedPassword = input.password && input.password.trim().length >= 6 ? undefined : rawPassword;
+  // Only surfaced (and only ever emailed) when the caller didn't supply their
+  // own password and this is a genuinely new account — never echoes back a
+  // caller-supplied password, and never emails a fabricated password for an
+  // existing account whose real password wasn't touched.
+  const generatedPassword = isNewUser && !(input.password && input.password.trim().length >= 6) ? rawPassword : undefined;
+
+  try {
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } });
+    const { sendMail, buildWelcomeAgentEmail } = await import('../utils/mailer.js');
+    await sendMail({
+      to: member.user.email,
+      subject: `You've Been Added to ${org?.name || 'a Prowexa Workspace'}`,
+      html: buildWelcomeAgentEmail({
+        fullName: member.user.fullName,
+        email: member.user.email,
+        tempPassword: generatedPassword || null,
+        role: input.role,
+        allowedPages: member.allowedPages,
+        orgName: org?.name || 'Prowexa',
+        loginUrl: `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/login`,
+      }),
+    });
+  } catch (err) {
+    logger.error({ organizationId, err }, 'Failed to send new team member welcome email.');
+  }
 
   return { ...member, generatedPassword };
 }

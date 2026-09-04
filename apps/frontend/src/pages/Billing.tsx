@@ -19,8 +19,15 @@ import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { generateInvoicePdf } from '../utils/InvoiceGenerator';
 import { confirmAction } from '../components/ui/ConfirmDialog';
+import { useAuthStore } from '../store/auth.store';
 
 export const Billing: React.FC = () => {
+  const { user } = useAuthStore();
+  // Viewing balances/invoices is fine for any agent with billing page access,
+  // but actually spending the org's money is owner/manager-only — enforced
+  // for real on the backend; this just avoids showing a support agent a
+  // working-looking buy button that will only 403.
+  const canPurchase = user?.role === 'BUSINESS_OWNER' || user?.role === 'MANAGER';
   const [rechargeAmount, setRechargeAmount] = useState('1000');
   const queryClient = useQueryClient();
 
@@ -288,8 +295,9 @@ export const Billing: React.FC = () => {
                   const finalAmount = Number((baseAmount * 1.18).toFixed(2));
                   createRazorpayOrderMutation.mutate({ baseAmount, finalAmount });
                 }}
-                disabled={createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                disabled={!canPurchase || createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
+                title={!canPurchase ? 'Only the org owner or a manager can make purchases.' : undefined}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {createRazorpayOrderMutation.isPending ? 'Processing...' : 'Buy Credits (+18% GST)'}
               </button>
@@ -312,8 +320,9 @@ export const Billing: React.FC = () => {
           <div className="pt-2">
             <button
               onClick={() => createRazorpayAiCreditsOrderMutation.mutate(590)}
-              disabled={createRazorpayAiCreditsOrderMutation.isPending || topupCreditsMutation.isPending}
-              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-purple-500/20 cursor-pointer flex items-center justify-center gap-2"
+              disabled={!canPurchase || createRazorpayAiCreditsOrderMutation.isPending || topupCreditsMutation.isPending}
+              title={!canPurchase ? 'Only the org owner or a manager can make purchases.' : undefined}
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-purple-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <PlusCircle className="w-4 h-4" />
               <span>{createRazorpayAiCreditsOrderMutation.isPending ? 'Initiating Razorpay...' : 'Buy 1,000 Credits (₹590 with GST)'}</span>
@@ -419,8 +428,9 @@ export const Billing: React.FC = () => {
             <p className="text-xs text-slate-400">Includes 1,000 AI Credits (₹0.50 per credit)</p>
             <button
               onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(500 * 1.18))}
-              disabled={createRazorpayAiCreditsOrderMutation.isPending}
-              className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
+              disabled={!canPurchase || createRazorpayAiCreditsOrderMutation.isPending}
+              title={!canPurchase ? 'Only the org owner or a manager can make purchases.' : undefined}
+              className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Get 1,000 Credits
             </button>
@@ -433,8 +443,9 @@ export const Billing: React.FC = () => {
             <p className="text-xs text-slate-400">Includes 3,500 AI Credits (₹0.42 per credit)</p>
             <button
               onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(1500 * 1.18))}
-              disabled={createRazorpayAiCreditsOrderMutation.isPending}
-              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg text-xs transition-all cursor-pointer shadow-lg shadow-purple-500/20"
+              disabled={!canPurchase || createRazorpayAiCreditsOrderMutation.isPending}
+              title={!canPurchase ? 'Only the org owner or a manager can make purchases.' : undefined}
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg text-xs transition-all cursor-pointer shadow-lg shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Get 3,500 Credits
             </button>
@@ -446,8 +457,9 @@ export const Billing: React.FC = () => {
             <p className="text-xs text-slate-400">Includes 10,000 AI Credits (₹0.35 per credit)</p>
             <button
               onClick={() => createRazorpayAiCreditsOrderMutation.mutate(Math.round(3500 * 1.18))}
-              disabled={createRazorpayAiCreditsOrderMutation.isPending}
-              className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer"
+              disabled={!canPurchase || createRazorpayAiCreditsOrderMutation.isPending}
+              title={!canPurchase ? 'Only the org owner or a manager can make purchases.' : undefined}
+              className="w-full bg-slate-900 hover:bg-purple-600 text-white font-bold py-2 rounded-lg text-xs border border-slate-700 hover:border-purple-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Get 10,000 Credits
             </button>

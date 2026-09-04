@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from './error-handler.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
-import { COOKIE_NAMES } from '../utils/auth-cookies.js';
+import { COOKIE_NAMES, isWebsiteSurface } from '../utils/auth-cookies.js';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -32,9 +32,14 @@ export interface AuthenticatedRequest extends Request {
  */
 export function extractToken(req: Request): string | undefined {
   const authHeader = req.headers.authorization;
-  return authHeader && authHeader.startsWith('Bearer ')
-    ? authHeader.split(' ')[1]
-    : (req as any).cookies?.[COOKIE_NAMES.ACCESS_TOKEN];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+  // wabtic-website tags its own requests so the backend reads ITS cookie
+  // (websiteAccessToken), never the dashboard's — the two are deliberately
+  // separate sessions even though both cookies share Domain=.wabtic.com.
+  const cookieName = isWebsiteSurface(req) ? COOKIE_NAMES.WEBSITE_ACCESS_TOKEN : COOKIE_NAMES.ACCESS_TOKEN;
+  return (req as any).cookies?.[cookieName];
 }
 
 export function authenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): void {

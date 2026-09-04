@@ -120,3 +120,145 @@ export function buildPurchaseConfirmationEmail(input: {
     </div>
   `;
 }
+
+// Kept in sync with apps/backend/src/middlewares/page-access.middleware.ts
+// PAGE_KEYS and apps/frontend/src/pages/Team.tsx PAGE_OPTIONS.
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  inbox: 'Live Inbox',
+  campaigns: 'Campaigns',
+  contacts: 'Contacts CRM',
+  templates: 'Meta Templates',
+  'auto-reply': 'Auto Reply Bot',
+  flows: 'Chatbot Flows',
+  catalog: 'Product Catalog',
+  billing: 'Billing & Credits',
+  team: 'Team & Agents',
+  analytics: 'Analytics',
+  settings: 'Organization Settings',
+  profile: 'Profile & Support Portal',
+};
+
+function describeAccess(allowedPages: string[]): string {
+  if (!allowedPages || allowedPages.length === 0) return 'Full access to all sections';
+  return allowedPages.map((p) => PAGE_LABELS[p] || p).join(', ');
+}
+
+// A short, plain notice on every internal-account email — reads as normal
+// business correspondence rather than a marketing blast, which also helps
+// keep these out of spam folders (no urgency language, no excessive
+// formatting/links, a real named sender).
+const CONFIDENTIALITY_NOTICE = `
+  <p style="margin-top:20px;color:#6b7280;font-size:11px;line-height:1.6;">
+    This email contains confidential account information intended only for the named recipient. If you weren't
+    expecting this message, please ignore it and let your organization admin know. This is a one-time account
+    notification, not a recurring or promotional email.
+  </p>
+`;
+
+export function buildWelcomeAgentEmail(input: {
+  fullName: string;
+  email: string;
+  tempPassword: string | null;
+  role: string;
+  allowedPages: string[];
+  orgName: string;
+  loginUrl: string;
+}): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Welcome to ${input.orgName} on Prowexa</h2>
+      <p>Hi ${input.fullName},</p>
+      <p>${
+        input.tempPassword
+          ? `An account has been created for you on <strong>${input.orgName}</strong>'s Prowexa WhatsApp workspace. Here are your login details:`
+          : `You've been added to <strong>${input.orgName}</strong>'s Prowexa WhatsApp workspace. Log in with your existing Prowexa account:`
+      }</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f9fafb;border-radius:8px;">
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Login Email</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${input.email}</td>
+        </tr>
+        ${
+          input.tempPassword
+            ? `<tr>
+          <td style="padding:10px 14px;color:#6b7280;">Temporary Password</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;font-family:monospace;">${input.tempPassword}</td>
+        </tr>`
+            : ''
+        }
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Role</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${input.role}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Access</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${describeAccess(input.allowedPages)}</td>
+        </tr>
+      </table>
+      <p><a href="${input.loginUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Log In to Dashboard</a></p>
+      ${input.tempPassword ? `<p>Please log in and change your password at your earliest convenience from your Profile page.</p>` : ''}
+      ${CONFIDENTIALITY_NOTICE}
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}
+
+export function buildAccessUpdatedEmail(input: {
+  fullName: string;
+  role: string;
+  allowedPages: string[];
+  orgName: string;
+  loginUrl: string;
+}): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Your Account Access Was Updated</h2>
+      <p>Hi ${input.fullName},</p>
+      <p>Your account role or permissions on <strong>${input.orgName}</strong>'s Prowexa workspace were just updated by your organization admin. Your current access is now:</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f9fafb;border-radius:8px;">
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Role</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${input.role}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Access</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${describeAccess(input.allowedPages)}</td>
+        </tr>
+      </table>
+      <p><a href="${input.loginUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Dashboard</a></p>
+      <p>If this change is unexpected, please reach out to your organization admin.</p>
+      ${CONFIDENTIALITY_NOTICE}
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}
+
+export function buildAccountStatusEmail(input: {
+  fullName: string;
+  isActive: boolean;
+  orgName: string;
+  loginUrl: string;
+}): SendMailInput['html'] {
+  return input.isActive
+    ? `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Your Account Has Been Reactivated</h2>
+      <p>Hi ${input.fullName},</p>
+      <p>Your account on <strong>${input.orgName}</strong>'s Prowexa workspace has been reactivated. You can log back in now.</p>
+      <p><a href="${input.loginUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Log In to Dashboard</a></p>
+      ${CONFIDENTIALITY_NOTICE}
+      ${EMAIL_FOOTER}
+    </div>
+  `
+    : `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Your Account Has Been Deactivated</h2>
+      <p>Hi ${input.fullName},</p>
+      <p>Your access to <strong>${input.orgName}</strong>'s Prowexa workspace has been deactivated by your organization admin. You will not be able to log in until it's reactivated.</p>
+      <p>If you believe this is a mistake, please reach out to your organization admin directly.</p>
+      ${CONFIDENTIALITY_NOTICE}
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}

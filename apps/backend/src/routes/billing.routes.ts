@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import * as BillingController from '../controllers/billing.controller.js';
-import { authenticate } from '../middlewares/auth.middleware.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
 import { requirePageAccess } from '../middlewares/page-access.middleware.js';
+import { UserRole } from '@prowexa/shared-types';
+
+// Actually spending the org's money (buying a plan, topping up credits,
+// recharging the wallet) is restricted to the org owner or a manager — a
+// support agent with 'billing' page access can still view balances/invoices,
+// but can't make a purchase, even by calling the API directly.
+const purchaseOnly = authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER);
 
 const router = Router();
 
@@ -36,12 +43,12 @@ router.get('/settings', BillingController.getInvoiceSettings);
  * @access  Bearer (requires 'billing' page access)
  */
 router.get('/wallet', requirePageAccess('billing'), BillingController.getWalletDetails);
-router.post('/validate-plan-purchase', requirePageAccess('billing'), BillingController.validatePlanPurchase);
-router.post('/purchase-plan', requirePageAccess('billing'), BillingController.purchasePlan);
+router.post('/validate-plan-purchase', requirePageAccess('billing'), purchaseOnly, BillingController.validatePlanPurchase);
+router.post('/purchase-plan', requirePageAccess('billing'), purchaseOnly, BillingController.purchasePlan);
 router.get('/ledger', requirePageAccess('billing'), BillingController.getLedgers);
-router.post('/topup-credits', requirePageAccess('billing'), BillingController.topupAiCredits);
-router.post('/create-razorpay-order', requirePageAccess('billing'), BillingController.createRazorpayOrder);
-router.post('/recharge-wallet', requirePageAccess('billing'), BillingController.rechargeWallet);
+router.post('/topup-credits', requirePageAccess('billing'), purchaseOnly, BillingController.topupAiCredits);
+router.post('/create-razorpay-order', requirePageAccess('billing'), purchaseOnly, BillingController.createRazorpayOrder);
+router.post('/recharge-wallet', requirePageAccess('billing'), purchaseOnly, BillingController.rechargeWallet);
 
 /**
  * @route   GET /api/v1/billing/invoices
