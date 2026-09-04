@@ -1,4 +1,5 @@
 import express, { Application, Request, Response } from 'express';
+import crypto from 'crypto';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -80,14 +81,30 @@ export function createApp(): Application {
   );
 
   // ── Rate Limiting ─────────────────────────────────────────────────────────
+  // Behind the nginx reverse proxy, many logged-in users/orgs can end up
+  // sharing a single client IP (mobile carrier NAT, corporate networks, or a
+  // proxy hop that doesn't forward the real address) — keying purely by IP
+  // then means one busy user (or one org's aggressive dashboard polling) can
+  // exhaust the whole bucket and 429 everyone else behind that same address.
+  // Key by the session's own token when one is present (Bearer header or the
+  // httpOnly cookie) so each logged-in session gets its own budget, falling
+  // back to IP only for anonymous requests (e.g. login attempts).
+  app.use(cookieParser());
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: env.NODE_ENV === 'development' ? 50000 : 5000,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => {
+      const bearer = req.headers.authorization?.startsWith('Bearer ')
+        ? req.headers.authorization.slice(7)
+        : undefined;
+      const token = bearer || req.cookies?.accessToken;
+      if (token) return crypto.createHash('sha256').update(token).digest('hex');
+      return req.ip || 'unknown';
+    },
     message: { success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests, please try again later.' } },
   });
-
 
   app.use('/api/', apiLimiter);
 
@@ -111,7 +128,6 @@ export function createApp(): Application {
     }
   });
   app.use(express.urlencoded({ extended: true }));
-  app.use(cookieParser());
 
   // ── Request ID Injection ──────────────────────────────────────────────────
   app.use((req, _res, next) => {
