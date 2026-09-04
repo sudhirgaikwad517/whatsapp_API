@@ -65,7 +65,7 @@ export const Layout: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-[100dvh] h-screen bg-slate-950 text-slate-100 overflow-hidden overscroll-none relative">
+    <div className="flex flex-col h-[100dvh] bg-slate-950 text-slate-100 overflow-hidden overscroll-none relative">
       {/* Impersonation Session Protection Top Bar */}
       {isImpersonating && (
         <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border-b border-amber-500/40 px-4 py-2 flex items-center justify-between text-xs text-amber-200 font-semibold z-50 shrink-0 shadow-lg">

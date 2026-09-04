@@ -23,7 +23,7 @@ export const Analytics: React.FC = () => {
   });
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight flex items-center">
           <BarChart3 className="w-6 h-6 mr-2 text-emerald-400" />

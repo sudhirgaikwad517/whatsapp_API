@@ -50,8 +50,11 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
     const organizationId = payment.notes?.organizationId;
 
     if (!organizationId) {
+      // Permanent condition — this payment will never gain an organizationId on
+      // retry, so acknowledge with 200 instead of throwing. Throwing here made
+      // Razorpay retry the same webhook indefinitely, flooding the logs.
       logger.error({ paymentId }, 'Razorpay webhook payment carries no organizationId in notes — rejecting rather than guessing a tenant.');
-      throw new AppError('Payment notes missing organizationId; cannot attribute this payment to a tenant.', 400, 'MISSING_ORGANIZATION_ID');
+      return { success: true, processed: false, reason: 'MISSING_ORGANIZATION_ID' };
     }
 
     // Idempotency Check: Prevent duplicate wallet recharges
