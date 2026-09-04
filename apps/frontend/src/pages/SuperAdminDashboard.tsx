@@ -35,6 +35,10 @@ export const SuperAdminDashboard: React.FC = () => {
   const [invoiceEmail, setInvoiceEmail] = useState('');
   const [invoiceWebsite, setInvoiceWebsite] = useState('');
   const [invoicePhone, setInvoicePhone] = useState('');
+  const [invoiceGstin, setInvoiceGstin] = useState('');
+  const [invoicePan, setInvoicePan] = useState('');
+  const [invoicePlaceOfSupply, setInvoicePlaceOfSupply] = useState('');
+  const [invoiceStateCode, setInvoiceStateCode] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -86,6 +90,10 @@ export const SuperAdminDashboard: React.FC = () => {
       setInvoiceEmail(settingsData.invoiceEmail || '');
       setInvoiceWebsite(settingsData.invoiceWebsite || '');
       setInvoicePhone(settingsData.invoicePhone || '');
+      setInvoiceGstin(settingsData.invoiceGstin || '');
+      setInvoicePan(settingsData.invoicePan || '');
+      setInvoicePlaceOfSupply(settingsData.invoicePlaceOfSupply || '');
+      setInvoiceStateCode(settingsData.invoiceStateCode || '');
     }
   }, [settingsData]);
 
@@ -98,6 +106,10 @@ export const SuperAdminDashboard: React.FC = () => {
         invoiceEmail,
         invoiceWebsite,
         invoicePhone,
+        invoiceGstin,
+        invoicePan,
+        invoicePlaceOfSupply,
+        invoiceStateCode,
       });
       return res.data.data;
     },
@@ -523,6 +535,46 @@ export const SuperAdminDashboard: React.FC = () => {
                   value={invoicePhone}
                   onChange={(e) => setInvoicePhone(e.target.value)}
                   placeholder="+91-XXXXXXXXXX"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">GSTIN</label>
+                <input
+                  type="text"
+                  value={invoiceGstin}
+                  onChange={(e) => setInvoiceGstin(e.target.value)}
+                  placeholder="27AABCF5150Q1ZG"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">PAN</label>
+                <input
+                  type="text"
+                  value={invoicePan}
+                  onChange={(e) => setInvoicePan(e.target.value)}
+                  placeholder="AABCF5150G"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Place of Supply</label>
+                <input
+                  type="text"
+                  value={invoicePlaceOfSupply}
+                  onChange={(e) => setInvoicePlaceOfSupply(e.target.value)}
+                  placeholder="Maharashtra"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">State Code</label>
+                <input
+                  type="text"
+                  value={invoiceStateCode}
+                  onChange={(e) => setInvoiceStateCode(e.target.value)}
+                  placeholder="27"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>

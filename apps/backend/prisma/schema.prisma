@@ -639,6 +639,11 @@ model Invoice {
   id              String       @id @default(uuid()) @db.Uuid
   organizationId  String       @db.Uuid
   invoiceNumber   String       @unique @db.VarChar(100)
+  // Human-readable line item, e.g. "PRO Plan - Monthly Subscription",
+  // "AI Credits Top-up", "Wallet Recharge" — set at invoice creation time so
+  // the PDF shows exactly what was purchased instead of guessing from the
+  // invoice number prefix.
+  description     String?      @db.VarChar(255)
   subtotal        Decimal      @db.Decimal(12, 2)
   taxAmount       Decimal      @db.Decimal(12, 2)
   grandTotal      Decimal      @db.Decimal(12, 2)
@@ -758,5 +763,9 @@ model SystemSettings {
   invoiceEmail          String?  @db.VarChar(255)
   invoiceWebsite        String?  @db.VarChar(255)
   invoicePhone          String?  @db.VarChar(50)
+  invoiceGstin          String?  @db.VarChar(50)
+  invoicePan            String?  @db.VarChar(20)
+  invoicePlaceOfSupply  String?  @db.VarChar(100)
+  invoiceStateCode      String?  @db.VarChar(10)
   updatedAt             DateTime @updatedAt
 }

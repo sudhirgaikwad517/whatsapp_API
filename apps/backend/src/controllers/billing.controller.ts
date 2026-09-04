@@ -124,6 +124,7 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
       grandTotal: amount,
       paymentId: razorpay_payment_id,
       gatewayName: 'RAZORPAY',
+      description: `AI Credits Top-up (${creditsToAdd.toLocaleString()} credits)`,
     });
 
     res.status(200).json({
@@ -205,6 +206,7 @@ export async function purchasePlan(req: AuthenticatedRequest, res: Response, nex
       grandTotal: amount,
       paymentId: razorpay_payment_id,
       gatewayName: 'RAZORPAY',
+      description: `${planTier} Plan Subscription — ${billingCycle === 'ANNUAL' ? 'Annual' : 'Monthly'} Billing`,
     });
 
     res.status(200).json({
@@ -334,6 +336,7 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
       grandTotal,
       paymentId: razorpay_payment_id,
       gatewayName: gateway || 'RAZORPAY',
+      description: 'Wallet Recharge (Messaging Credits)',
     });
 
     res.status(200).json({

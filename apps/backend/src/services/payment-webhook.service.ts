@@ -64,6 +64,7 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       data: {
         organizationId,
         invoiceNumber,
+        description: 'Wallet Recharge (Messaging Credits)',
         subtotal: new Prisma.Decimal(subtotal),
         taxAmount: new Prisma.Decimal(taxAmount),
         grandTotal: new Prisma.Decimal(amountPaid),

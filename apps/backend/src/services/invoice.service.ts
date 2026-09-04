@@ -7,6 +7,7 @@ interface CreateInvoiceInput {
   grandTotal: number; // GST-inclusive amount actually charged
   paymentId: string;
   gatewayName: string;
+  description: string;
 }
 
 /**
@@ -23,6 +24,7 @@ export async function createInvoiceRecord(input: CreateInvoiceInput) {
     data: {
       organizationId: input.organizationId,
       invoiceNumber: `${input.invoicePrefix}-${Date.now().toString().slice(-6)}`,
+      description: input.description,
       subtotal: new Prisma.Decimal(subtotal),
       taxAmount: new Prisma.Decimal(taxAmount),
       grandTotal: new Prisma.Decimal(input.grandTotal),
