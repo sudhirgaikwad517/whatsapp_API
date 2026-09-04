@@ -27,6 +27,10 @@ function formatGateway(gatewayName?: string): string {
 async function loadLogoAsPng(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
   try {
     const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`Invoice logo fetch failed (${res.status} ${res.statusText}) for ${url} — falling back to text mark.`);
+      return null;
+    }
     const blob = await res.blob();
     const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
@@ -36,7 +40,8 @@ async function loadLogoAsPng(url: string): Promise<{ dataUrl: string; width: num
     if (!ctx) return null;
     ctx.drawImage(bitmap, 0, 0);
     return { dataUrl: canvas.toDataURL('image/png'), width: bitmap.width, height: bitmap.height };
-  } catch {
+  } catch (err) {
+    console.warn(`Invoice logo could not be loaded from ${url} — falling back to text mark.`, err);
     return null;
   }
 }
