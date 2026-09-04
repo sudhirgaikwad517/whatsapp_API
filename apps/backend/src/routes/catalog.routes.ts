@@ -8,13 +8,17 @@ const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
-router.use(requirePageAccess('catalog'));
 
+// Reading the catalog and requesting an in-chat payment are also used from
+// the Inbox page (product picker, "Request Payment") — low-sensitivity reads
+// and a conversation-scoped action, so these are deliberately NOT gated
+// behind 'catalog' page access; only actually managing products is.
 router.get('/', CatalogController.listProducts);
 router.get('/:id', CatalogController.getProduct);
-router.post('/', CatalogController.createProduct);
-router.put('/:id', CatalogController.updateProduct);
-router.delete('/:id', CatalogController.deleteProduct);
 router.post('/payment-link', CatalogController.createPaymentLink);
+
+router.post('/', requirePageAccess('catalog'), CatalogController.createProduct);
+router.put('/:id', requirePageAccess('catalog'), CatalogController.updateProduct);
+router.delete('/:id', requirePageAccess('catalog'), CatalogController.deleteProduct);
 
 export default router;

@@ -115,7 +115,7 @@ export function buildPurchaseConfirmationEmail(input: {
           <td style="padding:8px 0;text-align:right;font-weight:bold;">${input.invoiceNumber}</td>
         </tr>
       </table>
-      <p>You can download the full tax invoice anytime from your Billing page.</p>
+      <p><a href="${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/billing" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">View & Download Invoice</a></p>
       ${EMAIL_FOOTER}
     </div>
   `;

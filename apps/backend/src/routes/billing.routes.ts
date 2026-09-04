@@ -12,33 +12,42 @@ const router = Router();
 
 router.use(authenticate);
 router.use(tenantContext);
-router.use(requirePageAccess('billing'));
 
 /**
- * @route   GET /api/v1/billing/wallet
- * @desc    Get wallet balance and ledger history
+ * @route   GET /api/v1/billing/credits
+ * @desc    Get AI credits balance + plan expiry. Deliberately NOT gated by
+ *          'billing' page access — Layout.tsx calls this on every page to
+ *          show the "plan expired" banner to every member, regardless of
+ *          which pages they're restricted to.
  * @access  Bearer
  */
-router.get('/wallet', BillingController.getWalletDetails);
-router.post('/validate-plan-purchase', BillingController.validatePlanPurchase);
-router.post('/purchase-plan', BillingController.purchasePlan);
 router.get('/credits', BillingController.getAiCredits);
-router.get('/ledger', BillingController.getLedgers);
-router.post('/topup-credits', BillingController.topupAiCredits);
-router.post('/create-razorpay-order', BillingController.createRazorpayOrder);
-router.post('/recharge-wallet', BillingController.rechargeWallet);
 
 /**
  * @route   GET /api/v1/billing/settings
- * @desc    Get public invoice settings
+ * @desc    Get public invoice letterhead settings (company name/GSTIN/etc.) —
+ *          needed by anyone downloading an invoice, not billing-specific.
  */
 router.get('/settings', BillingController.getInvoiceSettings);
 
 /**
+ * @route   GET /api/v1/billing/wallet
+ * @desc    Get wallet balance and ledger history
+ * @access  Bearer (requires 'billing' page access)
+ */
+router.get('/wallet', requirePageAccess('billing'), BillingController.getWalletDetails);
+router.post('/validate-plan-purchase', requirePageAccess('billing'), BillingController.validatePlanPurchase);
+router.post('/purchase-plan', requirePageAccess('billing'), BillingController.purchasePlan);
+router.get('/ledger', requirePageAccess('billing'), BillingController.getLedgers);
+router.post('/topup-credits', requirePageAccess('billing'), BillingController.topupAiCredits);
+router.post('/create-razorpay-order', requirePageAccess('billing'), BillingController.createRazorpayOrder);
+router.post('/recharge-wallet', requirePageAccess('billing'), BillingController.rechargeWallet);
+
+/**
  * @route   GET /api/v1/billing/invoices
  * @desc    Get organization tax invoices list
- * @access  Bearer
+ * @access  Bearer (requires 'billing' page access)
  */
-router.get('/invoices', BillingController.getInvoices);
+router.get('/invoices', requirePageAccess('billing'), BillingController.getInvoices);
 
 export default router;

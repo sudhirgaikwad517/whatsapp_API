@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'sonner';
 
 const isProduction =
   typeof window !== 'undefined' &&
@@ -37,10 +38,35 @@ const PUBLIC_PATHS = [
   '/superadmin/reset-password',
 ];
 
+// Guards against showing this more than once if several requests fail at
+// the same moment (e.g. a page that fires off multiple queries on mount).
+let deactivatedNoticeShown = false;
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: any) => {
     const originalRequest = error.config;
+
+    // The org admin can deactivate a member's access at any time — this
+    // takes effect immediately (tenantContext checks it on every request),
+    // not just at next login. A member already using the app needs a clear
+    // signal, not just a request silently failing in the background.
+    if (error.response?.status === 403 && error.response?.data?.error?.code === 'MEMBER_DEACTIVATED') {
+      if (!deactivatedNoticeShown && !PUBLIC_PATHS.includes(window.location.pathname)) {
+        deactivatedNoticeShown = true;
+        toast.error('Your account is deactivated by your organization.', {
+          description: 'Contact your organization admin to restore access.',
+          duration: 8000,
+        });
+        setTimeout(() => {
+          import('../store/auth.store').then(({ useAuthStore }) => {
+            useAuthStore.getState().logout();
+          });
+        }, 2000);
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
