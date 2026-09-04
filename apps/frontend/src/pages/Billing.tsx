@@ -281,7 +281,11 @@ export const Billing: React.FC = () => {
               <button
                 onClick={() => {
                   const baseAmount = Number(rechargeAmount);
-                  const finalAmount = Math.round(baseAmount * 1.18);
+                  // Keep paise precision (11.80, not rounded to 12) — Math.round()
+                  // here would round to the nearest WHOLE RUPEE, silently charging
+                  // up to 50 paise extra and throwing off the credited amount once
+                  // the backend backs GST out of whatever was actually captured.
+                  const finalAmount = Number((baseAmount * 1.18).toFixed(2));
                   createRazorpayOrderMutation.mutate({ baseAmount, finalAmount });
                 }}
                 disabled={createRazorpayOrderMutation.isPending || walletRechargeMutation.isPending}
