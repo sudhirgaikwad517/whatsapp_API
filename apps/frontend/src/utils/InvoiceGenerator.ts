@@ -21,7 +21,29 @@ function formatGateway(gatewayName?: string): string {
   return gatewayName.charAt(0) + gatewayName.slice(1).toLowerCase();
 }
 
-export const generateInvoicePdf = (invoice: any, settings: any, organization: any) => {
+// jsPDF's addImage support for arbitrary source formats (the logo may be a
+// compressed WebP from the media-upload pipeline) is inconsistent, so decode
+// it via the browser's own image pipeline and re-encode as PNG instead.
+async function loadLogoAsPng(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0);
+    return { dataUrl: canvas.toDataURL('image/png'), width: bitmap.width, height: bitmap.height };
+  } catch {
+    return null;
+  }
+}
+
+export const generateInvoicePdf = async (invoice: any, settings: any, organization: any) => {
+  const logo = settings?.invoiceLogoUrl ? await loadLogoAsPng(settings.invoiceLogoUrl) : null;
+
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -46,10 +68,21 @@ export const generateInvoicePdf = (invoice: any, settings: any, organization: an
   const orgNameLines = doc.splitTextToSize(organization?.name || 'Customer', leftColMaxWidth);
   doc.text(orgNameLines, marginX, y + 7);
 
-  doc.setFontSize(13);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(5, 150, 105); // emerald-600
-  doc.text('Prowexa', rightX, y, { align: 'right' });
+  if (logo) {
+    // Fit within a fixed box (max 34mm wide, 14mm tall) without distorting
+    // the aspect ratio, aligned to the same top-right corner the text mark used.
+    const maxW = 34;
+    const maxH = 14;
+    const scale = Math.min(maxW / logo.width, maxH / logo.height);
+    const w = logo.width * scale;
+    const h = logo.height * scale;
+    doc.addImage(logo.dataUrl, 'PNG', rightX - w, y - h + 4, w, h);
+  } else {
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 150, 105); // emerald-600
+    doc.text('Prowexa', rightX, y, { align: 'right' });
+  }
 
   y += 7 + orgNameLines.length * 6 + 6;
   doc.setDrawColor(220);

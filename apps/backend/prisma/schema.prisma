@@ -767,5 +767,6 @@ model SystemSettings {
   invoicePan            String?  @db.VarChar(20)
   invoicePlaceOfSupply  String?  @db.VarChar(100)
   invoiceStateCode      String?  @db.VarChar(10)
+  invoiceLogoUrl        String?  @db.Text
   updatedAt             DateTime @updatedAt
 }

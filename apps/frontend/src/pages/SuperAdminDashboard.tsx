@@ -39,6 +39,8 @@ export const SuperAdminDashboard: React.FC = () => {
   const [invoicePan, setInvoicePan] = useState('');
   const [invoicePlaceOfSupply, setInvoicePlaceOfSupply] = useState('');
   const [invoiceStateCode, setInvoiceStateCode] = useState('');
+  const [invoiceLogoUrl, setInvoiceLogoUrl] = useState('');
+  const logoFileInputRef = React.useRef<HTMLInputElement>(null);
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -94,8 +96,27 @@ export const SuperAdminDashboard: React.FC = () => {
       setInvoicePan(settingsData.invoicePan || '');
       setInvoicePlaceOfSupply(settingsData.invoicePlaceOfSupply || '');
       setInvoiceStateCode(settingsData.invoiceStateCode || '');
+      setInvoiceLogoUrl(settingsData.invoiceLogoUrl || '');
     }
   }, [settingsData]);
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await apiClient.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data.data.url as string;
+    },
+    onSuccess: (url) => {
+      setInvoiceLogoUrl(url);
+      toast.success('Logo uploaded — click "Save Settings" to apply it to invoices.');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to upload logo', { description: err?.response?.data?.error?.message || err.message });
+    },
+  });
 
   const saveSettingsMutation = useMutation({
     mutationFn: async () => {
@@ -110,6 +131,7 @@ export const SuperAdminDashboard: React.FC = () => {
         invoicePan,
         invoicePlaceOfSupply,
         invoiceStateCode,
+        invoiceLogoUrl,
       });
       return res.data.data;
     },
@@ -474,6 +496,47 @@ export const SuperAdminDashboard: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-1">
                   These details will appear on all automatically generated tenant tax invoices.
                 </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 pb-2 border-b border-slate-800/80">
+              <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                {invoiceLogoUrl ? (
+                  <img src={invoiceLogoUrl} alt="Company logo" className="w-full h-full object-contain" />
+                ) : (
+                  <FileSpreadsheet className="w-6 h-6 text-slate-600" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <label className="block text-xs font-semibold text-slate-400">Company Logo (appears on invoice PDFs)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={logoFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadLogoMutation.mutate(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    onClick={() => logoFileInputRef.current?.click()}
+                    disabled={uploadLogoMutation.isPending}
+                    className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {uploadLogoMutation.isPending ? 'Uploading...' : invoiceLogoUrl ? 'Change Logo' : 'Upload Logo'}
+                  </button>
+                  {invoiceLogoUrl && (
+                    <button
+                      onClick={() => setInvoiceLogoUrl('')}
+                      className="text-xs text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

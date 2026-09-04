@@ -556,9 +556,13 @@ export const Billing: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap text-right">
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!currentOrg) return toast.error('Organization data missing');
-                          generateInvoicePdf(inv, settingsData || {}, currentOrg);
+                          try {
+                            await generateInvoicePdf(inv, settingsData || {}, currentOrg);
+                          } catch (err: any) {
+                            toast.error('Failed to generate invoice PDF', { description: err?.message });
+                          }
                         }}
                         className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5"
                       >
