@@ -12,7 +12,15 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 export async function getWalletDetails(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;
-    const wallet = await BillingService.getOrCreateWallet(orgId);
+    await BillingService.getOrCreateWallet(orgId);
+
+    // Catch the ledger up on any usage debits that accrued since the last
+    // reconciliation, before reading it — otherwise this page keeps showing
+    // a stale ledger until the org's next recharge (see reconcileUnbilledUsage).
+    const wallet = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Wallet" WHERE "organizationId" = ${orgId}::uuid FOR UPDATE`;
+      return BillingService.reconcileUnbilledUsage(orgId, tx);
+    });
 
     const [ledgers, invoices, campaignRecipients, inboundCount, ledgerDebitsSum] = await Promise.all([
       prisma.walletLedger.findMany({
@@ -326,7 +334,7 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
     const subtotal = Number((grandTotal / 1.18).toFixed(2));
 
     const referenceId = razorpay_payment_id;
-    const description = `Usage Credits Top-up via ${gateway || 'RAZORPAY'}`;
+    const description = `Credits Purchased via ${gateway || 'Razorpay'}`;
 
     const wallet = await BillingService.rechargeWallet(orgId, subtotal, referenceId, description);
 
@@ -336,7 +344,7 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
       grandTotal,
       paymentId: razorpay_payment_id,
       gatewayName: gateway || 'RAZORPAY',
-      description: 'Wallet Recharge (Messaging Credits)',
+      description: 'Credits Purchased via Razorpay',
     });
 
     res.status(200).json({

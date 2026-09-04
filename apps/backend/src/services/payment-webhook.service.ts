@@ -55,7 +55,7 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       organizationId,
       subtotal,
       paymentId,
-      `Razorpay Wallet Top-Up (${paymentId})`
+      `Credits Purchased via Razorpay (${paymentId})`
     );
 
     // Generate Tax Invoice
@@ -64,7 +64,7 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       data: {
         organizationId,
         invoiceNumber,
-        description: 'Wallet Recharge (Messaging Credits)',
+        description: 'Credits Purchased via Razorpay',
         subtotal: new Prisma.Decimal(subtotal),
         taxAmount: new Prisma.Decimal(taxAmount),
         grandTotal: new Prisma.Decimal(amountPaid),

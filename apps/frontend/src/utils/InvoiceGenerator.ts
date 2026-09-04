@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 function describeInvoice(invoiceNumber: string): string {
   if (invoiceNumber?.startsWith('INV-PLAN')) return 'Subscription Plan Purchase';
   if (invoiceNumber?.startsWith('INV-AI')) return 'AI Credits Top-up';
-  if (invoiceNumber?.startsWith('INV-USG')) return 'Wallet Recharge';
+  if (invoiceNumber?.startsWith('INV-USG')) return 'Credits Purchased via Razorpay';
   return 'Service Charge';
 }
 

@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobile }) => {
     { to: '/auto-reply', label: 'Auto Reply Bot', icon: Bot },
     { to: '/flows', label: 'Chatbot Flows', icon: GitFork },
     { to: '/catalog', label: 'Product Catalog', icon: ShoppingBag },
-    { to: '/billing', label: 'Billing, Wallet & Credits', icon: CreditCard },
+    { to: '/billing', label: 'Billing & Credits', icon: CreditCard },
     { to: '/team', label: 'Team & Agents', icon: Users2 },
     { to: '/analytics', label: 'Analytics', icon: BarChart3 },
     { to: '/settings', label: 'Organization Settings', icon: Settings },

@@ -4,6 +4,8 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 import { getTemplateSentCounts } from './usage-metrics.service.js';
 
+type QueryableClient = PrismaClient | Prisma.TransactionClient;
+
 export async function getOrCreateWallet(organizationId: string) {
   let wallet = await prisma.wallet.findUnique({
     where: { organizationId },
@@ -217,6 +219,62 @@ export async function releaseWalletReservation(
 }
 
 /**
+ * Commits any usage (messages sent since the last reconciliation) that has
+ * been counted toward billing but never actually turned into a Wallet debit
+ * + WalletLedger row. Previously this only ran inside rechargeWallet(), so
+ * the ledger's audit trail (and the stored Wallet balance) silently lagged
+ * behind the live-computed "spendable balance" shown on the Billing page
+ * until the org's next recharge — a message send would visibly reduce the
+ * displayed balance immediately, but no corresponding DEBIT row appeared
+ * until much later. Calling this from the wallet-details GET endpoint too
+ * means simply opening the Billing page keeps the ledger caught up.
+ */
+export async function reconcileUnbilledUsage(organizationId: string, tx: QueryableClient) {
+  let wallet = await tx.wallet.findUnique({ where: { organizationId } });
+  if (!wallet) {
+    wallet = await tx.wallet.create({
+      data: { organizationId, availableBalance: new Prisma.Decimal(500.0), reservedBalance: new Prisma.Decimal(0.0) },
+    });
+  }
+
+  const { marketingSent, utilitySent } = await getTemplateSentCounts(tx, { organizationId });
+  const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+
+  const ledgerDebitsSum = await tx.walletLedger.aggregate({
+    _sum: { amount: true },
+    where: { organizationId, transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
+  });
+  const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
+  const unbilledCharges = calculatedCharges > ledgerDebits ? calculatedCharges - ledgerDebits : 0;
+
+  if (unbilledCharges <= 0) return wallet;
+
+  const currentBalance = wallet.availableBalance;
+  const debitAmount = new Prisma.Decimal(unbilledCharges);
+  const newBalanceAfterDebit = Decimal.sub(currentBalance, debitAmount);
+
+  const updatedWallet = await tx.wallet.update({
+    where: { id: wallet.id },
+    data: { availableBalance: { decrement: debitAmount } },
+  });
+
+  await tx.walletLedger.create({
+    data: {
+      walletId: wallet.id,
+      organizationId,
+      transactionType: 'DEBIT',
+      amount: debitAmount,
+      openingBalance: currentBalance,
+      closingBalance: newBalanceAfterDebit,
+      referenceId: `USAGE_${Date.now()}`,
+      description: 'Messaging Usage Charges',
+    },
+  });
+
+  return updatedWallet;
+}
+
+/**
  * Wallet Top-Up / Recharge
  */
 export async function rechargeWallet(
@@ -231,61 +289,11 @@ export async function rechargeWallet(
     // Acquire a pessimistic row-level lock
     await tx.$queryRaw`SELECT id FROM "Wallet" WHERE "organizationId" = ${organizationId}::uuid FOR UPDATE`;
 
-    let wallet = await tx.wallet.findUnique({
-      where: { organizationId },
-    });
-
-    if (!wallet) {
-      wallet = await tx.wallet.create({
-        data: { organizationId, availableBalance: new Prisma.Decimal(0) },
-      });
-    }
-
     // 1. Calculate and auto-commit any pending unbilled charges BEFORE recharge
-    const { marketingSent, utilitySent } = await getTemplateSentCounts(tx, { organizationId });
-
-    const campaignRecipients = await tx.campaignRecipient.count({
-      where: { campaign: { organizationId: organizationId }, status: { not: 'FAILED' } },
-    });
-
-    const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
-    
-    const ledgerDebitsSum = await tx.walletLedger.aggregate({
-      _sum: { amount: true },
-      where: { organizationId: organizationId, transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
-    });
-    const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
-    const unbilledCharges = calculatedCharges > ledgerDebits ? calculatedCharges - ledgerDebits : 0;
-
-    let currentBalance = wallet.availableBalance;
-
-    if (unbilledCharges > 0) {
-      const debitAmount = new Prisma.Decimal(unbilledCharges);
-      const newBalanceAfterDebit = Decimal.sub(currentBalance, debitAmount);
-      
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { availableBalance: { decrement: debitAmount } },
-      });
-
-      await tx.walletLedger.create({
-        data: {
-          walletId: wallet.id,
-          organizationId,
-          transactionType: 'DEBIT',
-          amount: debitAmount,
-          openingBalance: currentBalance,
-          closingBalance: newBalanceAfterDebit,
-          referenceId: `USAGE_${Date.now()}`,
-          description: 'Auto-debit of pending messaging usage charges',
-        },
-      });
-      
-      currentBalance = newBalanceAfterDebit;
-    }
+    let wallet = await reconcileUnbilledUsage(organizationId, tx);
 
     // 2. Process the actual Recharge
-    const openingBalance = currentBalance;
+    const openingBalance = wallet.availableBalance;
     const closingBalance = Decimal.add(openingBalance, amount);
 
     const updatedWallet = await tx.wallet.update({
