@@ -152,7 +152,7 @@ export const Profile: React.FC = () => {
     : null;
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto space-y-8 bg-slate-950 text-slate-100 min-h-screen w-full max-w-full overflow-x-hidden">
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto space-y-8 bg-slate-950 text-slate-100 w-full max-w-full overflow-x-hidden">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
