@@ -21,6 +21,11 @@ export async function getOrganization(organizationId: string) {
         isSuspended: true,
         planTier: true,
         createdAt: true,
+        billingAddress: true,
+        billingGstin: true,
+        billingPan: true,
+        billingEmail: true,
+        billingPhone: true,
       },
     });
 
@@ -50,7 +55,21 @@ export async function getOrganization(organizationId: string) {
 
 export async function updateOrganization(
   organizationId: string,
-  data: { name?: string; timezone?: string; logoUrl?: string; aiKnowledgeBase?: string; geminiApiKey?: string; isAiAutoRespondEnabled?: boolean; razorpayKeyId?: string; razorpayKeySecret?: string }
+  data: {
+    name?: string;
+    timezone?: string;
+    logoUrl?: string;
+    aiKnowledgeBase?: string;
+    geminiApiKey?: string;
+    isAiAutoRespondEnabled?: boolean;
+    razorpayKeyId?: string;
+    razorpayKeySecret?: string;
+    billingAddress?: string;
+    billingGstin?: string;
+    billingPan?: string;
+    billingEmail?: string;
+    billingPhone?: string;
+  }
 ) {
   const updateData: Record<string, any> = {};
   if (data.name !== undefined) updateData.name = data.name;
@@ -61,12 +80,32 @@ export async function updateOrganization(
   if (data.isAiAutoRespondEnabled !== undefined) updateData.isAiAutoRespondEnabled = Boolean(data.isAiAutoRespondEnabled);
   if (data.razorpayKeyId !== undefined) updateData.razorpayKeyId = data.razorpayKeyId;
   if (data.razorpayKeySecret !== undefined) updateData.razorpayKeySecret = data.razorpayKeySecret ? encryptToken(data.razorpayKeySecret) : null;
+  if (data.billingAddress !== undefined) updateData.billingAddress = data.billingAddress;
+  if (data.billingGstin !== undefined) updateData.billingGstin = data.billingGstin;
+  if (data.billingPan !== undefined) updateData.billingPan = data.billingPan;
+  if (data.billingEmail !== undefined) updateData.billingEmail = data.billingEmail;
+  if (data.billingPhone !== undefined) updateData.billingPhone = data.billingPhone;
 
   try {
     const updated = await prisma.organization.update({
       where: { id: organizationId },
       data: updateData,
-      select: { id: true, name: true, slug: true, logoUrl: true, timezone: true, aiKnowledgeBase: true, geminiApiKey: true, isAiAutoRespondEnabled: true, razorpayKeyId: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logoUrl: true,
+        timezone: true,
+        aiKnowledgeBase: true,
+        geminiApiKey: true,
+        isAiAutoRespondEnabled: true,
+        razorpayKeyId: true,
+        billingAddress: true,
+        billingGstin: true,
+        billingPan: true,
+        billingEmail: true,
+        billingPhone: true,
+      },
     });
     return { ...updated, geminiApiKey: safeDecrypt(updated.geminiApiKey) };
   } catch (err: any) {

@@ -73,15 +73,18 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   const orgNameLines = doc.splitTextToSize(organization?.name || 'Customer', leftColMaxWidth);
   doc.text(orgNameLines, marginX, y + 7);
 
+  let logoBottomY = y;
   if (logo) {
-    // Fit within a fixed box (max 34mm wide, 14mm tall) without distorting
+    // Fit within a fixed box (max 55mm wide, 22mm tall) without distorting
     // the aspect ratio, aligned to the same top-right corner the text mark used.
-    const maxW = 34;
-    const maxH = 14;
+    const maxW = 55;
+    const maxH = 22;
     const scale = Math.min(maxW / logo.width, maxH / logo.height);
     const w = logo.width * scale;
     const h = logo.height * scale;
-    doc.addImage(logo.dataUrl, 'PNG', rightX - w, y - h + 4, w, h);
+    const logoTopY = y - 6;
+    doc.addImage(logo.dataUrl, 'PNG', rightX - w, logoTopY, w, h);
+    logoBottomY = logoTopY + h;
   } else {
     doc.setFontSize(13);
     doc.setFont('helvetica', 'bold');
@@ -89,7 +92,7 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
     doc.text('Prowexa', rightX, y, { align: 'right' });
   }
 
-  y += 7 + orgNameLines.length * 6 + 6;
+  y = Math.max(y + 7 + orgNameLines.length * 6 + 6, logoBottomY + 6);
   doc.setDrawColor(220);
   doc.line(marginX, y, rightX, y);
   y += 10;
@@ -167,11 +170,39 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   doc.setTextColor(20);
   doc.text(organization?.name || 'Customer', marginX, y);
   y += 6;
+
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
+  const billToWidth = pageWidth - marginX * 2;
+
+  if (organization?.billingAddress) {
+    const lines = doc.splitTextToSize(organization.billingAddress, billToWidth);
+    doc.text(lines, marginX, y);
+    y += lines.length * 4.5;
+  }
+
+  const billToIdBits = [
+    organization?.billingGstin ? `GSTIN: ${organization.billingGstin}` : null,
+    organization?.billingPan ? `PAN: ${organization.billingPan}` : null,
+  ].filter(Boolean);
+  if (billToIdBits.length > 0) {
+    doc.text(billToIdBits.join('   |   '), marginX, y);
+    y += 4.5;
+  }
+
+  const billToContactBits = [
+    organization?.billingEmail ? `Email: ${organization.billingEmail}` : null,
+    organization?.billingPhone ? `Phone: ${organization.billingPhone}` : null,
+  ].filter(Boolean);
+  if (billToContactBits.length > 0) {
+    doc.text(billToContactBits.join('   |   '), marginX, y);
+    y += 4.5;
+  }
+
   if (organization?.slug) {
     doc.text(`Account ID: ${organization.slug}`, marginX, y);
+    y += 4.5;
   }
 
   // ── Footer (company/legal identity, pinned to the bottom of the page) ──

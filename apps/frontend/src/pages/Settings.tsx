@@ -15,6 +15,11 @@ export const Settings: React.FC = () => {
   const [orgName, setOrgName] = useState('');
   const [timezone, setTimezone] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
+  const [billingGstin, setBillingGstin] = useState('');
+  const [billingPan, setBillingPan] = useState('');
+  const [billingEmail, setBillingEmail] = useState('');
+  const [billingPhone, setBillingPhone] = useState('');
   const [wabaId, setWabaId] = useState('2251442372294214');
   const [phoneNumberId, setPhoneNumberId] = useState('1181142285092556');
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
@@ -53,6 +58,11 @@ export const Settings: React.FC = () => {
       if (orgData.name) setOrgName(orgData.name);
       if (orgData.timezone) setTimezone(orgData.timezone);
       if (orgData.logoUrl) setLogoUrl(orgData.logoUrl);
+      if (orgData.billingAddress) setBillingAddress(orgData.billingAddress);
+      if (orgData.billingGstin) setBillingGstin(orgData.billingGstin);
+      if (orgData.billingPan) setBillingPan(orgData.billingPan);
+      if (orgData.billingEmail) setBillingEmail(orgData.billingEmail);
+      if (orgData.billingPhone) setBillingPhone(orgData.billingPhone);
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
       if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
       if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
@@ -62,7 +72,16 @@ export const Settings: React.FC = () => {
 
   const saveBusinessDetailsMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.patch('/organization', { name: orgName, timezone, logoUrl });
+      const res = await apiClient.patch('/organization', {
+        name: orgName,
+        timezone,
+        logoUrl,
+        billingAddress,
+        billingGstin,
+        billingPan,
+        billingEmail,
+        billingPhone,
+      });
       return res.data.data;
     },
     onSuccess: () => {
@@ -261,6 +280,63 @@ export const Settings: React.FC = () => {
             />
           </div>
         </div>
+
+        <div className="pt-2 border-t border-slate-800/80">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Tax / Billing Identity (shown on invoices)</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Billing Address</label>
+              <input
+                type="text"
+                placeholder="Street, City, State, PIN"
+                value={billingAddress}
+                onChange={(e) => setBillingAddress(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">GSTIN</label>
+              <input
+                type="text"
+                placeholder="27AABCF5150Q1ZG"
+                value={billingGstin}
+                onChange={(e) => setBillingGstin(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">PAN</label>
+              <input
+                type="text"
+                placeholder="AABCF5150G"
+                value={billingPan}
+                onChange={(e) => setBillingPan(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Billing Email</label>
+              <input
+                type="email"
+                placeholder="accounts@yourbusiness.com"
+                value={billingEmail}
+                onChange={(e) => setBillingEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Billing Phone</label>
+              <input
+                type="text"
+                placeholder="+91-XXXXXXXXXX"
+                value={billingPhone}
+                onChange={(e) => setBillingPhone(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="flex justify-end">
           <button
             onClick={() => saveBusinessDetailsMutation.mutate()}
