@@ -104,7 +104,7 @@ export const SuperAdminDashboard: React.FC = () => {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await apiClient.post('/media/upload', formData, {
+      const res = await apiClient.post('/superadmin/settings/logo', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       return res.data.data.url as string;

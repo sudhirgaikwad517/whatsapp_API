@@ -223,3 +223,21 @@ export async function updateSystemSettings(req: Request, res: Response, next: Ne
     next(err);
   }
 }
+
+export async function uploadInvoiceLogo(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!(req as any).file) {
+      res.status(400).json({ success: false, error: { code: 'NO_FILE_PROVIDED', message: 'Please select an image file to upload.' } });
+      return;
+    }
+    const host = req.get('host') || 'localhost:5050';
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
+
+    const { compressAndSaveImage } = await import('../services/media-compression.service.js');
+    const result = await compressAndSaveImage((req as any).file.buffer, baseUrl);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,7 +1,21 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as SuperAdminController from '../controllers/superadmin.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { requireSuperAdmin } from '../middlewares/superadmin.middleware.js';
+import { AppError } from '../middlewares/error-handler.middleware.js';
+
+const ALLOWED_LOGO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_LOGO_MIME_TYPES.has(file.mimetype)) {
+      return cb(new AppError(`Unsupported file type: ${file.mimetype}. Only JPEG, PNG, WebP, and GIF images are accepted.`, 400, 'UNSUPPORTED_FILE_TYPE'));
+    }
+    cb(null, true);
+  },
+});
 
 const router = Router();
 
@@ -58,5 +72,13 @@ router.post('/org-ai-key', SuperAdminController.updateOrgAiKey);
 
 router.get('/settings', SuperAdminController.getSystemSettings);
 router.put('/settings', SuperAdminController.updateSystemSettings);
+
+/**
+ * @route   POST /api/v1/superadmin/settings/logo
+ * @desc    Upload the platform invoice/letterhead logo. Separate from
+ *          /media/upload because that route requires tenantContext, and a
+ *          Super Admin's JWT carries no real organizationId to satisfy it.
+ */
+router.post('/settings/logo', logoUpload.single('file'), SuperAdminController.uploadInvoiceLogo);
 
 export default router;
