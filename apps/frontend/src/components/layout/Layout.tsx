@@ -166,7 +166,10 @@ export const Layout: React.FC = () => {
           </div>
         </header>
 
-        <div className={`flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-y-auto ${isRestrictedPage ? 'opacity-40 pointer-events-none select-none grayscale cursor-not-allowed' : ''}`}>
+        <div
+          className={`flex-1 min-w-0 min-h-0 flex flex-col h-full overflow-y-auto ${isRestrictedPage ? 'opacity-40 pointer-events-none select-none grayscale cursor-not-allowed' : ''}`}
+          style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+        >
           <Outlet />
         </div>
       </main>
