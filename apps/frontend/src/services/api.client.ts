@@ -20,6 +20,23 @@ export const apiClient = axios.create({
 // race each other into issuing multiple refresh calls.
 let refreshPromise: Promise<void> | null = null;
 
+// Public pages call apiClient before any session exists at all (App.tsx's
+// cookie-based session check runs unconditionally on every mount, including
+// on /login itself). Redirecting to /login on failure there — while already
+// on /login — still forces a full reload via window.location.href, which
+// re-mounts the app, re-runs the same check, fails the same way, and
+// reloads again: an infinite reload loop. Only redirect when the user is
+// actually on a page that assumes an active session.
+const PUBLIC_PATHS = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/superadmin/login',
+  '/superadmin/forgot-password',
+  '/superadmin/reset-password',
+];
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: any) => {
@@ -39,7 +56,9 @@ apiClient.interceptors.response.use(
         await refreshPromise;
         return apiClient(originalRequest);
       } catch {
-        window.location.href = '/login';
+        if (!PUBLIC_PATHS.includes(window.location.pathname)) {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
