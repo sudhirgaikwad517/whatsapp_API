@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as AuthController from '../controllers/auth.controller.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { credentialLimiter } from '../middlewares/rate-limiters.middleware.js';
 import {
   registerSchema,
   loginSchema,
@@ -20,14 +21,14 @@ const router = Router();
  * @desc    Register new business owner and create organization
  * @access  Public
  */
-router.post('/register', validate(registerSchema), AuthController.register);
+router.post('/register', credentialLimiter, validate(registerSchema), AuthController.register);
 
 /**
  * @route   POST /api/v1/auth/login
  * @desc    Authenticate user, return JWT access + refresh token
  * @access  Public
  */
-router.post('/login', validate(loginSchema), AuthController.login);
+router.post('/login', credentialLimiter, validate(loginSchema), AuthController.login);
 
 /**
  * @route   POST /api/v1/auth/session
@@ -70,21 +71,21 @@ router.get('/verify-email', AuthController.verifyEmailViaLink);
  * @desc    Resend the email verification link
  * @access  Public
  */
-router.post('/resend-verification', AuthController.resendVerificationEmail);
+router.post('/resend-verification', credentialLimiter, AuthController.resendVerificationEmail);
 
 /**
  * @route   POST /api/v1/auth/forgot-password
  * @desc    Trigger password reset email
  * @access  Public
  */
-router.post('/forgot-password', validate(forgotPasswordSchema), AuthController.forgotPassword);
+router.post('/forgot-password', credentialLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword);
 
 /**
  * @route   POST /api/v1/auth/reset-password
  * @desc    Complete a password reset using the emailed token
  * @access  Public
  */
-router.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
+router.post('/reset-password', credentialLimiter, validate(resetPasswordSchema), AuthController.resetPassword);
 
 /**
  * @route   GET /api/v1/auth/me

@@ -4,6 +4,7 @@ import * as SuperAdminController from '../controllers/superadmin.controller.js';
 import { authenticate } from '../middlewares/auth.middleware.js';
 import { requireSuperAdmin } from '../middlewares/superadmin.middleware.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { credentialLimiter } from '../middlewares/rate-limiters.middleware.js';
 
 const ALLOWED_LOGO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const logoUpload = multer({
@@ -23,7 +24,7 @@ const router = Router();
  * @route   POST /api/v1/superadmin/login
  * @desc    Super Admin ERP Portal Authentication
  */
-router.post('/login', SuperAdminController.login);
+router.post('/login', credentialLimiter, SuperAdminController.login);
 
 /**
  * @route   POST /api/v1/superadmin/stop-impersonation

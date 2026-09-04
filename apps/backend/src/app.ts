@@ -88,13 +88,6 @@ export function createApp(): Application {
     message: { success: false, error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests, please try again later.' } },
   });
 
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, error: { code: 'AUTH_RATE_LIMIT_EXCEEDED', message: 'Too many auth attempts, please try again in 15 minutes.' } },
-  });
 
   app.use('/api/', apiLimiter);
 
@@ -147,7 +140,7 @@ export function createApp(): Application {
   );
 
   // ── API Routes ────────────────────────────────────────────────────────────
-  app.use('/api/v1/auth', authLimiter, authRoutes);
+  app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/webhooks', webhookRoutes);
   app.use('/api/v1/webhooks/payments', paymentWebhooksRoutes);
   app.use('/api/v1/organization', organizationRoutes);
