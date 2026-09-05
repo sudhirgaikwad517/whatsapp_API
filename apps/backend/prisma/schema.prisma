@@ -738,17 +738,23 @@ model TicketMessage {
 }
 
 // Website visitor leads — captured from the marketing site's "Contact"
-// popup, before the visitor has any account/organization. Deliberately not
-// tied to Organization/User, since most leads never sign up.
+// popup or the standalone Contact page, before the visitor has any
+// account/organization. Deliberately not tied to Organization/User, since
+// most leads never sign up.
 model Lead {
   id                    String   @id @default(uuid()) @db.Uuid
   name                  String   @db.VarChar(255)
   email                 String   @db.VarChar(255)
-  phoneNumber           String   @db.VarChar(50)
+  // Nullable — the popup requires it, but the standalone Contact page's
+  // phone field is optional, matching that form's existing (unlabelled-*)
+  // required-fields UX.
+  phoneNumber           String?  @db.VarChar(50)
   // Whether the visitor says they're currently receiving WhatsApp
   // notifications/messages correctly — null if the toggle wasn't answered.
   isReceivingWhatsapp   Boolean?
   message               String?  @db.Text
+  // Which website form this came from — e.g. "popup", "contact_page".
+  source                String   @default("popup") @db.VarChar(50)
   createdAt             DateTime @default(now())
 
   @@index([createdAt])

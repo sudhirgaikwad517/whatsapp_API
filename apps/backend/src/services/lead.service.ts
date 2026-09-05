@@ -8,18 +8,20 @@ export async function createLead(input: {
   phoneNumber: string;
   isReceivingWhatsapp?: boolean | null;
   message?: string;
+  source?: string;
 }) {
-  if (!input.name?.trim() || !input.email?.trim() || !input.phoneNumber?.trim()) {
-    throw new AppError('Name, email, and phone number are required.', 400, 'MISSING_FIELDS');
+  if (!input.name?.trim() || !input.email?.trim()) {
+    throw new AppError('Name and email are required.', 400, 'MISSING_FIELDS');
   }
 
   return prisma.lead.create({
     data: {
       name: input.name.trim(),
       email: input.email.trim().toLowerCase(),
-      phoneNumber: cleanPhone(input.phoneNumber),
+      phoneNumber: input.phoneNumber?.trim() ? cleanPhone(input.phoneNumber) : null,
       isReceivingWhatsapp: input.isReceivingWhatsapp ?? null,
       message: input.message?.trim() || null,
+      source: input.source?.trim() || 'popup',
     },
   });
 }

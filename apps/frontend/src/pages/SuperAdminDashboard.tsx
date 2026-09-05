@@ -1424,6 +1424,7 @@ export const SuperAdminDashboard: React.FC = () => {
                   <th className="py-4 px-6">Name</th>
                   <th className="py-4 px-6">Email</th>
                   <th className="py-4 px-6">Phone</th>
+                  <th className="py-4 px-6">Source</th>
                   <th className="py-4 px-6">WhatsApp OK?</th>
                   <th className="py-4 px-6">Message</th>
                   <th className="py-4 px-6 text-right">Date</th>
@@ -1432,14 +1433,19 @@ export const SuperAdminDashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
                 {leadsData?.length === 0 || !leadsData ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-500">No website leads captured yet.</td>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">No website leads captured yet.</td>
                   </tr>
                 ) : (
                   leadsData?.map((lead: any) => (
                     <tr key={lead.id} className="hover:bg-slate-800/40">
                       <td className="py-4 px-6 font-semibold text-white">{lead.name}</td>
                       <td className="py-4 px-6 text-slate-300">{lead.email}</td>
-                      <td className="py-4 px-6 font-mono text-slate-300 text-xs">{lead.phoneNumber}</td>
+                      <td className="py-4 px-6 font-mono text-slate-300 text-xs">{lead.phoneNumber || '—'}</td>
+                      <td className="py-4 px-6">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase font-bold">
+                          {lead.source === 'contact_page' ? 'Contact Page' : 'Popup'}
+                        </span>
+                      </td>
                       <td className="py-4 px-6">
                         {lead.isReceivingWhatsapp === null ? (
                           <span className="text-slate-500 text-xs">—</span>
