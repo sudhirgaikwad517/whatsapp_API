@@ -83,6 +83,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-Prowexa <no-reply@wabtic.com>}
+      SALES_NOTIFICATION_EMAIL: ${SALES_NOTIFICATION_EMAIL:-connect@prowexa.com}
     depends_on:
       - postgres
       - redis

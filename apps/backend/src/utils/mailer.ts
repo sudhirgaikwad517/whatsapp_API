@@ -295,3 +295,61 @@ export function buildSupportTicketReceivedEmail(input: {
     </div>
   `;
 }
+
+const LEAD_SOURCE_LABELS: Record<string, string> = {
+  popup: 'Website Popup',
+  contact_page: 'Contact Page',
+  demo_page: 'Book a Demo Page',
+};
+
+export function buildLeadReceivedEmail(input: { name: string; source: string }): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Thanks for Reaching Out, ${input.name}!</h2>
+      <p>We've received your ${input.source === 'demo_page' ? 'demo request' : 'message'} and a member of our team will get back to you shortly.</p>
+      <p><strong>Our team will contact you within 24 hours.</strong></p>
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}
+
+export function buildNewLeadNotificationEmail(input: {
+  name: string;
+  email: string;
+  phoneNumber?: string | null;
+  source: string;
+  whatsappConsent?: boolean | null;
+  company?: string | null;
+  industry?: string | null;
+  messageVolume?: string | null;
+  message?: string | null;
+}): SendMailInput['html'] {
+  const rows: Array<[string, string]> = [
+    ['Name', input.name],
+    ['Email', input.email],
+    ['Phone', input.phoneNumber || '—'],
+    ['Source', LEAD_SOURCE_LABELS[input.source] || input.source],
+  ];
+  if (input.company) rows.push(['Company', input.company]);
+  if (input.industry) rows.push(['Industry', input.industry]);
+  if (input.messageVolume) rows.push(['Monthly Message Volume', input.messageVolume]);
+  if (input.whatsappConsent !== null && input.whatsappConsent !== undefined) {
+    rows.push(['WhatsApp Notification Consent', input.whatsappConsent ? 'Yes' : 'No']);
+  }
+
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>New Website Lead</h2>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        ${rows
+          .map(
+            ([label, value]) =>
+              `<tr><td style="padding:8px 0;color:#6b7280;">${label}</td><td style="padding:8px 0;text-align:right;font-weight:bold;">${value}</td></tr>`
+          )
+          .join('')}
+      </table>
+      ${input.message ? `<p><strong>Message:</strong><br>${input.message}</p>` : ''}
+      <p style="color:#6b7280;font-size:12px;">View this and all other leads in the SuperAdmin panel's Website Leads tab.</p>
+    </div>
+  `;
+}

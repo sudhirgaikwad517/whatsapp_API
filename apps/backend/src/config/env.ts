@@ -44,6 +44,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional().default(''),
   SMTP_PASS: z.string().optional().default(''),
   SMTP_FROM: z.string().optional().default('Prowexa <no-reply@wabtic.com>'),
+  // Where the internal team gets notified of a new website lead (Contact/Demo/popup form).
+  SALES_NOTIFICATION_EMAIL: z.string().optional().default('connect@prowexa.com'),
 });
 
 const KNOWN_INSECURE_DEFAULTS = new Set([
