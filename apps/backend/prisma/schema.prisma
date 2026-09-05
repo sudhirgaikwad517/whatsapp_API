@@ -738,9 +738,9 @@ model TicketMessage {
 }
 
 // Website visitor leads — captured from the marketing site's "Contact"
-// popup or the standalone Contact page, before the visitor has any
-// account/organization. Deliberately not tied to Organization/User, since
-// most leads never sign up.
+// popup, the standalone Contact page, or the "Book a Demo" page, before the
+// visitor has any account/organization. Deliberately not tied to
+// Organization/User, since most leads never sign up.
 model Lead {
   id                    String   @id @default(uuid()) @db.Uuid
   name                  String   @db.VarChar(255)
@@ -749,11 +749,15 @@ model Lead {
   // phone field is optional, matching that form's existing (unlabelled-*)
   // required-fields UX.
   phoneNumber           String?  @db.VarChar(50)
-  // Whether the visitor says they're currently receiving WhatsApp
-  // notifications/messages correctly — null if the toggle wasn't answered.
-  isReceivingWhatsapp   Boolean?
+  // Explicit opt-in consent to receive WhatsApp notifications from Wabtic —
+  // null if the visitor's form didn't ask (e.g. the demo/contact forms).
+  whatsappConsent       Boolean?
   message               String?  @db.Text
-  // Which website form this came from — e.g. "popup", "contact_page".
+  // Demo-request-specific fields (Book a Demo page) — null for other sources.
+  company               String?  @db.VarChar(255)
+  industry              String?  @db.VarChar(100)
+  messageVolume         String?  @db.VarChar(100)
+  // Which website form this came from — e.g. "popup", "contact_page", "demo_page".
   source                String   @default("popup") @db.VarChar(50)
   createdAt             DateTime @default(now())
 

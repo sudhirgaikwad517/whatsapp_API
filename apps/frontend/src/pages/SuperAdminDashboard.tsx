@@ -46,6 +46,7 @@ export const SuperAdminDashboard: React.FC = () => {
   const [invoiceStateCode, setInvoiceStateCode] = useState('');
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState('');
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [viewingLead, setViewingLead] = useState<any>(null);
   const [viewingTicket, setViewingTicket] = useState<any>(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
   const [isSubmittingTicketAction, setIsSubmittingTicketAction] = useState(false);
@@ -1425,15 +1426,14 @@ export const SuperAdminDashboard: React.FC = () => {
                   <th className="py-4 px-6">Email</th>
                   <th className="py-4 px-6">Phone</th>
                   <th className="py-4 px-6">Source</th>
-                  <th className="py-4 px-6">WhatsApp OK?</th>
-                  <th className="py-4 px-6">Message</th>
-                  <th className="py-4 px-6 text-right">Date</th>
+                  <th className="py-4 px-6">Date</th>
+                  <th className="py-4 px-6 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
                 {leadsData?.length === 0 || !leadsData ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-slate-500">No website leads captured yet.</td>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">No website leads captured yet.</td>
                   </tr>
                 ) : (
                   leadsData?.map((lead: any) => (
@@ -1443,33 +1443,70 @@ export const SuperAdminDashboard: React.FC = () => {
                       <td className="py-4 px-6 font-mono text-slate-300 text-xs">{lead.phoneNumber || '—'}</td>
                       <td className="py-4 px-6">
                         <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase font-bold">
-                          {lead.source === 'contact_page' ? 'Contact Page' : 'Popup'}
+                          {lead.source === 'contact_page' ? 'Contact Page' : lead.source === 'demo_page' ? 'Demo Request' : 'Popup'}
                         </span>
                       </td>
-                      <td className="py-4 px-6">
-                        {lead.isReceivingWhatsapp === null ? (
-                          <span className="text-slate-500 text-xs">—</span>
-                        ) : (
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                              lead.isReceivingWhatsapp
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            }`}
-                          >
-                            {lead.isReceivingWhatsapp ? 'Yes' : 'No'}
-                          </span>
-                        )}
+                      <td className="py-4 px-6 text-xs text-slate-400">{new Date(lead.createdAt).toLocaleString()}</td>
+                      <td className="py-4 px-6 text-right">
+                        <button
+                          onClick={() => setViewingLead(lead)}
+                          className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md"
+                        >
+                          View Details
+                        </button>
                       </td>
-                      <td className="py-4 px-6 text-slate-300 max-w-xs truncate" title={lead.message || ''}>
-                        {lead.message || '—'}
-                      </td>
-                      <td className="py-4 px-6 text-right text-xs text-slate-400">{new Date(lead.createdAt).toLocaleString()}</td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Detail Modal */}
+      {viewingLead && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Contact className="w-5 h-5 text-emerald-400" />
+                Lead Details
+              </h3>
+              <button onClick={() => setViewingLead(null)} aria-label="Close" className="text-slate-400 hover:text-white p-1 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              {[
+                ['Name', viewingLead.name],
+                ['Email', viewingLead.email],
+                ['Phone', viewingLead.phoneNumber || '—'],
+                ['Source', viewingLead.source === 'contact_page' ? 'Contact Page' : viewingLead.source === 'demo_page' ? 'Demo Request' : 'Popup'],
+                ['Company', viewingLead.company || '—'],
+                ['Industry', viewingLead.industry || '—'],
+                ['Monthly Message Volume', viewingLead.messageVolume || '—'],
+                [
+                  'WhatsApp Notification Consent',
+                  viewingLead.whatsappConsent === null ? '—' : viewingLead.whatsappConsent ? 'Yes' : 'No',
+                ],
+                ['Submitted', new Date(viewingLead.createdAt).toLocaleString()],
+              ].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-4 py-1.5 border-b border-slate-800/60">
+                  <span className="text-slate-500 shrink-0">{label}</span>
+                  <span className="text-slate-200 font-semibold text-right break-words">{value}</span>
+                </div>
+              ))}
+              {viewingLead.message && (
+                <div className="pt-2 space-y-1">
+                  <span className="text-slate-500 uppercase text-[10px] font-bold tracking-wider">Message</span>
+                  <p className="text-slate-200 bg-slate-950 border border-slate-800 rounded-xl p-3 whitespace-pre-wrap">
+                    {viewingLead.message}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

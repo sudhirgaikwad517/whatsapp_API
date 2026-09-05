@@ -5,9 +5,12 @@ import { cleanPhone } from './contact.service.js';
 export async function createLead(input: {
   name: string;
   email: string;
-  phoneNumber: string;
-  isReceivingWhatsapp?: boolean | null;
+  phoneNumber?: string;
+  whatsappConsent?: boolean | null;
   message?: string;
+  company?: string;
+  industry?: string;
+  messageVolume?: string;
   source?: string;
 }) {
   if (!input.name?.trim() || !input.email?.trim()) {
@@ -19,8 +22,11 @@ export async function createLead(input: {
       name: input.name.trim(),
       email: input.email.trim().toLowerCase(),
       phoneNumber: input.phoneNumber?.trim() ? cleanPhone(input.phoneNumber) : null,
-      isReceivingWhatsapp: input.isReceivingWhatsapp ?? null,
+      whatsappConsent: input.whatsappConsent ?? null,
       message: input.message?.trim() || null,
+      company: input.company?.trim() || null,
+      industry: input.industry?.trim() || null,
+      messageVolume: input.messageVolume?.trim() || null,
       source: input.source?.trim() || 'popup',
     },
   });
