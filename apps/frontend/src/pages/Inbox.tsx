@@ -947,7 +947,7 @@ export const Inbox: React.FC = () => {
                       onChange={(e) => setNoteText(e.target.value)}
                       disabled={isLockedToOtherAgent}
                       placeholder={isLockedToOtherAgent ? "This chat is assigned to another agent." : "Add a private internal note for your team..."}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all disabled:opacity-50"
+                      className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-all disabled:opacity-50"
                     />
                     <button
                       type="submit"

@@ -159,7 +159,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 shadow-2xl overflow-y-auto max-h-[92vh]">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 shadow-2xl overflow-y-auto overflow-x-hidden max-h-[92vh]">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
           <div>
             <h3 className="text-lg font-bold text-white flex items-center">
@@ -341,7 +341,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
                         placeholder={`e.g. Sample value for {{${vNum}}}`}
                         value={sampleValues[vNum] || ''}
                         onChange={(e) => setSampleValues({ ...sampleValues, [vNum]: e.target.value })}
-                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:border-emerald-500"
+                        className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-600 focus:border-emerald-500"
                       />
                     </div>
                   ))}
@@ -414,7 +414,7 @@ export const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ isOpen, on
                           updated[idx].text = e.target.value;
                           setButtons(updated);
                         }}
-                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white"
+                        className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white"
                       />
                       {btn.type === 'PHONE_NUMBER' && (
                         <input
