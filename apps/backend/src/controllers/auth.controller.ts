@@ -6,8 +6,8 @@ import { env } from '../config/env.js';
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await AuthService.registerUser(req.body);
     const website = isWebsiteSurface(req);
+    const result = await AuthService.registerUser(req.body, website);
     setAccessTokenCookie(res, result.tokens.accessToken, undefined, website);
     setRefreshTokenCookie(res, result.tokens.refreshToken, undefined, website);
     res.status(201).json({ success: true, data: result });

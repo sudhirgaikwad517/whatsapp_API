@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageSquare, Lock, Mail, User, Building2, ArrowRight } from 'lucide-react';
+import { MessageSquare, Lock, Mail, Phone, User, Building2, ArrowRight } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 
@@ -8,6 +8,7 @@ export const Signup: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,7 @@ export const Signup: React.FC = () => {
         fullName,
         organizationName,
         email,
+        phoneNumber,
         password,
       });
 
@@ -115,6 +117,24 @@ export const Signup: React.FC = () => {
                 required
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition-all"
                 placeholder="rohan@nexusmarketing.com"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="signup-phone" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Mobile Number
+            </label>
+            <div className="relative">
+              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+              <input
+                id="signup-phone"
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500 transition-all"
+                placeholder="+91 98765 43210"
               />
             </div>
           </div>

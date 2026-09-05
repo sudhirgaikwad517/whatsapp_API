@@ -1,4 +1,5 @@
 import { prisma } from '../config/database.js';
+import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { sendMail, buildChatAssignedEmail } from '../utils/mailer.js';
 
@@ -36,7 +37,7 @@ export async function notifyAgentOfEscalation(
       await sendMail({
         to: agent.email,
         subject: `New Chat Assigned — ${contactName}`,
-        html: buildChatAssignedEmail(agent.fullName, contactName, org?.name || 'Prowexa'),
+        html: buildChatAssignedEmail(agent.fullName, contactName, org?.name || 'Prowexa', `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/login`),
       });
     } catch (err) {
       logger.error({ organizationId, agentUserId, err }, 'Failed to email agent about chat assignment.');

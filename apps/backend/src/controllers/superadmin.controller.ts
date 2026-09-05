@@ -175,6 +175,16 @@ export async function updatePricingRule(req: Request, res: Response, next: NextF
   }
 }
 
+export async function getLeads(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { listLeads } = await import('../services/lead.service.js');
+    const data = await listLeads();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function replyTicket(req: Request, res: Response, next: NextFunction) {
   try {
     const { ticketId } = req.params;

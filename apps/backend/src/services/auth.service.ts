@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { UserRole } from '@prowexa/shared-types';
 import type { RegisterInput, LoginInput } from '../validators/auth.schema.js';
 import { sendMail, buildVerificationEmail, buildPasswordResetEmail } from '../utils/mailer.js';
+import { cleanPhone } from './contact.service.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -43,7 +44,7 @@ function generateRefreshToken(payload: object): string {
 
 // ─── Auth Service ────────────────────────────────────────────────────────────
 
-export async function registerUser(input: RegisterInput) {
+export async function registerUser(input: RegisterInput, isWebsiteRegistration = false) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) {
     throw new AppError('A user with this email already exists.', 409, 'EMAIL_ALREADY_REGISTERED');
@@ -72,6 +73,7 @@ export async function registerUser(input: RegisterInput) {
       data: {
         email: input.email,
         fullName: input.fullName,
+        phoneNumber: cleanPhone(input.phoneNumber),
         passwordHash,
         emailVerifyToken,
         isEmailVerified: false,
@@ -93,10 +95,13 @@ export async function registerUser(input: RegisterInput) {
 
   try {
     const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
+    const loginUrl = isWebsiteRegistration
+      ? `${env.FRONTEND_URL.replace(/\/$/, '')}/?tab=login`
+      : `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/login`;
     await sendMail({
       to: result.user.email,
       subject: 'Verify your Prowexa account',
-      html: buildVerificationEmail(result.user.fullName, verifyUrl),
+      html: buildVerificationEmail(result.user.fullName, verifyUrl, loginUrl),
     });
   } catch (err) {
     // Registration should still succeed even if the verification email fails
@@ -118,6 +123,7 @@ export async function registerUser(input: RegisterInput) {
       id: result.user.id,
       email: result.user.email,
       fullName: result.user.fullName,
+      phoneNumber: result.user.phoneNumber,
       organizationId: result.organization.id,
       role: UserRole.BUSINESS_OWNER,
     },

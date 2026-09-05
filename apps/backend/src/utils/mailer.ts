@@ -53,13 +53,18 @@ const EMAIL_FOOTER = `
   </p>
 `;
 
-export function buildVerificationEmail(fullName: string, verifyUrl: string): SendMailInput['html'] {
+export function buildVerificationEmail(fullName: string, verifyUrl: string, loginUrl?: string): SendMailInput['html'] {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       <h2>Welcome to <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa</a>, ${fullName}!</h2>
       <p>Please verify your email address to activate your account.</p>
       <p><a href="${verifyUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Verify Email</a></p>
       <p>If the button doesn't work, copy this link into your browser:<br>${verifyUrl}</p>
+      ${
+        loginUrl
+          ? `<p>Once verified, you can log in here: <a href="${loginUrl}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;margin-top:4px;">Login to Prowexa</a></p>`
+          : ''
+      }
       <p>If you didn't create this account, you can safely ignore this email.</p>
       ${EMAIL_FOOTER}
     </div>
@@ -79,12 +84,13 @@ export function buildPasswordResetEmail(resetUrl: string): SendMailInput['html']
   `;
 }
 
-export function buildChatAssignedEmail(agentName: string, contactName: string, orgName: string): SendMailInput['html'] {
+export function buildChatAssignedEmail(agentName: string, contactName: string, orgName: string, loginUrl: string): SendMailInput['html'] {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
       <h2>New Chat Assigned to You</h2>
       <p>Hi ${agentName},</p>
       <p>Our AI Copilot handed off a conversation with <strong>${contactName}</strong> to you at <strong>${orgName}</strong> — it needs a human touch. Please open your Live Inbox and resolve the customer's query.</p>
+      <p><a href="${loginUrl}" style="display:inline-block;background:#059669;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Login to Dashboard</a></p>
       <p>We also sent you a WhatsApp message about this, if your organization has that enabled.</p>
       ${EMAIL_FOOTER}
     </div>

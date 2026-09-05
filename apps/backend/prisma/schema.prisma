@@ -737,6 +737,23 @@ model TicketMessage {
   ticket          SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 }
 
+// Website visitor leads — captured from the marketing site's "Contact"
+// popup, before the visitor has any account/organization. Deliberately not
+// tied to Organization/User, since most leads never sign up.
+model Lead {
+  id                    String   @id @default(uuid()) @db.Uuid
+  name                  String   @db.VarChar(255)
+  email                 String   @db.VarChar(255)
+  phoneNumber           String   @db.VarChar(50)
+  // Whether the visitor says they're currently receiving WhatsApp
+  // notifications/messages correctly — null if the toggle wasn't answered.
+  isReceivingWhatsapp   Boolean?
+  message               String?  @db.Text
+  createdAt             DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model SuperAdminAuditLog {
   id                   String          @id @default(uuid()) @db.Uuid
   actorAdminId         String?         @db.Uuid

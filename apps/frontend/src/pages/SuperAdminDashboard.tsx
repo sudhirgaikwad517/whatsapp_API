@@ -20,6 +20,7 @@ import {
   X,
   Send,
   CheckCircle2,
+  Contact,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
@@ -27,7 +28,7 @@ import { useAuthStore } from '../store/auth.store';
 import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const SuperAdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'pricing' | 'tickets' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'pricing' | 'tickets' | 'leads' | 'audit'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all');
   const [globalGeminiKey, setGlobalGeminiKey] = useState('');
@@ -168,6 +169,16 @@ export const SuperAdminDashboard: React.FC = () => {
       return res.data.data.kpi;
     },
     refetchInterval: 10000,
+  });
+
+  // Fetch Website Visitor Leads
+  const { data: leadsData } = useQuery({
+    queryKey: ['superadmin-leads'],
+    queryFn: async () => {
+      const res = await apiClient.get('/superadmin/leads');
+      return res.data.data;
+    },
+    enabled: activeTab === 'leads',
   });
 
   const handleTicketReply = async () => {
@@ -411,6 +422,18 @@ export const SuperAdminDashboard: React.FC = () => {
           >
             <ShieldCheck className="w-4 h-4 mr-2 text-indigo-500" />
             Security Audit Logs
+          </button>
+
+          <button
+            onClick={() => setActiveTab('leads')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center cursor-pointer ${
+              activeTab === 'leads'
+                ? 'bg-indigo-600 text-white shadow-none'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 border border-transparent hover:border-slate-800'
+            }`}
+          >
+            <Contact className="w-4 h-4 mr-2 text-emerald-500" />
+            Website Leads
           </button>
         </div>
 
@@ -1377,6 +1400,65 @@ export const SuperAdminDashboard: React.FC = () => {
                       <td className="py-4 px-6 text-slate-200 font-semibold">{log.targetOrganization?.name || '—'}</td>
                       <td className="py-4 px-6 font-mono text-slate-400 text-xs">{log.ipAddress || '127.0.0.1'}</td>
                       <td className="py-4 px-6 text-right font-mono text-slate-400 text-xs">{log.resource}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: WEBSITE VISITOR LEADS */}
+      {activeTab === 'leads' && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-white tracking-tight flex items-center">
+            <Contact className="w-5 h-5 mr-2 text-emerald-400" />
+            Website Visitor Leads
+          </h3>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-950/60 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <th className="py-4 px-6">Name</th>
+                  <th className="py-4 px-6">Email</th>
+                  <th className="py-4 px-6">Phone</th>
+                  <th className="py-4 px-6">WhatsApp OK?</th>
+                  <th className="py-4 px-6">Message</th>
+                  <th className="py-4 px-6 text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
+                {leadsData?.length === 0 || !leadsData ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">No website leads captured yet.</td>
+                  </tr>
+                ) : (
+                  leadsData?.map((lead: any) => (
+                    <tr key={lead.id} className="hover:bg-slate-800/40">
+                      <td className="py-4 px-6 font-semibold text-white">{lead.name}</td>
+                      <td className="py-4 px-6 text-slate-300">{lead.email}</td>
+                      <td className="py-4 px-6 font-mono text-slate-300 text-xs">{lead.phoneNumber}</td>
+                      <td className="py-4 px-6">
+                        {lead.isReceivingWhatsapp === null ? (
+                          <span className="text-slate-500 text-xs">—</span>
+                        ) : (
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                              lead.isReceivingWhatsapp
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            }`}
+                          >
+                            {lead.isReceivingWhatsapp ? 'Yes' : 'No'}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6 text-slate-300 max-w-xs truncate" title={lead.message || ''}>
+                        {lead.message || '—'}
+                      </td>
+                      <td className="py-4 px-6 text-right text-xs text-slate-400">{new Date(lead.createdAt).toLocaleString()}</td>
                     </tr>
                   ))
                 )}

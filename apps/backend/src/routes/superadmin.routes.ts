@@ -79,6 +79,7 @@ router.post('/grant-credits', SuperAdminController.grantAiCredits);
 router.post('/credit-wallet', SuperAdminController.manualCreditWallet);
 router.post('/pricing-rule', SuperAdminController.updatePricingRule);
 router.post('/tickets/:ticketId/reply', SuperAdminController.replyTicket);
+router.get('/leads', SuperAdminController.getLeads);
 router.get('/global-ai-key', SuperAdminController.getMasterAiKey);
 router.post('/global-ai-key', SuperAdminController.saveMasterAiKey);
 router.post('/org-ai-key', SuperAdminController.updateOrgAiKey);
