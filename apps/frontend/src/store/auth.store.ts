@@ -85,10 +85,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(STORED_IMPERSONATING_KEY);
     set({ user: null, isAuthenticated: false, isImpersonating: false });
 
-    // Unified Logout: Redirect back to website with logout flag
-    const isProduction = typeof window !== 'undefined' && (window.location.hostname.includes('wabtic.com') || window.location.protocol === 'https:');
-    const websiteUrl = (import.meta as any).env?.VITE_FRONTEND_URL || (isProduction ? 'https://wabtic.com' : 'http://localhost:3000');
-    window.location.href = `${websiteUrl}?logout=true`;
+    // Stay on this dashboard's own login page — this app's session is
+    // deliberately separate from wabtic-website's (see auth-cookies.ts on the
+    // backend), so logging out here should never bounce the user out to the
+    // marketing site.
+    window.location.href = '/login';
   },
 
   syncUser: async () => {
