@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, Link } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Menu, X, MessageSquare, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../store/auth.store';
@@ -21,16 +21,8 @@ export const Layout: React.FC = () => {
 
   const isPlanExpired = !creditsData?.planExpiryDate || new Date(creditsData.planExpiryDate) < new Date();
   const location = useLocation();
-  const isRestrictedPage = isPlanExpired && user?.role !== 'SUPER_ADMIN' && !['/billing', '/profile', '/settings'].includes(location.pathname);
-
-  const getUpgradeUrl = () => {
-    const envUrl = (import.meta as any).env?.VITE_WEBSITE_URL;
-    if (envUrl) return `${envUrl}/?tab=pricing`;
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:3000/?tab=pricing';
-    }
-    return 'https://wabtic.com/?tab=pricing';
-  };
+  const isRestrictedPage =
+    isPlanExpired && user?.role !== 'SUPER_ADMIN' && !['/billing', '/plans', '/profile', '/settings'].includes(location.pathname);
 
   // Reset scroll offset on mobile keyboard close (focusout) to prevent static whitespace gap at bottom
   useEffect(() => {
@@ -96,12 +88,12 @@ export const Layout: React.FC = () => {
               <strong>No Active Plan:</strong> Your subscription has expired or you do not have an active plan. Please upgrade to continue using all services.
             </span>
           </div>
-          <a
-            href={getUpgradeUrl()}
+          <Link
+            to="/plans"
             className="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5 shrink-0 whitespace-nowrap"
           >
             <span>Upgrade Now ➔</span>
-          </a>
+          </Link>
         </div>
       )}
 

@@ -58,13 +58,16 @@ export const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
-        <div className="text-center space-y-2">
+      <div className="w-full max-w-md bg-slate-900 border border-emerald-500/30 rounded-2xl p-8 shadow-2xl space-y-6 relative">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-500/30">
+          Team Dashboard
+        </div>
+        <div className="text-center space-y-2 pt-2">
           <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/20">
             <MessageSquare className="w-6 h-6 text-slate-950 stroke-[2.5]" />
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Sign in to Prowexa</h2>
-          <p className="text-sm text-slate-400">Enterprise WhatsApp Cloud Platform</p>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Dashboard Login</h2>
+          <p className="text-sm text-slate-400">Sign in to your Prowexa team dashboard — app.wabtic.com</p>
         </div>
 
         {verifiedParam === '1' && !error && (

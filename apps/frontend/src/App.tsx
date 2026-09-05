@@ -28,6 +28,7 @@ const SuperAdminResetPassword = lazy(() => import('./pages/SuperAdminResetPasswo
 const Flows = lazy(() => import('./pages/Flows').then(m => ({ default: m.Flows })));
 const Catalog = lazy(() => import('./pages/Catalog').then(m => ({ default: m.Catalog })));
 const Billing = lazy(() => import('./pages/Billing').then(m => ({ default: m.Billing })));
+const ManagePlans = lazy(() => import('./pages/ManagePlans').then(m => ({ default: m.ManagePlans })));
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
 
@@ -134,6 +135,7 @@ export const App: React.FC = () => {
               <Route path="flows" element={<Flows />} />
               <Route path="catalog" element={<Catalog />} />
               <Route path="billing" element={<Billing />} />
+              <Route path="plans" element={<ManagePlans />} />
               <Route path="wallet" element={<Wallet />} />
               <Route path="team" element={<Team />} />
               <Route path="analytics" element={<Analytics />} />

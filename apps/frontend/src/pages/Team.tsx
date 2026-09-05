@@ -303,8 +303,8 @@ export const Team: React.FC = () => {
       {/* Invite Member Modal */}
       {isInviteOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between sticky -top-6 -mx-6 px-6 pt-6 pb-3 bg-slate-900 z-10">
               <h3 className="text-lg font-bold text-white flex items-center">
                 <UserPlus className="w-5 h-5 mr-2 text-emerald-400" />
                 Invite Support Team Member
@@ -492,7 +492,7 @@ export const Team: React.FC = () => {
       {editingMember && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-lg space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 sticky -top-6 -mx-6 px-6 pt-6 bg-slate-900 z-10">
               <h3 className="text-base font-bold text-white flex items-center">
                 <Pencil className="w-5 h-5 mr-2 text-emerald-400" />
                 Edit {editingMember.user?.fullName}
