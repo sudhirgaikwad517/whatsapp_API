@@ -4,6 +4,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
+  phoneNumber?: string;
   role: string;
   organizationId: string;
   allowedPages?: string[];

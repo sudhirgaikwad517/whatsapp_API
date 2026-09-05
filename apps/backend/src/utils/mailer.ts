@@ -262,3 +262,30 @@ export function buildAccountStatusEmail(input: {
     </div>
   `;
 }
+
+export function buildSupportTicketReceivedEmail(input: {
+  fullName: string;
+  ticketNumber: string;
+  subject: string;
+}): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>We've Received Your Support Request</h2>
+      <p>Hi ${input.fullName},</p>
+      <p>Thank you for reaching out to Prowexa Support. Your ticket has been logged and a member of our support team will get in touch with you shortly.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f9fafb;border-radius:8px;">
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Ticket Number</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;font-family:monospace;">${input.ticketNumber}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;color:#6b7280;">Subject</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:bold;">${input.subject}</td>
+        </tr>
+      </table>
+      <p><strong>Our support executive will contact you within 24 hours.</strong></p>
+      <p>You can track this ticket and reply to it anytime from your Profile page's Support Portal.</p>
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}

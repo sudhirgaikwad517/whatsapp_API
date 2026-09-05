@@ -154,7 +154,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
       where: { transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] }, ...dateFilter },
     }),
     prisma.supportTicket.findMany({
-      include: { organization: true },
+      include: { organization: true, messages: { orderBy: { createdAt: 'asc' } } },
       orderBy: { createdAt: 'desc' },
       take: 20,
     }),
@@ -594,7 +594,12 @@ export async function updatePricingRule(data: {
   return rule;
 }
 
-export async function superAdminReplyTicket(ticketId: string, message: string, status?: string) {
+/**
+ * Handles both a superadmin reply and a plain status change (e.g. "Mark
+ * Resolved" with no message) — message is optional so resolving/closing a
+ * ticket doesn't force typing something into it first.
+ */
+export async function superAdminReplyTicket(ticketId: string, message?: string | null, status?: string) {
   const ticket = await prisma.supportTicket.findUnique({
     where: { id: ticketId },
   });
@@ -611,22 +616,29 @@ export async function superAdminReplyTicket(ticketId: string, message: string, s
     );
   }
 
-  const msg = await prisma.ticketMessage.create({
-    data: {
-      ticketId,
-      senderType: 'SUPER_ADMIN',
-      senderId: 'SYSTEM_SUPER_ADMIN',
-      message,
-    },
-  });
+  const trimmedMessage = message?.trim();
+  if (!trimmedMessage && !status) {
+    throw new AppError('Provide a reply message or a status update.', 400, 'EMPTY_UPDATE');
+  }
+
+  if (trimmedMessage) {
+    await prisma.ticketMessage.create({
+      data: {
+        ticketId,
+        senderType: 'SUPER_ADMIN',
+        senderId: 'SYSTEM_SUPER_ADMIN',
+        message: trimmedMessage,
+      },
+    });
+  }
 
   const updatedTicket = await prisma.supportTicket.update({
     where: { id: ticketId },
     data: {
-      status: (status as SupportTicketStatus) || 'IN_PROGRESS',
+      status: (status as SupportTicketStatus) || (trimmedMessage ? 'IN_PROGRESS' : ticket.status),
       updatedAt: new Date(),
     },
-    include: { messages: true, organization: true },
+    include: { messages: { orderBy: { createdAt: 'asc' } }, organization: true },
   });
 
   return updatedTicket;

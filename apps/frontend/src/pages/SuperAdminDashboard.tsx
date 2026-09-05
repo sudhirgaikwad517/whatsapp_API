@@ -17,10 +17,14 @@ import {
   ShieldCheck,
   Scale,
   RefreshCw,
+  X,
+  Send,
+  CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const SuperAdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'pricing' | 'tickets' | 'audit'>('overview');
@@ -41,6 +45,9 @@ export const SuperAdminDashboard: React.FC = () => {
   const [invoiceStateCode, setInvoiceStateCode] = useState('');
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState('');
   const logoFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [viewingTicket, setViewingTicket] = useState<any>(null);
+  const [ticketReplyText, setTicketReplyText] = useState('');
+  const [isSubmittingTicketAction, setIsSubmittingTicketAction] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -162,6 +169,43 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     refetchInterval: 10000,
   });
+
+  const handleTicketReply = async () => {
+    if (!viewingTicket || !ticketReplyText.trim()) return;
+    setIsSubmittingTicketAction(true);
+    try {
+      const res = await apiClient.post(`/superadmin/tickets/${viewingTicket.id}/reply`, { message: ticketReplyText.trim() });
+      setViewingTicket(res.data.data);
+      setTicketReplyText('');
+      toast.success('Response sent to client!');
+      refetch();
+    } catch (e: any) {
+      toast.error('Failed to send response', { description: e.response?.data?.error?.message || e.message });
+    } finally {
+      setIsSubmittingTicketAction(false);
+    }
+  };
+
+  const handleTicketStatusChange = async (status: 'RESOLVED' | 'CLOSED') => {
+    if (!viewingTicket) return;
+    const ok = await confirmAction({
+      title: `Mark ticket ${viewingTicket.ticketNumber} as ${status}?`,
+      message: 'The client will still be able to see this ticket and its full history.',
+      confirmLabel: `Mark ${status === 'RESOLVED' ? 'Resolved' : 'Closed'}`,
+    });
+    if (!ok) return;
+    setIsSubmittingTicketAction(true);
+    try {
+      const res = await apiClient.post(`/superadmin/tickets/${viewingTicket.id}/reply`, { status });
+      setViewingTicket(res.data.data);
+      toast.success(`Ticket marked ${status.toLowerCase()}.`);
+      refetch();
+    } catch (e: any) {
+      toast.error('Failed to update ticket status', { description: e.response?.data?.error?.message || e.message });
+    } finally {
+      setIsSubmittingTicketAction(false);
+    }
+  };
 
   // Fetch Organizations List
   const { data: orgsData, isLoading } = useQuery({
@@ -1146,39 +1190,48 @@ export const SuperAdminDashboard: React.FC = () => {
                   <th className="py-4 px-6">Organization</th>
                   <th className="py-4 px-6">Subject</th>
                   <th className="py-4 px-6">Priority</th>
+                  <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6">Date</th>
-                  <th className="py-4 px-6 text-right">Status / Action</th>
+                  <th className="py-4 px-6 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm text-slate-200">
                 {kpi.supportTickets?.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-500">No support tickets currently open.</td>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">No support tickets currently open.</td>
                   </tr>
                 ) : (
                   kpi.supportTickets?.map((t: any) => (
                     <tr key={t.id} className="hover:bg-slate-800/40">
                       <td className="py-4 px-6 font-mono text-purple-400 font-bold">{t.ticketNumber}</td>
                       <td className="py-4 px-6 font-semibold text-white">{t.organization?.name || '—'}</td>
-                      <td className="py-4 px-6 text-slate-300">{t.subject}</td>
+                      <td className="py-4 px-6 text-slate-300 max-w-xs truncate">{t.subject}</td>
                       <td className="py-4 px-6 text-xs font-bold text-amber-400">{t.priority}</td>
+                      <td className="py-4 px-6">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                            t.status === 'RESOLVED'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : t.status === 'CLOSED'
+                              ? 'bg-slate-700/40 text-slate-400 border-slate-600'
+                              : t.status === 'IN_PROGRESS'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </td>
                       <td className="py-4 px-6 text-xs text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</td>
                       <td className="py-4 px-6 text-right">
                         <button
                           onClick={() => {
-                            const reply = prompt(`Reply to ticket ${t.ticketNumber} ("${t.subject}"):`);
-                            if (reply) {
-                              apiClient.post(`/superadmin/tickets/${t.id}/reply`, { message: reply, status: 'IN_PROGRESS' })
-                                .then(() => {
-                                  toast.success('Response sent to client!');
-                                  refetch();
-                                })
-                                .catch((e) => toast.error('Failed to send response', { description: e.message }));
-                            }
+                            setViewingTicket(t);
+                            setTicketReplyText('');
                           }}
                           className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md"
                         >
-                          Reply to Client
+                          View & Reply
                         </button>
                       </td>
                     </tr>
@@ -1186,6 +1239,108 @@ export const SuperAdminDashboard: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Support Ticket Detail & Reply Modal */}
+      {viewingTicket && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 sticky -top-6 -mx-6 px-6 pt-6 bg-slate-900 z-10">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Ticket className="w-5 h-5 text-purple-400" />
+                  {viewingTicket.ticketNumber}
+                  <span className="text-xs font-normal text-slate-400">— {viewingTicket.organization?.name || '—'}</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">{viewingTicket.subject}</p>
+              </div>
+              <button onClick={() => setViewingTicket(null)} aria-label="Close" className="text-slate-400 hover:text-white p-1 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase text-slate-500">Priority: {viewingTicket.priority}</span>
+              <span
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                  viewingTicket.status === 'RESOLVED'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : viewingTicket.status === 'CLOSED'
+                    ? 'bg-slate-700/40 text-slate-400 border-slate-600'
+                    : viewingTicket.status === 'IN_PROGRESS'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                }`}
+              >
+                {viewingTicket.status}
+              </span>
+            </div>
+
+            {/* Message Thread */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 max-h-72 overflow-y-auto">
+              {viewingTicket.messages?.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">No messages yet.</p>
+              ) : (
+                viewingTicket.messages?.map((msg: any) => (
+                  <div
+                    key={msg.id}
+                    className={`p-3 rounded-xl text-xs space-y-1 max-w-[85%] ${
+                      msg.senderType === 'SUPER_ADMIN'
+                        ? 'bg-purple-950/40 border border-purple-500/30 text-purple-100 ml-auto'
+                        : 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 pb-1">
+                      <span className="font-bold uppercase text-purple-400">
+                        {msg.senderType === 'SUPER_ADMIN' ? '🛡️ Prowexa Support' : 'Client'}
+                      </span>
+                      <span>{new Date(msg.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap">{msg.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Reply Input */}
+            <div className="flex gap-2">
+              <textarea
+                value={ticketReplyText}
+                onChange={(e) => setTicketReplyText(e.target.value)}
+                placeholder="Type your reply to the client..."
+                rows={2}
+                className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
+              />
+              <button
+                onClick={handleTicketReply}
+                disabled={isSubmittingTicketAction || !ticketReplyText.trim()}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Send
+              </button>
+            </div>
+
+            {/* Status Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => handleTicketStatusChange('CLOSED')}
+                disabled={isSubmittingTicketAction || viewingTicket.status === 'CLOSED'}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Mark Closed
+              </button>
+              <button
+                onClick={() => handleTicketStatusChange('RESOLVED')}
+                disabled={isSubmittingTicketAction || viewingTicket.status === 'RESOLVED'}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Mark Resolved
+              </button>
+            </div>
           </div>
         </div>
       )}

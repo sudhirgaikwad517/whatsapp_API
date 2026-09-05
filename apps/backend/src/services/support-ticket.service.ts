@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { TicketPriority } from '@prisma/client';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { logger } from '../utils/logger.js';
 
 export async function createSupportTicket(
   organizationId: string,
@@ -37,6 +38,20 @@ export async function createSupportTicket(
       organization: { select: { name: true } },
     },
   });
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { fullName: true, email: true } });
+    if (user) {
+      const { sendMail, buildSupportTicketReceivedEmail } = await import('../utils/mailer.js');
+      await sendMail({
+        to: user.email,
+        subject: `Support Ticket Received — ${ticketNumber}`,
+        html: buildSupportTicketReceivedEmail({ fullName: user.fullName, ticketNumber, subject: data.subject }),
+      });
+    }
+  } catch (err) {
+    logger.error({ organizationId, ticketNumber, err }, 'Failed to send support ticket confirmation email.');
+  }
 
   return ticket;
 }

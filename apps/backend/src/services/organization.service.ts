@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+import { cleanPhone } from './contact.service.js';
 
 export async function getOrganization(organizationId: string) {
   try {
@@ -145,6 +146,7 @@ export async function getMembers(organizationId: string) {
           id: true,
           fullName: true,
           email: true,
+          phoneNumber: true,
           isEmailVerified: true,
           createdAt: true,
         },
@@ -196,7 +198,7 @@ export async function updateMember(
 
   const userUpdate: Record<string, any> = {};
   if (data.fullName !== undefined) userUpdate.fullName = data.fullName.trim();
-  if (data.phoneNumber !== undefined) userUpdate.phoneNumber = data.phoneNumber?.trim() || null;
+  if (data.phoneNumber !== undefined) userUpdate.phoneNumber = data.phoneNumber?.trim() ? cleanPhone(data.phoneNumber) : null;
 
   const [updatedMember] = await prisma.$transaction([
     prisma.organizationMember.update({
@@ -289,6 +291,8 @@ export async function inviteMember(
   const rawPassword =
     input.password && input.password.trim().length >= 6 ? input.password.trim() : crypto.randomBytes(9).toString('base64url');
 
+  const normalizedPhone = input.phoneNumber?.trim() ? cleanPhone(input.phoneNumber) : null;
+
   if (!user) {
     const passwordHash = await bcrypt.hash(rawPassword, 10);
     user = await prisma.user.create({
@@ -296,7 +300,7 @@ export async function inviteMember(
         email,
         fullName: input.fullName.trim(),
         passwordHash,
-        phoneNumber: input.phoneNumber?.trim() || null,
+        phoneNumber: normalizedPhone,
         isEmailVerified: true,
       },
     });
@@ -304,10 +308,10 @@ export async function inviteMember(
     const passwordHash = await bcrypt.hash(input.password.trim(), 10);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, ...(input.phoneNumber?.trim() ? { phoneNumber: input.phoneNumber.trim() } : {}) },
+      data: { passwordHash, ...(normalizedPhone ? { phoneNumber: normalizedPhone } : {}) },
     });
-  } else if (input.phoneNumber?.trim()) {
-    await prisma.user.update({ where: { id: user.id }, data: { phoneNumber: input.phoneNumber.trim() } });
+  } else if (normalizedPhone) {
+    await prisma.user.update({ where: { id: user.id }, data: { phoneNumber: normalizedPhone } });
   }
 
   const existingMember = await prisma.organizationMember.findFirst({

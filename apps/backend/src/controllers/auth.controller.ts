@@ -154,6 +154,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response, next: Next
           id: req.user!.userId,
           email: req.user!.email,
           fullName: dbUser?.fullName || '',
+          phoneNumber: dbUser?.phoneNumber || '',
           organizationId: req.user!.organizationId,
           role: req.user!.role,
           isSuperAdmin: req.user!.isSuperAdmin,
