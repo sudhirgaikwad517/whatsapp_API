@@ -22,6 +22,9 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
   const [language, setLanguage] = useState('en_US');
   const [headerType, setHeaderType] = useState<'NONE' | 'TEXT' | 'IMAGE'>('NONE');
   const [headerText, setHeaderText] = useState('');
+  const [headerSampleHandle, setHeaderSampleHandle] = useState('');
+  const [headerSampleFileName, setHeaderSampleFileName] = useState('');
+  const [isUploadingHeaderSample, setIsUploadingHeaderSample] = useState(false);
   const [bodyText, setBodyText] = useState('Hello {{1}}, welcome to {{2}}! Your order {{3}} is confirmed.');
   const [footerText, setFooterText] = useState('Reply STOP to unsubscribe');
   const [buttons, setButtons] = useState<ButtonItem[]>([]);
@@ -40,6 +43,9 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (headerType === 'IMAGE' && !headerSampleHandle) {
+        throw new Error('Meta requires a sample header image to review this template — please upload one first.');
+      }
       const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const sampleBodyValues = extractedVars.map((vNum) => sampleValues[vNum]?.trim() || `Sample_${vNum}`);
 
@@ -49,6 +55,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
         language,
         headerType,
         headerText: headerType === 'TEXT' ? headerText : undefined,
+        headerSampleHandle: headerType === 'IMAGE' ? headerSampleHandle : undefined,
         bodyText,
         sampleBodyValues,
         footerText: footerText.trim() ? footerText : undefined,
@@ -62,6 +69,8 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
       setName('');
       setHeaderType('NONE');
       setHeaderText('');
+      setHeaderSampleHandle('');
+      setHeaderSampleFileName('');
       setBodyText('Hello {{1}}, thank you for choosing our business!');
       setFooterText('');
       setButtons([]);
@@ -69,7 +78,7 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
       onClose();
     },
     onError: (err: any) => {
-      setError(err.response?.data?.error?.message || 'Failed to submit template to Meta.');
+      setError(err.response?.data?.error?.message || err.message || 'Failed to submit template to Meta.');
     },
   });
 
@@ -95,6 +104,32 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
 
   const removeButton = (index: number) => {
     setButtons(buttons.filter((_, i) => i !== index));
+  };
+
+  const handleHeaderSampleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size exceeds 5MB limit for Meta upload.');
+      return;
+    }
+
+    setIsUploadingHeaderSample(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await apiClient.post('/whatsapp/templates/upload-header-sample', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setHeaderSampleHandle(res.data.data.handle);
+      setHeaderSampleFileName(file.name);
+      toast.success('Sample image uploaded to Meta for review.');
+    } catch (err: any) {
+      toast.error('Sample image upload failed', { description: err.response?.data?.error?.message || err.message });
+    } finally {
+      setIsUploadingHeaderSample(false);
+    }
   };
 
   // Live render for phone card preview replacing variables with sample values
@@ -216,11 +251,25 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
               )}
 
               {headerType === 'IMAGE' && (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 mt-2 flex items-start">
-                  <span className="text-emerald-400 mr-2 text-lg leading-none">💡</span>
-                  <p className="text-[10px] text-emerald-300 leading-relaxed">
-                    <strong>No need to upload the image here!</strong> You will securely upload the actual high-quality image file to Meta's CDN when you launch a campaign using this template. This guarantees 100% delivery without URL download errors (131053).
-                  </p>
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 mt-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase text-slate-400">Sample Header Image (Required by Meta)</label>
+                    <label className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer">
+                      <span>{isUploadingHeaderSample ? 'Uploading...' : '⚡ Upload Sample Image'}</span>
+                      <input type="file" accept="image/*" onChange={handleHeaderSampleUpload} disabled={isUploadingHeaderSample} className="hidden" />
+                    </label>
+                  </div>
+                  {headerSampleFileName ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{headerSampleFileName} uploaded — ready for Meta review.</span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-amber-300 leading-relaxed">
+                      Meta requires an actual example image to review an image-header template — this is submitted with the
+                      template for review, separate from the image you'll attach per-campaign later.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -389,8 +438,9 @@ export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ isOpen
             <div className="pt-3">
               <button
                 type="submit"
-                disabled={createMutation.isPending}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
+                disabled={createMutation.isPending || (headerType === 'IMAGE' && !headerSampleHandle)}
+                title={headerType === 'IMAGE' && !headerSampleHandle ? 'Upload a sample header image first — Meta requires it for review.' : undefined}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="w-4 h-4" />
                 <span>{createMutation.isPending ? 'Submitting to Meta API...' : 'Submit Template to Meta'}</span>

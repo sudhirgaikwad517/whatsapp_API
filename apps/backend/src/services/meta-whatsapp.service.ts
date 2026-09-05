@@ -280,6 +280,9 @@ export interface CreateTemplateInput {
   headerType?: 'NONE' | 'TEXT' | 'IMAGE';
   headerText?: string;
   headerSampleValue?: string;
+  // Required by Meta for an IMAGE-format header — a handle from
+  // uploadTemplateHeaderSample(), NOT the campaign media ID.
+  headerSampleHandle?: string;
   buttons?: Array<{
     type: 'QUICK_REPLY' | 'PHONE_NUMBER' | 'URL';
     text: string;
@@ -321,9 +324,20 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
     }
     components.push(headerComp);
   } else if (input.headerType === 'IMAGE') {
+    // Meta requires an actual sample image handle to review an IMAGE-header
+    // template — without it the create call fails with a generic "invalid
+    // parameter" error no matter how correct everything else is.
+    if (!input.headerSampleHandle) {
+      throw new AppError(
+        'Meta requires a sample header image to review this template. Please upload one before submitting.',
+        400,
+        'MISSING_HEADER_SAMPLE'
+      );
+    }
     components.push({
       type: 'HEADER',
       format: 'IMAGE',
+      example: { header_handle: [input.headerSampleHandle] },
     });
   }
 
@@ -416,6 +430,64 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
   return template;
 }
 
+/**
+ * Uploads a sample image for an IMAGE-header template submission via Meta's
+ * Resumable Upload API. This is a DIFFERENT upload mechanism from
+ * uploadMediaToMeta (which hits /{phone_number_id}/media for sending actual
+ * messages/campaigns) — template creation/review specifically requires a
+ * "header_handle" produced this way; Meta rejects an IMAGE-header template
+ * with INVALID_PARAMETER if example.header_handle is missing, no matter how
+ * correct the rest of the payload is.
+ */
+export async function uploadTemplateHeaderSample(organizationId: string, file: Express.Multer.File): Promise<{ handle: string }> {
+  const waAccount = await prisma.whatsappAccount.findFirst({
+    where: { organizationId, deletedAt: null },
+  });
+  if (!waAccount) {
+    throw new AppError('No WhatsApp account connected. Connect Meta WhatsApp account first in Settings.', 404, 'NO_WHATSAPP_ACCOUNT');
+  }
+  if (!env.META_APP_ID) {
+    throw new AppError('META_APP_ID is not configured on the server — cannot upload a template header sample to Meta.', 500, 'SERVER_MISCONFIGURATION');
+  }
+
+  const decryptedToken = decryptToken(waAccount.encryptedAccessToken);
+  const accessToken = env.META_SYSTEM_USER_TOKEN || decryptedToken;
+
+  // Step 1: start an upload session.
+  const sessionUrl = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${env.META_APP_ID}/uploads?file_length=${file.size}&file_type=${encodeURIComponent(file.mimetype)}&access_token=${encodeURIComponent(accessToken)}`;
+  const sessionRes = await fetch(sessionUrl, { method: 'POST' });
+  const sessionData = (await sessionRes.json()) as any;
+  if (!sessionRes.ok || !sessionData?.id) {
+    logger.error({ sessionData }, 'Failed to start Meta resumable upload session for template header sample.');
+    throw new AppError(
+      sessionData?.error?.message || 'Meta API rejected the upload session request.',
+      sessionRes.status || 400,
+      'META_UPLOAD_SESSION_ERROR'
+    );
+  }
+
+  // Step 2: push the file bytes to that session, get back the sample handle.
+  const uploadRes = await fetch(`${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${sessionData.id}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `OAuth ${accessToken}`,
+      file_offset: '0',
+    },
+    body: file.buffer,
+  });
+  const uploadData = (await uploadRes.json()) as any;
+  if (!uploadRes.ok || !uploadData?.h) {
+    logger.error({ uploadData }, 'Failed to upload template header sample bytes to Meta.');
+    throw new AppError(
+      uploadData?.error?.message || 'Meta API rejected the template header sample upload.',
+      uploadRes.status || 400,
+      'META_UPLOAD_ERROR'
+    );
+  }
+
+  return { handle: uploadData.h };
+}
+
 export async function uploadMediaToMeta(organizationId: string, file: Express.Multer.File) {
   const waAccount = await prisma.whatsappAccount.findFirst({
     where: { organizationId, deletedAt: null },
@@ -498,7 +570,14 @@ export async function editMetaTemplate(organizationId: string, templateId: strin
     }
     components.push(headerComp);
   } else if (input.headerType === 'IMAGE') {
-    components.push({ type: 'HEADER', format: 'IMAGE' });
+    if (!input.headerSampleHandle) {
+      throw new AppError(
+        'Meta requires a sample header image to review this template. Please upload one before submitting.',
+        400,
+        'MISSING_HEADER_SAMPLE'
+      );
+    }
+    components.push({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [input.headerSampleHandle] } });
   }
 
   // Body component

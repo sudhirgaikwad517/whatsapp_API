@@ -37,6 +37,20 @@ router.post('/connect', WhatsAppController.connectAccount);
 router.post('/media', upload.single('file'), WhatsAppController.uploadMedia);
 
 /**
+ * @route   POST /api/v1/whatsapp/templates/upload-header-sample
+ * @desc    Upload a sample header image for Meta's template review (a
+ *          different upload mechanism than /media — produces a "handle" via
+ *          Meta's Resumable Upload API, not a messaging media ID)
+ * @access  Bearer (Manager, Business Owner)
+ */
+router.post(
+  '/templates/upload-header-sample',
+  authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER),
+  upload.single('file'),
+  WhatsAppController.uploadTemplateHeaderSample
+);
+
+/**
  * @route   GET /api/v1/whatsapp/health
  * @desc    Check connected WABA phone number status and quality rating
  * @access  Bearer (All roles)
