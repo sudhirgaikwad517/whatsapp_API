@@ -626,7 +626,7 @@ export const Settings: React.FC = () => {
               rows={4}
               value={aiKnowledgeBase}
               onChange={(e) => setAiKnowledgeBase(e.target.value)}
-              placeholder="e.g. Shrishti Dairy Farm offers pure A2 Desi Cow Milk at ₹80/liter. Delivery timing: 6:00 AM - 9:00 AM daily. Customer support: 9:00 AM to 7:00 PM."
+              placeholder="e.g. We offer [products/services] starting at ₹[price]. Business hours: 9:00 AM - 6:00 PM, Mon-Sat. Delivery/turnaround time: 2-3 business days. Support: support@yourcompany.com."
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
             />
           </div>

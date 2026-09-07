@@ -247,7 +247,7 @@ export const Catalog: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. A2 Desi Cow Milk 1L"
+                  placeholder="e.g. Wireless Bluetooth Earbuds"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-medium"
@@ -262,7 +262,7 @@ export const Catalog: React.FC = () => {
                   <input
                     type="number"
                     step="0.01"
-                    placeholder="80.00"
+                    placeholder="999.00"
                     value={priceInINR}
                     onChange={(e) => setPriceInINR(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
@@ -274,7 +274,7 @@ export const Catalog: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    placeholder="MILK-A2-1L"
+                    placeholder="e.g. SKU-1001"
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
@@ -288,7 +288,7 @@ export const Catalog: React.FC = () => {
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="Pure farm fresh A2 Desi Cow Milk delivered daily morning."
+                  placeholder="Brief description of the product — features, specs, or what makes it worth buying."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"

@@ -1018,7 +1018,7 @@ export const Inbox: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 5L Desi Ghee Order"
+                  placeholder="e.g. 2x Product Bundle Order"
                   value={paymentDesc}
                   onChange={(e) => setPaymentDesc(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"

@@ -310,7 +310,7 @@ export const AutoResponder: React.FC = () => {
                 <textarea
                   required
                   rows={4}
-                  placeholder="👋 Hello! Thank you for reaching out to Shrishti Dairy Farm. How can we assist you today?"
+                  placeholder="👋 Hello! Thank you for reaching out to us. How can we assist you today?"
                   value={replyMessage}
                   onChange={(e) => setReplyMessage(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-emerald-500 resize-none"
