@@ -235,15 +235,6 @@ export async function getMasterAiKey(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function updateOrgAiKey(req: Request, res: Response, next: NextFunction) {
-  try {
-    const { organizationId, apiKey } = req.body;
-    const data = await SuperAdminService.updateOrganizationAiKey(organizationId, apiKey);
-    res.status(200).json({ success: true, data });
-  } catch (err) {
-    next(err);
-  }
-}
 
 export async function getSystemSettings(req: Request, res: Response, next: NextFunction) {
   try {

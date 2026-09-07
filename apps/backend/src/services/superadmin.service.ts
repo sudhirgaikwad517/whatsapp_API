@@ -7,7 +7,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 import { getTemplateSentCounts } from './usage-metrics.service.js';
-import { encryptToken, safeDecryptToken } from '../utils/encryption.js';
+import { encryptToken } from '../utils/encryption.js';
 import { sendMail, buildPasswordResetEmail } from '../utils/mailer.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -178,7 +178,13 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   });
   const actualPaidRecharges = Number(paidRechargesSum._sum?.amount || 0);
 
-  // Fetch real-time Meta Graph API analytics & actual delivered charges
+  // Fetch real-time Meta Graph API analytics & actual delivered charges.
+  // metaDelivered* start out DB-derived (only what Prowexa itself sent) so
+  // there's always a number even if the live call below fails entirely —
+  // but that DB count is blind to anything sent on the same WABA outside
+  // Prowexa (a direct test send from Meta Business Manager, another tool,
+  // etc.), so it's overwritten with Meta's own per-category conversation
+  // counts/costs whenever the live call succeeds for at least one account.
   const metaAnalytics = {
     metaDeliveredMarketing: 0,
     metaDeliveredUtility: 0,
@@ -209,34 +215,62 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     metaAnalytics.metaDeliveredUtility = finalUtilityCount;
     metaAnalytics.metaDeliveredService = inboundCount;
 
-    let apiCostSum = 0;
+    let liveCostSum = 0;
+    let liveMarketingCount = 0;
+    let liveUtilityCount = 0;
+    let liveServiceCount = 0;
+    let gotLiveData = false;
+
     for (const acc of accounts) {
       if (acc.encryptedAccessToken) {
         try {
           const token = env.META_SYSTEM_USER_TOKEN || decryptToken(acc.encryptedAccessToken);
-          const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
+          // Match the same window this KPI call is scoped to — 30 days back
+          // when no explicit range was requested (startDate undefined), else
+          // from startDate to now.
+          const startTime = Math.floor((startDate ? startDate.getTime() : Date.now() - 30 * 86400 * 1000) / 1000);
           const endTime = Math.floor(Date.now() / 1000);
+          const phoneDigits = (acc.displayPhoneNumber || '').replace(/\D/g, '');
 
-          // Meta Graph API WABA Insights Endpoint Call
+          // Conversation Analytics — the current WhatsApp Business Platform
+          // endpoint for real per-category conversation counts & costs,
+          // reflecting Meta's actual bill for this WABA regardless of which
+          // tool sent the message. The old `analytics` field this replaced
+          // was deprecated by Meta and always failed silently here, which is
+          // why this dashboard could show ₹0 even when Meta had genuinely
+          // billed the account.
           const res = await axios.get(
-            `https://graph.facebook.com/v20.0/${acc.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
-            { timeout: 4000 }
+            `https://graph.facebook.com/v20.0/${acc.wabaId}` +
+              `?fields=conversation_analytics.start(${startTime}).end(${endTime}).granularity(DAILY)` +
+              `.phone_numbers(["${phoneDigits}"]).dimensions(["conversation_category"])` +
+              `&access_token=${token}`,
+            { timeout: 6000 }
           );
-          if (res.data?.analytics?.data) {
-            res.data.analytics.data.forEach((item: any) => {
-              item.data_points?.forEach((dp: any) => {
-                apiCostSum += Number(dp.cost || 0);
-              });
-            });
+
+          const dataPoints = res.data?.conversation_analytics?.data?.flatMap((entry: any) => entry.data_points || []) || [];
+          for (const dp of dataPoints) {
+            gotLiveData = true;
+            liveCostSum += Number(dp.cost || 0);
+            const category = String(dp.conversation_category || '').toUpperCase();
+            const count = Number(dp.conversation || 0);
+            if (category === 'MARKETING') liveMarketingCount += count;
+            else if (category === 'UTILITY') liveUtilityCount += count;
+            else if (category === 'SERVICE') liveServiceCount += count;
           }
         } catch {
-          // Graceful fallback to exact Meta India Rate Card
+          // Graceful fallback to exact Meta India Rate Card for this account
         }
       }
     }
 
-    metaAnalytics.actualMetaCostInINR = apiCostSum > 0
-      ? Number(apiCostSum.toFixed(2))
+    if (gotLiveData) {
+      metaAnalytics.metaDeliveredMarketing = liveMarketingCount;
+      metaAnalytics.metaDeliveredUtility = liveUtilityCount;
+      metaAnalytics.metaDeliveredService = liveServiceCount;
+    }
+
+    metaAnalytics.actualMetaCostInINR = gotLiveData
+      ? Number(liveCostSum.toFixed(2))
       : Number((metaAnalytics.metaDeliveredMarketing * 0.86309 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
   } catch {
     // Graceful fallback
@@ -784,9 +818,11 @@ export async function saveMasterAiKey(apiKey: string) {
   masterGlobalAiKeyMemory = trimmedKey;
   process.env.GEMINI_API_KEY = trimmedKey;
 
-  // Mass update all existing tenant organizations that don't have custom geminiApiKey set
+  // Every organization shares this one platform-wide key — deliberately
+  // unconditional (no `where`) so a new master key always takes effect
+  // everywhere immediately, matching the product decision that there is no
+  // per-org custom Gemini key.
   await prisma.organization.updateMany({
-    where: { geminiApiKey: null },
     data: {
       geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null,
     },
@@ -803,17 +839,6 @@ export async function saveMasterAiKey(apiKey: string) {
 export async function getMasterAiKey() {
   const currentKey = process.env.GEMINI_API_KEY || masterGlobalAiKeyMemory || '';
   return { apiKey: currentKey };
-}
-
-export async function updateOrganizationAiKey(organizationId: string, apiKey: string) {
-  const trimmedKey = (apiKey || '').trim();
-  const org = await prisma.organization.update({
-    where: { id: organizationId },
-    data: { geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null },
-    select: { id: true, name: true, geminiApiKey: true },
-  });
-
-  return { ...org, geminiApiKey: safeDecryptToken(org.geminiApiKey) };
 }
 
 export async function getSystemSettings() {

@@ -89,7 +89,6 @@ router.post('/tickets/:ticketId/reply', SuperAdminController.replyTicket);
 router.get('/leads', SuperAdminController.getLeads);
 router.get('/global-ai-key', SuperAdminController.getMasterAiKey);
 router.post('/global-ai-key', SuperAdminController.saveMasterAiKey);
-router.post('/org-ai-key', SuperAdminController.updateOrgAiKey);
 
 router.get('/settings', SuperAdminController.getSystemSettings);
 router.put('/settings', SuperAdminController.updateSystemSettings);

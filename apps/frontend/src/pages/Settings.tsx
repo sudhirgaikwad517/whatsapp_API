@@ -27,7 +27,6 @@ export const Settings: React.FC = () => {
   const [displayPhoneNumber, setDisplayPhoneNumber] = useState('+1 (555) 667-7453');
   const [accessToken, setAccessToken] = useState('');
   const [aiKnowledgeBase, setAiKnowledgeBase] = useState('');
-  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isAiAutoRespondEnabled, setIsAiAutoRespondEnabled] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
@@ -68,7 +67,6 @@ export const Settings: React.FC = () => {
       if (orgData.escalationTemplateId) setEscalationTemplateId(orgData.escalationTemplateId);
       if (orgData.slaReassignMinutes) setSlaReassignMinutes(String(orgData.slaReassignMinutes));
       if (orgData.aiKnowledgeBase) setAiKnowledgeBase(orgData.aiKnowledgeBase);
-      if (orgData.geminiApiKey) setGeminiApiKey(orgData.geminiApiKey);
       if (orgData.isAiAutoRespondEnabled !== undefined) setIsAiAutoRespondEnabled(orgData.isAiAutoRespondEnabled);
       if (orgData.razorpayKeyId) setRazorpayKeyId(orgData.razorpayKeyId);
     }
@@ -140,7 +138,6 @@ export const Settings: React.FC = () => {
     mutationFn: async () => {
       const res = await apiClient.patch('/organization', {
         aiKnowledgeBase,
-        geminiApiKey,
         isAiAutoRespondEnabled,
       });
       return res.data.data;

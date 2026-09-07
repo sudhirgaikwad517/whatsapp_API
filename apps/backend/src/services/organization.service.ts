@@ -67,7 +67,6 @@ export async function updateOrganization(
     timezone?: string;
     logoUrl?: string;
     aiKnowledgeBase?: string;
-    geminiApiKey?: string;
     isAiAutoRespondEnabled?: boolean;
     razorpayKeyId?: string;
     razorpayKeySecret?: string;
@@ -85,7 +84,6 @@ export async function updateOrganization(
   if (data.timezone !== undefined) updateData.timezone = data.timezone;
   if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
   if (data.aiKnowledgeBase !== undefined) updateData.aiKnowledgeBase = data.aiKnowledgeBase;
-  if (data.geminiApiKey !== undefined) updateData.geminiApiKey = data.geminiApiKey ? encryptToken(data.geminiApiKey) : null;
   if (data.isAiAutoRespondEnabled !== undefined) updateData.isAiAutoRespondEnabled = Boolean(data.isAiAutoRespondEnabled);
   if (data.razorpayKeyId !== undefined) updateData.razorpayKeyId = data.razorpayKeyId;
   if (data.razorpayKeySecret !== undefined) updateData.razorpayKeySecret = data.razorpayKeySecret ? encryptToken(data.razorpayKeySecret) : null;
