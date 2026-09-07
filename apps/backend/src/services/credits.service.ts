@@ -47,12 +47,13 @@ export async function addAiCredits(organizationId: string, creditsAmount: number
 export async function getAiCreditsBalance(organizationId: string) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { aiCreditsBalance: true, planTier: true, planExpiryDate: true },
+    select: { aiCreditsBalance: true, planTier: true, planExpiryDate: true, isSuspended: true },
   });
 
   return {
     aiCreditsBalance: org?.aiCreditsBalance ?? 0,
     planTier: org?.planTier ?? 'PRO',
     planExpiryDate: org?.planExpiryDate || null,
+    isSuspended: org?.isSuspended ?? false,
   };
 }

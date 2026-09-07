@@ -21,6 +21,7 @@ import {
   Send,
   CheckCircle2,
   Contact,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
@@ -261,6 +262,33 @@ export const SuperAdminDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
     },
   });
+
+  // Delete Organization Mutation (soft delete — irreversible from this UI)
+  const deleteOrgMutation = useMutation({
+    mutationFn: async (orgId: string) => {
+      const res = await apiClient.delete(`/superadmin/organizations/${orgId}`);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      toast.success('Organization deleted.');
+      queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
+      queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to delete organization', { description: err?.response?.data?.error?.message || err.message });
+    },
+  });
+
+  const handleDeleteOrg = async (orgId: string, orgName: string) => {
+    const ok = await confirmAction({
+      title: `Delete "${orgName}"?`,
+      message:
+        'This immediately blocks all access for every member of this organization and removes it from this list. Their billing/invoice history is retained for records, not deleted. This cannot be undone from this screen.',
+      confirmLabel: 'Delete Organization',
+    });
+    if (!ok) return;
+    deleteOrgMutation.mutate(orgId);
+  };
 
   // Update Plan Tier Mutation
   const updatePlanMutation = useMutation({
@@ -871,6 +899,15 @@ export const SuperAdminDashboard: React.FC = () => {
                             }`}
                           >
                             <Power className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteOrg(org.id, org.name)}
+                            disabled={deleteOrgMutation.isPending}
+                            title="Delete Organization"
+                            className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>

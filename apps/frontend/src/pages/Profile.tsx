@@ -300,9 +300,15 @@ export const Profile: React.FC = () => {
 
                 <div>
                   <span className="text-slate-400 uppercase font-semibold block text-[10px]">Subscription Tier</span>
-                  <span className="inline-block bg-purple-500/10 text-purple-400 border border-purple-500/30 px-3 py-1 rounded-full font-bold uppercase mt-1">
-                    {orgData?.planTier || 'PRO TIER'}
-                  </span>
+                  {!orgData?.planExpiryDate || new Date(orgData.planExpiryDate) < new Date() ? (
+                    <span className="inline-block bg-rose-500/10 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-full font-bold uppercase mt-1">
+                      No Active Plan
+                    </span>
+                  ) : (
+                    <span className="inline-block bg-purple-500/10 text-purple-400 border border-purple-500/30 px-3 py-1 rounded-full font-bold uppercase mt-1">
+                      {orgData?.planTier || 'PRO'} TIER
+                    </span>
+                  )}
                 </div>
 
                 <div>

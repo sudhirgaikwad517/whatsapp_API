@@ -70,6 +70,13 @@ router.get('/organizations/:id/financials', SuperAdminController.getOrgFinancial
 router.post('/impersonate', SuperAdminController.impersonateOrganization);
 
 /**
+ * @route   DELETE /api/v1/superadmin/organizations/:id
+ * @desc    Soft-delete an organization (sets deletedAt + isSuspended; the
+ *          org's financial/audit records are never hard-deleted).
+ */
+router.delete('/organizations/:id', SuperAdminController.deleteOrganization);
+
+/**
  * @route   POST /api/v1/superadmin/suspension
  * @desc    Toggle organization suspension state
  */

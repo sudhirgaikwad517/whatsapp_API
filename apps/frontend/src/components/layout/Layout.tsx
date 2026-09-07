@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 export const Layout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPlanPopupDismissed, setIsPlanPopupDismissed] = useState(false);
+  const [isSuspendedPopupDismissed, setIsSuspendedPopupDismissed] = useState(false);
   const [isContactFormOpen, setIsContactFormOpen] = useState(false);
   const [supportConcern, setSupportConcern] = useState('');
   const [ticketSubmitted, setTicketSubmitted] = useState(false);
@@ -27,17 +28,23 @@ export const Layout: React.FC = () => {
   // Wait for the query to actually settle before deciding to show anything —
   // otherwise every user sees a flash of "plan expired" on first load, since
   // creditsData is undefined (and !undefined?.x is true) until it resolves.
+  const isOrgSuspended = creditsData?.isSuspended === true;
   const isPlanExpired =
-    creditsData !== undefined && (!creditsData?.planExpiryDate || new Date(creditsData.planExpiryDate) < new Date());
+    creditsData !== undefined &&
+    !isOrgSuspended &&
+    (!creditsData?.planExpiryDate || new Date(creditsData.planExpiryDate) < new Date());
   const location = useLocation();
   const isRestrictedPage =
-    isPlanExpired && user?.role !== 'SUPER_ADMIN' && !['/billing', '/plans', '/profile', '/settings'].includes(location.pathname);
+    (isOrgSuspended || isPlanExpired) &&
+    user?.role !== 'SUPER_ADMIN' &&
+    !['/billing', '/plans', '/profile', '/settings'].includes(location.pathname);
+  const showSuspendedPopup = isOrgSuspended && user?.role !== 'SUPER_ADMIN' && !isSuspendedPopupDismissed;
   const showPlanPopup = isPlanExpired && user?.role !== 'SUPER_ADMIN' && !isPlanPopupDismissed;
 
   const raiseSupportTicketMutation = useMutation({
     mutationFn: async () => {
       const res = await apiClient.post('/support-tickets', {
-        subject: 'Subscription / Plan Assistance Request',
+        subject: showSuspendedPopup ? 'Organization Suspended — Support Request' : 'Subscription / Plan Assistance Request',
         priority: 'MEDIUM',
         description: supportConcern.trim(),
       });
@@ -54,7 +61,8 @@ export const Layout: React.FC = () => {
   });
 
   const closePlanPopup = () => {
-    setIsPlanPopupDismissed(true);
+    if (showSuspendedPopup) setIsSuspendedPopupDismissed(true);
+    else setIsPlanPopupDismissed(true);
     setIsContactFormOpen(false);
     setTicketSubmitted(false);
   };
@@ -114,8 +122,8 @@ export const Layout: React.FC = () => {
         </div>
       )}
 
-      {/* No Active Plan Popup */}
-      {showPlanPopup && (
+      {/* No Active Plan / Organization Suspended Popup */}
+      {(showPlanPopup || showSuspendedPopup) && (
         <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-rose-500/30 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
@@ -132,19 +140,25 @@ export const Layout: React.FC = () => {
                   <AlertTriangle className="w-7 h-7 text-rose-400" />
                 </div>
                 <div className="space-y-1.5">
-                  <h3 className="text-lg font-bold text-white">No Active Plan</h3>
+                  <h3 className="text-lg font-bold text-white">
+                    {showSuspendedPopup ? 'Organization Suspended' : 'No Active Plan'}
+                  </h3>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Your subscription has expired or you do not have an active plan. Please upgrade to continue using all services.
+                    {showSuspendedPopup
+                      ? 'Your organization has been suspended by the Prowexa team. Access to the platform is currently blocked — please contact our support team to resolve this.'
+                      : 'Your subscription has expired or you do not have an active plan. Please upgrade to continue using all services.'}
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                  <Link
-                    to="/plans"
-                    onClick={closePlanPopup}
-                    className="flex-1 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
-                  >
-                    Manage Plans ➔
-                  </Link>
+                  {!showSuspendedPopup && (
+                    <Link
+                      to="/plans"
+                      onClick={closePlanPopup}
+                      className="flex-1 bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      Manage Plans ➔
+                    </Link>
+                  )}
                   <button
                     onClick={() => setIsContactFormOpen(true)}
                     className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer border border-slate-700 flex items-center justify-center gap-1.5"

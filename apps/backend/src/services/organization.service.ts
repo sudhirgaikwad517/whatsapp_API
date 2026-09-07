@@ -23,6 +23,7 @@ export async function getOrganization(organizationId: string) {
         isAiAutoRespondEnabled: true,
         isSuspended: true,
         planTier: true,
+        planExpiryDate: true,
         createdAt: true,
         billingAddress: true,
         billingGstin: true,
@@ -49,6 +50,7 @@ export async function getOrganization(organizationId: string) {
         geminiApiKey: true,
         isSuspended: true,
         planTier: true,
+        planExpiryDate: true,
         createdAt: true,
       },
     });

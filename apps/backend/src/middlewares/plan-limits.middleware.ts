@@ -36,8 +36,19 @@ export const PLAN_LIMITS_MAP: Record<string, PlanLimits> = {
 export async function checkPlanNotExpired(organizationId: string): Promise<void> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { planExpiryDate: true },
+    select: { planExpiryDate: true, isSuspended: true },
   });
+
+  // A suspended org is blocked outright, regardless of plan status — checked
+  // here (rather than a separate call site) so every existing caller of
+  // checkPlanNotExpired picks this up for free.
+  if (org?.isSuspended) {
+    throw new AppError(
+      'Your organization has been suspended. Please contact support for assistance.',
+      403,
+      'ORG_SUSPENDED'
+    );
+  }
 
   if (org?.planExpiryDate && org.planExpiryDate < new Date()) {
     throw new AppError(

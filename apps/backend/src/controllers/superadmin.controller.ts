@@ -136,6 +136,16 @@ export async function toggleSuspension(req: Request, res: Response, next: NextFu
   }
 }
 
+export async function deleteOrganization(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const data = await SuperAdminService.deleteOrganization(id);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function updatePlanTier(req: Request, res: Response, next: NextFunction) {
   try {
     const { organizationId, planTier } = req.body;

@@ -501,6 +501,41 @@ export async function toggleOrganizationSuspension(organizationId: string, isSus
   return updated;
 }
 
+// Soft delete only — Organization carries onDelete: Restrict relations
+// (SuperAdminAuditLog, AuditLog, WalletLedger, Invoice) specifically so a
+// hard delete can never silently take the financial/audit trail with it.
+// Setting isSuspended alongside deletedAt reuses the exact same
+// tenantContext enforcement path a manual suspension already goes through,
+// so a deleted org's members are cut off from the API immediately, not just
+// hidden from future SuperAdmin listings.
+export async function deleteOrganization(organizationId: string) {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId, deletedAt: null },
+    select: { id: true, name: true },
+  });
+
+  if (!org) {
+    throw new AppError('Organization not found or already deleted.', 404, 'ORGANIZATION_NOT_FOUND');
+  }
+
+  const updated = await prisma.organization.update({
+    where: { id: organizationId },
+    data: { deletedAt: new Date(), isSuspended: true },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      targetOrganizationId: organizationId,
+      action: 'DELETE_ORGANIZATION',
+      resource: 'Organization',
+      details: { name: org.name },
+      ipAddress: '127.0.0.1',
+    },
+  });
+
+  return updated;
+}
+
 export async function updateOrganizationPlanTier(organizationId: string, planTier: PlanTier) {
   const updated = await prisma.organization.update({
     where: { id: organizationId },
