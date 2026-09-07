@@ -42,6 +42,7 @@ export const webhookWorker = new Worker(
       // ── Process Inbound Messages ───────────────────────────────────────────
       if (value.messages && value.messages.length > 0) {
         for (const msg of value.messages) {
+         try {
           // Deduplication check using Redis atomic SETNX
           const dedupKey = `dedup:wamid:${msg.id}`;
           const isNew = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
@@ -423,12 +424,20 @@ export const webhookWorker = new Worker(
           } catch (timelineErr) {
             logger.warn({ timelineErr }, 'Failed to record inbound timeline event');
           }
+         } catch (msgErr) {
+           // One malformed/edge-case inbound message should never fail the
+           // whole batch job — a job-level throw here would retry (and
+           // re-delay) every other message in this webhook payload too,
+           // including ones that already processed fine on a prior attempt.
+           logger.error({ wamid: msg?.id, msgErr }, 'Failed to process one inbound message — skipping it, continuing with the rest of the batch.');
+         }
         }
       }
 
       // ── Process Delivery Status Updates ───────────────────────────────────
       if (value.statuses && value.statuses.length > 0) {
         for (const status of value.statuses) {
+         try {
           logger.info({ statusId: status.id, status: status.status, recipient: status.recipient_id }, 'Processing Meta Status Update Webhook');
 
           const dedupKey = `dedup:status:${status.id}:${status.status}`;
@@ -580,6 +589,9 @@ export const webhookWorker = new Worker(
           });
 
           logger.debug({ wamid: status.id, status: status.status }, 'Message status updated.');
+         } catch (statusErr) {
+           logger.error({ wamid: status?.id, statusErr }, 'Failed to process one status update — skipping it, continuing with the rest of the batch.');
+         }
         }
       }
     }

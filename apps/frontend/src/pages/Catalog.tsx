@@ -64,6 +64,9 @@ export const Catalog: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
       toast.success('Product deleted from catalog.');
     },
+    onError: (err: any) => {
+      toast.error('Failed to delete product', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   const openCreateModal = () => {

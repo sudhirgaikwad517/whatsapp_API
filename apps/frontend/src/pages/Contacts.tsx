@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, Search, UserPlus, Upload, Tag, Trash2, CheckCircle2, XCircle, History } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { AddContactModal } from '../components/contacts/AddContactModal';
 import { ImportCsvModal } from '../components/contacts/ImportCsvModal';
@@ -27,7 +28,7 @@ export const Contacts: React.FC = () => {
   });
 
   // Fetch contacts (50 per page)
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['contacts', search, selectedTag, page],
     queryFn: async () => {
       const params: any = { page, limit: 50 };
@@ -47,6 +48,9 @@ export const Contacts: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
     },
+    onError: (err: any) => {
+      toast.error('Failed to update opt-in status', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   // Delete contact mutation
@@ -57,6 +61,9 @@ export const Contacts: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to delete contact', { description: err.response?.data?.error?.message || err.message });
     },
   });
 
@@ -127,6 +134,16 @@ export const Contacts: React.FC = () => {
       {/* Table */}
       {isLoading ? (
         <div className="text-center py-12 text-slate-500">Loading contacts database...</div>
+      ) : isError ? (
+        <div className="text-center py-12 text-rose-400 space-y-3">
+          <p>Failed to load contacts.</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-x-auto shadow-xl">
           <table className="w-full text-left border-collapse">

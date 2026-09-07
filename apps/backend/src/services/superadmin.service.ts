@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { Prisma, PlanTier, SupportTicketStatus } from '@prisma/client';
+import { PlanTier, SupportTicketStatus, ConversationCategory } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
-import { getTemplateSentCounts } from './usage-metrics.service.js';
+import { getTemplateSentCounts, getPricingRates } from './usage-metrics.service.js';
 import { encryptToken } from '../utils/encryption.js';
 import { sendMail, buildPasswordResetEmail } from '../utils/mailer.js';
 
@@ -180,6 +180,10 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   });
   const actualPaidRecharges = Number(paidRechargesSum._sum?.amount || 0);
 
+  // Reads from the SuperAdmin's Pricing Rules & Markups tab (falls back to
+  // the historical India rate card for any category not yet configured).
+  const rates = await getPricingRates(prisma);
+
   // Fetch real-time Meta Graph API analytics & actual delivered charges.
   // metaDelivered* start out DB-derived (only what Prowexa itself sent) so
   // there's always a number even if the live call below fails entirely —
@@ -201,15 +205,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
       where: { status: 'CONNECTED', deletedAt: null },
     });
 
-    const [campaignRecipients, inboundCount] = await Promise.all([
-      prisma.campaignRecipient.count({
-        where: {
-          status: { not: 'FAILED' },
-          ...(startDate ? { createdAt: { gte: startDate } } : {}),
-        },
-      }),
-      prisma.message.count({ where: { direction: 'INBOUND', ...dateFilter } }),
-    ]);
+    const inboundCount = await prisma.message.count({ where: { direction: 'INBOUND', ...dateFilter } });
 
     const { marketingSent, utilitySent: finalUtilityCount } = await getTemplateSentCounts(prisma, { startDate });
 
@@ -282,13 +278,12 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
 
     metaAnalytics.actualMetaCostInINR = gotLiveData
       ? Number(liveCostSum.toFixed(2))
-      : Number((metaAnalytics.metaDeliveredMarketing * 0.86309 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
+      : Number((metaAnalytics.metaDeliveredMarketing * rates.marketingMetaCost + metaAnalytics.metaDeliveredUtility * rates.utilityMetaCost).toFixed(2));
   } catch {
     // Graceful fallback
   }
 
-  // Calculate actual Gross Client Revenue from delivered messages (Marketing @ ₹1.00, Utility @ ₹0.20)
-  const clientBilledCalculated = Number((metaAnalytics.metaDeliveredMarketing * 1.00 + metaAnalytics.metaDeliveredUtility * 0.20).toFixed(2));
+  const clientBilledCalculated = Number((metaAnalytics.metaDeliveredMarketing * rates.marketingClientPrice + metaAnalytics.metaDeliveredUtility * rates.utilityClientPrice).toFixed(2));
   const totalBilledUsage = Math.max(billedUsageSum, clientBilledCalculated);
   
   const planRevenue = Number(planInvoicesSum._sum.grandTotal || 0);
@@ -305,7 +300,7 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   // Exact Meta Payable Liability & Real Net Platform Profit Margin
   const metaPayable = metaAnalytics.actualMetaCostInINR > 0
     ? metaAnalytics.actualMetaCostInINR
-    : Number((metaAnalytics.metaDeliveredMarketing * 0.86309 + metaAnalytics.metaDeliveredUtility * 0.1150).toFixed(2));
+    : Number((metaAnalytics.metaDeliveredMarketing * rates.marketingMetaCost + metaAnalytics.metaDeliveredUtility * rates.utilityMetaCost).toFixed(2));
 
   const platformProfit = Number((grossRevenue - metaPayable).toFixed(2));
 
@@ -386,23 +381,19 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
     }),
   ]);
 
+  // Fetched once for the whole page, not per-org — this is a platform-wide
+  // rate, and the org list can return up to `limit` rows.
+  const rates = await getPricingRates(prisma);
+
   const orgsWithFinancials = await Promise.all(
     organizations.map(async (org) => {
-      const waAccount = org.whatsappAccounts?.[0];
-
-      // Query actual ledger debits & recipient statuses strictly per-organization without leakage
-      const [ledgerDebitsSum, campaignRecipients, latestPlanInvoice] = await Promise.all([
+      // Query actual ledger debits strictly per-organization without leakage
+      const [ledgerDebitsSum, latestPlanInvoice] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
             organizationId: org.id,
             transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] },
-          },
-        }),
-        prisma.campaignRecipient.count({
-          where: {
-            campaign: { organizationId: org.id },
-            status: { not: 'FAILED' },
           },
         }),
         // The current plan's start date isn't stored on Organization directly —
@@ -417,44 +408,17 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
 
       const { marketingSent, utilitySent } = await getTemplateSentCounts(prisma, { organizationId: org.id });
 
-      // Meta official India Rate Card: Marketing ₹0.86309, Utility ₹0.1150
-      let metaCost = Number((marketingSent * 0.86309 + utilitySent * 0.1150).toFixed(2));
-      
+      // DB-derived estimate only — this list can return up to `limit` rows,
+      // so a live per-row Meta Graph API call here (as this used to do)
+      // meant up to `limit` outbound HTTP requests on every single page
+      // load. Live Meta data for one specific org is available on demand via
+      // "View Meta Breakdown" (getOrganizationFinancialDetails) instead.
+      const metaCost = Number((marketingSent * rates.marketingMetaCost + utilitySent * rates.utilityMetaCost).toFixed(2));
+
       // Client Billed: Use actual WalletLedger debit sum if available, else calculate at Prowexa Rates
-      const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+      const calculatedCharges = Number((marketingSent * rates.marketingClientPrice + utilitySent * rates.utilityClientPrice).toFixed(2));
       const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
       const clientBilled = Math.max(ledgerDebits, calculatedCharges);
-
-      // Attempt live Meta Graph API telemetry fetch for this organization WABA
-      if (waAccount && waAccount.wabaId) {
-        try {
-          const { decryptToken } = await import('../utils/encryption.js');
-          const axios = (await import('axios')).default;
-          const fullAcc = await prisma.whatsappAccount.findUnique({ where: { id: waAccount.id } });
-          if (fullAcc?.encryptedAccessToken) {
-            const token = env.META_SYSTEM_USER_TOKEN || decryptToken(fullAcc.encryptedAccessToken);
-            const startTime = Math.floor((Date.now() - 30 * 86400 * 1000) / 1000);
-            const endTime = Math.floor(Date.now() / 1000);
-            const res = await axios.get(
-              `https://graph.facebook.com/v20.0/${waAccount.wabaId}?fields=analytics.start(${startTime}).end(${endTime}).granularity(DAILY)&access_token=${token}`,
-              { timeout: 4000 }
-            );
-            if (res.data?.analytics?.data) {
-              let apiMetaCostSum = 0;
-              res.data.analytics.data.forEach((item: any) => {
-                item.data_points?.forEach((dp: any) => {
-                  apiMetaCostSum += Number(dp.cost || 0);
-                });
-              });
-              if (apiMetaCostSum > 0) {
-                metaCost = Number(apiMetaCostSum.toFixed(2));
-              }
-            }
-          }
-        } catch {
-          // Gracefully keep official rate card calculation
-        }
-      }
 
       const markupProfit = Number(Math.max(0, clientBilled - metaCost).toFixed(2));
 
@@ -483,11 +447,16 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
   return { organizations: orgsWithFinancials, total, page, limit };
 }
 
-export async function impersonateTenant(organizationId: string, actorAdminId?: string, reason?: string) {
+export async function impersonateTenant(organizationId: string, actorAdminId?: string, reason?: string, ipAddress?: string) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId, deletedAt: null },
     include: {
+      // Filtered to the actual owner — without this, an arbitrary member row
+      // (e.g. a MANAGER or AGENT) could be picked as "the owner" while the
+      // issued impersonation token always hardcoded role: 'BUSINESS_OWNER'
+      // regardless of who was actually fetched.
       users: {
+        where: { role: 'BUSINESS_OWNER' },
         take: 1,
         include: { user: true },
       },
@@ -500,7 +469,7 @@ export async function impersonateTenant(organizationId: string, actorAdminId?: s
 
   const primaryOwner = org.users[0]?.user;
   if (!primaryOwner) {
-    throw new AppError('No active user owner found in target organization.', 400, 'NO_OWNER');
+    throw new AppError('No active business owner found in target organization.', 400, 'NO_OWNER');
   }
 
   // Audit Log Entry
@@ -511,7 +480,7 @@ export async function impersonateTenant(organizationId: string, actorAdminId?: s
       action: 'IMPERSONATE_TENANT',
       resource: 'Organization',
       details: { reason: reason || 'Super Admin Support Troubleshooting' },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
@@ -536,7 +505,21 @@ export async function impersonateTenant(organizationId: string, actorAdminId?: s
   };
 }
 
-export async function toggleOrganizationSuspension(organizationId: string, isSuspended: boolean) {
+async function assertOrganizationExists(organizationId: string): Promise<void> {
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  if (!org) {
+    throw new AppError('Organization not found.', 404, 'ORGANIZATION_NOT_FOUND');
+  }
+}
+
+export async function toggleOrganizationSuspension(
+  organizationId: string,
+  isSuspended: boolean,
+  actorAdminId?: string,
+  ipAddress?: string
+) {
+  await assertOrganizationExists(organizationId);
+
   const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: { isSuspended },
@@ -544,11 +527,12 @@ export async function toggleOrganizationSuspension(organizationId: string, isSus
 
   await prisma.superAdminAuditLog.create({
     data: {
+      actorAdminId,
       targetOrganizationId: organizationId,
       action: isSuspended ? 'SUSPEND_ORGANIZATION' : 'ACTIVATE_ORGANIZATION',
       resource: 'Organization',
       details: { isSuspended },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
@@ -562,7 +546,7 @@ export async function toggleOrganizationSuspension(organizationId: string, isSus
 // tenantContext enforcement path a manual suspension already goes through,
 // so a deleted org's members are cut off from the API immediately, not just
 // hidden from future SuperAdmin listings.
-export async function deleteOrganization(organizationId: string) {
+export async function deleteOrganization(organizationId: string, actorAdminId?: string, ipAddress?: string) {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId, deletedAt: null },
     select: { id: true, name: true },
@@ -579,18 +563,26 @@ export async function deleteOrganization(organizationId: string) {
 
   await prisma.superAdminAuditLog.create({
     data: {
+      actorAdminId,
       targetOrganizationId: organizationId,
       action: 'DELETE_ORGANIZATION',
       resource: 'Organization',
       details: { name: org.name },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
   return updated;
 }
 
-export async function updateOrganizationPlanTier(organizationId: string, planTier: PlanTier) {
+export async function updateOrganizationPlanTier(
+  organizationId: string,
+  planTier: PlanTier,
+  actorAdminId?: string,
+  ipAddress?: string
+) {
+  await assertOrganizationExists(organizationId);
+
   const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: { planTier },
@@ -598,18 +590,26 @@ export async function updateOrganizationPlanTier(organizationId: string, planTie
 
   await prisma.superAdminAuditLog.create({
     data: {
+      actorAdminId,
       targetOrganizationId: organizationId,
       action: 'UPDATE_PLAN_TIER',
       resource: 'Organization',
       details: { planTier },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
   return updated;
 }
 
-export async function grantAiCreditsToOrganization(organizationId: string, creditsAmount: number) {
+export async function grantAiCreditsToOrganization(
+  organizationId: string,
+  creditsAmount: number,
+  actorAdminId?: string,
+  ipAddress?: string
+) {
+  await assertOrganizationExists(organizationId);
+
   const updated = await prisma.organization.update({
     where: { id: organizationId },
     data: {
@@ -619,50 +619,66 @@ export async function grantAiCreditsToOrganization(organizationId: string, credi
 
   await prisma.superAdminAuditLog.create({
     data: {
+      actorAdminId,
       targetOrganizationId: organizationId,
       action: 'GRANT_AI_CREDITS',
       resource: 'Organization',
       details: { creditsAmount },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
   return updated;
 }
 
-export async function creditWalletForOrganization(organizationId: string, amountNumber: number, description?: string) {
+export async function creditWalletForOrganization(
+  organizationId: string,
+  amountNumber: number,
+  description?: string,
+  actorAdminId?: string,
+  ipAddress?: string
+) {
   const { rechargeWallet } = await import('./billing-wallet.service.js');
   const referenceId = `SA_CREDIT_${Date.now()}`;
   const desc = description || 'SuperAdmin Manual Wallet Credit';
-  
+
   const wallet = await rechargeWallet(organizationId, amountNumber, referenceId, desc);
 
   await prisma.superAdminAuditLog.create({
     data: {
+      actorAdminId,
       targetOrganizationId: organizationId,
       action: 'MANUAL_WALLET_CREDIT',
       resource: 'Wallet',
       details: { amount: amountNumber, description: desc },
-      ipAddress: '127.0.0.1',
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
   return wallet;
 }
 
-export async function updatePricingRule(data: {
-  countryCode: string;
-  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE';
-  metaCost: number;
-  platformMarkup: number;
-}) {
+export async function updatePricingRule(
+  data: {
+    countryCode: string;
+    category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | 'SERVICE';
+    metaCost: number;
+    platformMarkup: number;
+  },
+  actorAdminId?: string,
+  ipAddress?: string
+) {
+  if (!Object.values(ConversationCategory).includes(data.category as ConversationCategory)) {
+    throw new AppError(`Invalid conversation category: ${data.category}`, 400, 'INVALID_CATEGORY');
+  }
+  const category = data.category as ConversationCategory;
   const totalPrice = Number((data.metaCost + data.platformMarkup).toFixed(4));
 
   const rule = await prisma.pricingRule.upsert({
     where: {
       countryCode_conversationCategory: {
         countryCode: data.countryCode,
-        conversationCategory: data.category as any,
+        conversationCategory: category,
       },
     },
     update: {
@@ -672,11 +688,21 @@ export async function updatePricingRule(data: {
     },
     create: {
       countryCode: data.countryCode,
-      conversationCategory: data.category as any,
+      conversationCategory: category,
       metaCost: data.metaCost,
       platformMarkup: data.platformMarkup,
       totalPrice,
       currency: 'INR',
+    },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      actorAdminId,
+      action: 'UPDATE_PRICING_RULE',
+      resource: 'PricingRule',
+      details: { countryCode: data.countryCode, category, metaCost: data.metaCost, platformMarkup: data.platformMarkup, totalPrice },
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 
@@ -688,7 +714,13 @@ export async function updatePricingRule(data: {
  * Resolved" with no message) — message is optional so resolving/closing a
  * ticket doesn't force typing something into it first.
  */
-export async function superAdminReplyTicket(ticketId: string, message?: string | null, status?: string) {
+export async function superAdminReplyTicket(
+  ticketId: string,
+  message?: string | null,
+  status?: string,
+  actorAdminId?: string,
+  ipAddress?: string
+) {
   const ticket = await prisma.supportTicket.findUnique({
     where: { id: ticketId },
   });
@@ -715,7 +747,7 @@ export async function superAdminReplyTicket(ticketId: string, message?: string |
       data: {
         ticketId,
         senderType: 'SUPER_ADMIN',
-        senderId: 'SYSTEM_SUPER_ADMIN',
+        senderId: actorAdminId || 'SYSTEM_SUPER_ADMIN',
         message: trimmedMessage,
       },
     });
@@ -728,6 +760,17 @@ export async function superAdminReplyTicket(ticketId: string, message?: string |
       updatedAt: new Date(),
     },
     include: { messages: { orderBy: { createdAt: 'asc' } }, organization: true },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      actorAdminId,
+      targetOrganizationId: ticket.organizationId,
+      action: trimmedMessage ? 'REPLY_SUPPORT_TICKET' : 'UPDATE_TICKET_STATUS',
+      resource: 'SupportTicket',
+      details: { ticketId, status: status || null, replied: Boolean(trimmedMessage) },
+      ipAddress: ipAddress || '127.0.0.1',
+    },
   });
 
   return updatedTicket;
@@ -749,13 +792,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     throw new AppError('Organization not found', 404, 'NOT_FOUND');
   }
 
-  const [campaignRecipients, inboundCount, ledgers, invoices] = await Promise.all([
-    prisma.campaignRecipient.count({
-      where: {
-        campaign: { organizationId: org.id },
-        status: { not: 'FAILED' },
-      },
-    }),
+  const [inboundCount, ledgers, invoices] = await Promise.all([
     prisma.message.count({
       where: { organizationId: org.id, direction: 'INBOUND' },
     }),
@@ -772,12 +809,13 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
   ]);
 
   const { marketingSent, utilitySent } = await getTemplateSentCounts(prisma, { organizationId: org.id });
-  const marketingMetaCost = Number((marketingSent * 0.86309).toFixed(2));
-  const utilityMetaCost = Number((utilitySent * 0.1150).toFixed(2));
+  const rates = await getPricingRates(prisma);
+  const marketingMetaCost = Number((marketingSent * rates.marketingMetaCost).toFixed(2));
+  const utilityMetaCost = Number((utilitySent * rates.utilityMetaCost).toFixed(2));
   const totalMetaCost = Number((marketingMetaCost + utilityMetaCost).toFixed(2));
 
-  const marketingClientBilled = Number((marketingSent * 1.00).toFixed(2));
-  const utilityClientBilled = Number((utilitySent * 0.20).toFixed(2));
+  const marketingClientBilled = Number((marketingSent * rates.marketingClientPrice).toFixed(2));
+  const utilityClientBilled = Number((utilitySent * rates.utilityClientPrice).toFixed(2));
   const totalClientBilled = Number((marketingClientBilled + utilityClientBilled).toFixed(2));
 
   const netProfit = Number((totalClientBilled - totalMetaCost).toFixed(2));
@@ -796,17 +834,17 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
     metaBreakdown: {
       marketing: {
         count: marketingSent,
-        metaRate: 0.86309,
+        metaRate: rates.marketingMetaCost,
         metaCost: marketingMetaCost,
-        clientRate: 1.00,
+        clientRate: rates.marketingClientPrice,
         clientBilled: marketingClientBilled,
         profit: Number((marketingClientBilled - marketingMetaCost).toFixed(2)),
       },
       utility: {
         count: utilitySent,
-        metaRate: 0.1150,
+        metaRate: rates.utilityMetaCost,
         metaCost: utilityMetaCost,
-        clientRate: 0.20,
+        clientRate: rates.utilityClientPrice,
         clientBilled: utilityClientBilled,
         profit: Number((utilityClientBilled - utilityMetaCost).toFixed(2)),
       },
@@ -833,7 +871,7 @@ export async function getOrganizationFinancialDetails(organizationId: string) {
 
 let masterGlobalAiKeyMemory = process.env.GEMINI_API_KEY || '';
 
-export async function saveMasterAiKey(apiKey: string) {
+export async function saveMasterAiKey(apiKey: string, actorAdminId?: string, ipAddress?: string) {
   const trimmedKey = (apiKey || '').trim();
   masterGlobalAiKeyMemory = trimmedKey;
   process.env.GEMINI_API_KEY = trimmedKey;
@@ -845,6 +883,16 @@ export async function saveMasterAiKey(apiKey: string) {
   await prisma.organization.updateMany({
     data: {
       geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null,
+    },
+  });
+
+  await prisma.superAdminAuditLog.create({
+    data: {
+      actorAdminId,
+      action: 'UPDATE_GLOBAL_AI_KEY',
+      resource: 'SystemSettings',
+      details: { keyLength: trimmedKey.length },
+      ipAddress: ipAddress || '127.0.0.1',
     },
   });
 

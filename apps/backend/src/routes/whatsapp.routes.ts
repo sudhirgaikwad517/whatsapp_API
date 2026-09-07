@@ -4,10 +4,32 @@ import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { tenantContext } from '../middlewares/tenant.middleware.js';
 import { UserRole } from '@prowexa/shared-types';
 import multer from 'multer';
+import { AppError } from '../middlewares/error-handler.middleware.js';
 
-const upload = multer({ 
+// Matches Meta's actual supported media types for WhatsApp messages/campaigns
+// (image, video, audio, document) — this buffer is forwarded straight to
+// Meta's Media API, so this is the last chance to reject an unexpected type
+// before it leaves our server.
+const ALLOWED_WHATSAPP_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp',
+  'video/mp4', 'video/3gpp',
+  'audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/ogg',
+  'application/pdf', 'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+]);
+
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 16 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_WHATSAPP_MIME_TYPES.has(file.mimetype)) {
+      return cb(new AppError(`Unsupported file type: ${file.mimetype}.`, 400, 'UNSUPPORTED_FILE_TYPE'));
+    }
+    cb(null, true);
+  },
 });
 
 const router = Router();
@@ -27,7 +49,7 @@ router.post('/embedded-signup', authorize(UserRole.BUSINESS_OWNER), WhatsAppCont
  * @desc    Onboard Meta WABA Account credentials (encrypts Access Token)
  * @access  Bearer (Business Owner only)
  */
-router.post('/connect', WhatsAppController.connectAccount);
+router.post('/connect', authorize(UserRole.BUSINESS_OWNER), WhatsAppController.connectAccount);
 
 /**
  * @route   POST /api/v1/whatsapp/media

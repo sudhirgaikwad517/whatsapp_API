@@ -42,6 +42,9 @@ export const Flows: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['flows-list'] });
     },
+    onError: (err: any) => {
+      toast.error('Failed to update flow status', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   if (activeFlowId || isCreating) {

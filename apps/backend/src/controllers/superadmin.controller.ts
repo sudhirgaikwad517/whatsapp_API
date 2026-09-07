@@ -66,7 +66,7 @@ export async function getOrganizations(req: Request, res: Response, next: NextFu
 export async function impersonateOrganization(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, reason } = req.body;
-    const data = await SuperAdminService.impersonateTenant(organizationId, req.user!.userId, reason);
+    const data = await SuperAdminService.impersonateTenant(organizationId, req.user!.userId, reason, req.ip);
 
     // Swap the active session cookie to the impersonation token, but keep the
     // super admin's own token recoverable via a separate cookie so "stop
@@ -126,59 +126,59 @@ export async function stopImpersonation(req: Request, res: Response, next: NextF
   }
 }
 
-export async function toggleSuspension(req: Request, res: Response, next: NextFunction) {
+export async function toggleSuspension(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, isSuspended } = req.body;
-    const data = await SuperAdminService.toggleOrganizationSuspension(organizationId, isSuspended);
+    const data = await SuperAdminService.toggleOrganizationSuspension(organizationId, isSuspended, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-export async function deleteOrganization(req: Request, res: Response, next: NextFunction) {
+export async function deleteOrganization(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const data = await SuperAdminService.deleteOrganization(id);
+    const data = await SuperAdminService.deleteOrganization(id, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-export async function updatePlanTier(req: Request, res: Response, next: NextFunction) {
+export async function updatePlanTier(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, planTier } = req.body;
-    const data = await SuperAdminService.updateOrganizationPlanTier(organizationId, planTier);
+    const data = await SuperAdminService.updateOrganizationPlanTier(organizationId, planTier, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-export async function grantAiCredits(req: Request, res: Response, next: NextFunction) {
+export async function grantAiCredits(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, creditsAmount } = req.body;
-    const data = await SuperAdminService.grantAiCreditsToOrganization(organizationId, Number(creditsAmount));
+    const data = await SuperAdminService.grantAiCreditsToOrganization(organizationId, Number(creditsAmount), req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-export async function manualCreditWallet(req: Request, res: Response, next: NextFunction) {
+export async function manualCreditWallet(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { organizationId, amount, description } = req.body;
-    const data = await SuperAdminService.creditWalletForOrganization(organizationId, Number(amount), description);
+    const data = await SuperAdminService.creditWalletForOrganization(organizationId, Number(amount), description, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
 
-export async function updatePricingRule(req: Request, res: Response, next: NextFunction) {
+export async function updatePricingRule(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const data = await SuperAdminService.updatePricingRule(req.body);
+    const data = await SuperAdminService.updatePricingRule(req.body, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -195,11 +195,11 @@ export async function getLeads(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function replyTicket(req: Request, res: Response, next: NextFunction) {
+export async function replyTicket(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { ticketId } = req.params;
     const { message, status } = req.body;
-    const data = await SuperAdminService.superAdminReplyTicket(ticketId, message, status);
+    const data = await SuperAdminService.superAdminReplyTicket(ticketId, message, status, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
@@ -216,10 +216,10 @@ export async function getOrgFinancials(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function saveMasterAiKey(req: Request, res: Response, next: NextFunction) {
+export async function saveMasterAiKey(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { apiKey } = req.body;
-    const data = await SuperAdminService.saveMasterAiKey(apiKey || '');
+    const data = await SuperAdminService.saveMasterAiKey(apiKey || '', req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

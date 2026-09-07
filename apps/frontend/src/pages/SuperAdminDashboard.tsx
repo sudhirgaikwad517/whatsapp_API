@@ -282,6 +282,12 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onSuccess: () => {
       toast.success('Organization deleted.');
+      // Deleting the last org on a page (other than page 1) would otherwise
+      // leave orgsPage pointing past the new last page — the list would
+      // come back empty while Previous/page-count still looked valid.
+      if (organizations.length === 1 && orgsPage > 1) {
+        setOrgsPage((p) => p - 1);
+      }
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
       queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
     },

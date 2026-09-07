@@ -31,7 +31,9 @@ export async function getMessages(req: AuthenticatedRequest, res: Response, next
   try {
     const orgId = req.user!.organizationId;
     const conversationId = req.params.id;
-    const data = await InboxService.getConversationMessages(conversationId, orgId, requesterOf(req));
+    const before = req.query.before ? new Date(req.query.before as string) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const data = await InboxService.getConversationMessages(conversationId, orgId, requesterOf(req), { before, limit });
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

@@ -151,7 +151,7 @@ export const Inbox: React.FC = () => {
   const [search, setSearch] = useState('');
 
   // Fetch active conversations list with pagination & search
-  const { data: convDataResponse, isLoading: loadingConvs } = useQuery({
+  const { data: convDataResponse, isLoading: loadingConvs, isError: convError, refetch: refetchConvs } = useQuery({
     queryKey: ['conversations', filterTab, user?.id, contactIdParam, page, search],
     queryFn: async () => {
       const params: any = { page, limit: 50 };
@@ -186,8 +186,9 @@ export const Inbox: React.FC = () => {
     }
   }, [contactIdParam, conversationIdParam, convData?.length]);
 
-  // Fetch messages for selected conversation
-  const { data: msgData, isLoading: loadingMsgs } = useQuery({
+  // Fetch messages for selected conversation — always the latest page;
+  // older history is loaded on demand into `olderMessages` below.
+  const { data: msgData, isLoading: loadingMsgs, isError: msgError, refetch: refetchMsgs } = useQuery({
     queryKey: ['messages', activeConversationId],
     queryFn: async () => {
       if (!activeConversationId) return null;
@@ -197,6 +198,42 @@ export const Inbox: React.FC = () => {
     enabled: !!activeConversationId,
     refetchInterval: 3000,
   });
+
+  // Manually-loaded older pages, prepended before whatever the live/polled
+  // query currently holds — reset whenever the active conversation changes.
+  const [olderMessages, setOlderMessages] = useState<any[]>([]);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  useEffect(() => {
+    setOlderMessages([]);
+    setHasMoreOlder(false);
+  }, [activeConversationId]);
+  useEffect(() => {
+    // Once the user has paged back manually, hasMoreOlder is owned by
+    // loadOlderMessages's own response instead — the latest-page poll's
+    // hasMore always describes "older than the live page", which is a
+    // separate question once earlier pages are already loaded here.
+    if (msgData && olderMessages.length === 0) {
+      setHasMoreOlder(Boolean(msgData.hasMore));
+    }
+  }, [msgData?.hasMore]);
+  const allMessages = [...olderMessages, ...(msgData?.messages || [])];
+  const loadOlderMessages = async () => {
+    const oldest = olderMessages[0] || msgData?.messages?.[0];
+    if (!activeConversationId || !oldest) return;
+    setLoadingOlder(true);
+    try {
+      const res = await apiClient.get(`/inbox/conversations/${activeConversationId}/messages`, {
+        params: { before: oldest.createdAt, limit: 50 },
+      });
+      setOlderMessages((prev) => [...(res.data.data.messages || []), ...prev]);
+      setHasMoreOlder(Boolean(res.data.data.hasMore));
+    } catch (err: any) {
+      toast.error('Failed to load older messages', { description: err.response?.data?.error?.message || err.message });
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   // Fetch internal notes for selected conversation
   const { data: notesData, isLoading: loadingNotes } = useQuery({
@@ -279,6 +316,9 @@ export const Inbox: React.FC = () => {
       setNoteText('');
       queryClient.invalidateQueries({ queryKey: ['notes', activeConversationId] });
     },
+    onError: (err: any) => {
+      toast.error('Failed to save note', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   // Assign agent mutation
@@ -294,6 +334,9 @@ export const Inbox: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
+    onError: (err: any) => {
+      toast.error('Failed to reassign conversation', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   // Status update mutation (e.g. Mark as RESOLVED / CLOSED)
@@ -308,6 +351,9 @@ export const Inbox: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update conversation status', { description: err.response?.data?.error?.message || err.message });
     },
   });
 
@@ -641,8 +687,30 @@ export const Inbox: React.FC = () => {
                   <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
                     {loadingMsgs ? (
                       <div className="text-center text-xs text-slate-500">Loading thread history...</div>
+                    ) : msgError ? (
+                      <div className="text-center text-xs text-rose-400 space-y-2 py-8">
+                        <p>Failed to load messages.</p>
+                        <button
+                          onClick={() => refetchMsgs()}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     ) : (
-                      msgData?.messages?.map((msg: any) => (
+                      <>
+                      {hasMoreOlder && (
+                        <div className="text-center pb-2">
+                          <button
+                            onClick={loadOlderMessages}
+                            disabled={loadingOlder}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loadingOlder ? 'Loading...' : 'Load older messages'}
+                          </button>
+                        </div>
+                      )}
+                      {allMessages.map((msg: any) => (
                         <div
                           key={msg.id}
                           className={`flex ${msg.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
@@ -693,7 +761,8 @@ export const Inbox: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                      ))
+                      ))}
+                      </>
                     )}
                   </div>
 

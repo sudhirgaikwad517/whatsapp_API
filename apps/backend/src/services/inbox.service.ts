@@ -115,7 +115,12 @@ export async function listConversations(
   return { conversations, total, page, limit };
 }
 
-export async function getConversationMessages(conversationId: string, organizationId: string, requester?: Requester) {
+export async function getConversationMessages(
+  conversationId: string,
+  organizationId: string,
+  requester?: Requester,
+  options: { before?: Date; limit?: number } = {}
+) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId },
     include: {
@@ -129,25 +134,36 @@ export async function getConversationMessages(conversationId: string, organizati
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
   if (requester) assertConversationAccess(conversation, requester);
 
-  // Reset unread count when agent opens conversation; also stamp the SLA
-  // "first opened" marker the first time the assigned agent actually views it.
-  const isFirstOpenByAssignedAgent =
-    requester?.role === 'AGENT' && conversation.assignedAgentId === requester.id && !conversation.agentOpenedAt;
+  // Only the initial (non-paginated) load counts as "opening" the
+  // conversation — a "load older messages" request shouldn't re-stamp
+  // agentOpenedAt or re-mark it read.
+  if (!options.before) {
+    const isFirstOpenByAssignedAgent =
+      requester?.role === 'AGENT' && conversation.assignedAgentId === requester.id && !conversation.agentOpenedAt;
 
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: {
-      unreadCount: 0,
-      ...(isFirstOpenByAssignedAgent ? { agentOpenedAt: new Date() } : {}),
-    },
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        unreadCount: 0,
+        ...(isFirstOpenByAssignedAgent ? { agentOpenedAt: new Date() } : {}),
+      },
+    });
+  }
+
+  // A conversation with a long-running history returned every message on
+  // every open with no limit at all — paginate to the most recent N,
+  // fetching one extra row to know whether older messages still exist
+  // without a separate count query.
+  const limit = options.limit && options.limit > 0 ? Math.min(options.limit, 200) : 50;
+  const rows = await prisma.message.findMany({
+    where: { conversationId, ...(options.before ? { createdAt: { lt: options.before } } : {}) },
+    orderBy: { createdAt: 'desc' },
+    take: limit + 1,
   });
+  const hasMore = rows.length > limit;
+  const messages = rows.slice(0, limit).reverse();
 
-  const messages = await prisma.message.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  return { conversation, messages };
+  return { conversation, messages, hasMore };
 }
 
 export async function sendOutboundTextMessage(

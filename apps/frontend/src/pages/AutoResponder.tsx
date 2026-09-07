@@ -65,6 +65,9 @@ export const AutoResponder: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['auto-responder-rules'] });
     },
+    onError: (err: any) => {
+      toast.error('Failed to delete rule', { description: err.response?.data?.error?.message || err.message });
+    },
   });
 
   // Toggle active rule mutation
@@ -74,6 +77,9 @@ export const AutoResponder: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['auto-responder-rules'] });
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update rule status', { description: err.response?.data?.error?.message || err.message });
     },
   });
 

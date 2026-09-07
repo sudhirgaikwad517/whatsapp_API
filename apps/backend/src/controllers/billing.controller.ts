@@ -4,7 +4,7 @@ import * as BillingService from '../services/billing-wallet.service.js';
 import * as PaymentWebhookService from '../services/payment-webhook.service.js';
 import { verifyAndFetchCapturedAmount } from '../services/razorpay.service.js';
 import { computePlanQuote } from '../services/plan-pricing.service.js';
-import { getTemplateSentCounts } from '../services/usage-metrics.service.js';
+import { getTemplateSentCounts, getPricingRates } from '../services/usage-metrics.service.js';
 import { createInvoiceRecord } from '../services/invoice.service.js';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
@@ -73,7 +73,8 @@ export async function getWalletDetails(req: AuthenticatedRequest, res: Response,
     ]);
 
     const { marketingSent, utilitySent } = await getTemplateSentCounts(prisma, { organizationId: orgId });
-    const calculatedCharges = Number((marketingSent * 1.00 + utilitySent * 0.20).toFixed(2));
+    const rates = await getPricingRates(prisma);
+    const calculatedCharges = Number((marketingSent * rates.marketingClientPrice + utilitySent * rates.utilityClientPrice).toFixed(2));
     const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
     
     // Total Billed Charges should reflect actual usage costs

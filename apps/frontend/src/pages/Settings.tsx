@@ -527,43 +527,15 @@ export const Settings: React.FC = () => {
           </div>
 
           <button
+            disabled
+            title="This flow isn't finished yet — it would send placeholder WABA/phone IDs instead of your real account details. Contact support to connect your WhatsApp Business Account for now."
             onClick={() => {
-              if (!window.FB) {
-                toast.error('Facebook SDK is still loading — please try again in a few seconds.');
-                return;
-              }
-
-              // Trigger Meta Embedded Signup Flow
-              window.FB.login(
-                function (response: any) {
-                  if (response.authResponse) {
-                    const { accessToken } = response.authResponse;
-                    
-                    // In a production Embedded Signup, Facebook returns a 'code' and 'setup' object.
-                    // For standard FB login, we just get the access token. 
-                    // You will need to fetch WABA ID and Phone ID via Graph API or pass them manually.
-                    
-                    embeddedSignupMutation.mutate({
-                      accessToken,
-                      // These placeholders would be dynamically fetched via Graph API
-                      wabaId: 'YOUR_WABA_ID',
-                      phoneNumberId: 'YOUR_PHONE_ID',
-                      displayPhoneNumber: 'YOUR_DISPLAY_PHONE',
-                    });
-                  } else {
-                    toast.error('Facebook login was cancelled or failed.');
-                  }
-                },
-                {
-                  scope: 'whatsapp_business_management,whatsapp_business_messaging',
-                  return_scopes: true
-                }
-              );
+              toast.error("This flow isn't finished yet — please contact support to connect your WhatsApp Business Account.");
             }}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-3 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 text-sm transition-all cursor-pointer whitespace-nowrap shrink-0"
+            className="w-full sm:w-auto bg-blue-600/40 text-white/60 font-bold px-5 py-3 rounded-xl flex items-center justify-center shadow-none text-sm whitespace-nowrap shrink-0 cursor-not-allowed"
           >
-            <span className="w-5 h-5 rounded bg-white text-blue-600 flex items-center justify-center font-extrabold text-xs mr-2">f</span>
-            Connect with Facebook
+            <span className="w-5 h-5 rounded bg-white/60 text-blue-600 flex items-center justify-center font-extrabold text-xs mr-2">f</span>
+            Connect with Facebook (Coming Soon)
           </button>
         </div>
       </div>

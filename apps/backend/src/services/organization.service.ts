@@ -182,6 +182,9 @@ export async function updateMember(
   if (targetUserId === requestingUserId && data.isActive === false) {
     throw new AppError('You cannot deactivate your own access.', 400, 'CANNOT_DEACTIVATE_SELF');
   }
+  if (data.role !== undefined && data.role !== 'MANAGER' && data.role !== 'AGENT') {
+    throw new AppError('Invalid role. Must be MANAGER or AGENT.', 400, 'INVALID_MEMBER_ROLE');
+  }
 
   const member = await prisma.organizationMember.findFirst({
     where: { organizationId, userId: targetUserId },
@@ -281,6 +284,14 @@ export async function inviteMember(
     allowedPages?: string[];
   }
 ) {
+  // The TS param type only constrains this at compile time — req.body is
+  // untyped at runtime, so without this check a Manager (who is allowed to
+  // call this endpoint) could POST role: 'BUSINESS_OWNER' and mint a
+  // co-owner of the tenant.
+  if (input.role !== 'MANAGER' && input.role !== 'AGENT') {
+    throw new AppError('Invalid role for an invited member. Must be MANAGER or AGENT.', 400, 'INVALID_MEMBER_ROLE');
+  }
+
   const email = input.email.trim().toLowerCase();
   const isNewUser = !(await prisma.user.findUnique({ where: { email } }));
   let user = await prisma.user.findUnique({ where: { email } });

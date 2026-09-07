@@ -1,10 +1,50 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 
-type QueryableClient = PrismaClient | Prisma.TransactionClient;
+export type QueryableClient = PrismaClient | Prisma.TransactionClient;
 
 export interface TemplateSentCounts {
   marketingSent: number;
   utilitySent: number;
+}
+
+export interface PricingRates {
+  marketingMetaCost: number;
+  marketingClientPrice: number;
+  utilityMetaCost: number;
+  utilityClientPrice: number;
+}
+
+// Used only when the SuperAdmin hasn't set a PricingRule for this category/
+// country yet — the same India rate-card figures this codebase always used
+// before the Pricing Rules tab existed.
+const DEFAULT_PRICING_RATES: PricingRates = {
+  marketingMetaCost: 0.86309,
+  marketingClientPrice: 1.0,
+  utilityMetaCost: 0.115,
+  utilityClientPrice: 0.2,
+};
+
+/**
+ * The single source of truth for "what do we charge, and what does Meta
+ * charge us" — read from the PricingRule table the SuperAdmin's Pricing
+ * Rules & Markups tab writes to, falling back to the historical hardcoded
+ * India rate card for any category that hasn't been explicitly configured
+ * yet. Every place in the codebase that computes billing/cost figures
+ * (wallet reconciliation, superadmin telemetry, per-org financials) should
+ * call this instead of hardcoding rate constants directly, so a rate change
+ * saved in the Pricing Rules tab actually takes effect everywhere.
+ */
+export async function getPricingRates(client: QueryableClient, countryCode: string = 'IN'): Promise<PricingRates> {
+  const rules = await client.pricingRule.findMany({ where: { countryCode } });
+  const marketing = rules.find((r) => r.conversationCategory === 'MARKETING');
+  const utility = rules.find((r) => r.conversationCategory === 'UTILITY');
+
+  return {
+    marketingMetaCost: marketing ? Number(marketing.metaCost) : DEFAULT_PRICING_RATES.marketingMetaCost,
+    marketingClientPrice: marketing ? Number(marketing.totalPrice) : DEFAULT_PRICING_RATES.marketingClientPrice,
+    utilityMetaCost: utility ? Number(utility.metaCost) : DEFAULT_PRICING_RATES.utilityMetaCost,
+    utilityClientPrice: utility ? Number(utility.totalPrice) : DEFAULT_PRICING_RATES.utilityClientPrice,
+  };
 }
 
 /**
