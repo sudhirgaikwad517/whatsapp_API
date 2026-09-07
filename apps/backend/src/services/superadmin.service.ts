@@ -249,13 +249,22 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
 
           const dataPoints = res.data?.conversation_analytics?.data?.flatMap((entry: any) => entry.data_points || []) || [];
           for (const dp of dataPoints) {
-            gotLiveData = true;
             liveCostSum += Number(dp.cost || 0);
             const category = String(dp.conversation_category || '').toUpperCase();
             const count = Number(dp.conversation || 0);
             if (category === 'MARKETING') liveMarketingCount += count;
             else if (category === 'UTILITY') liveUtilityCount += count;
             else if (category === 'SERVICE') liveServiceCount += count;
+          }
+          // Only trust this as real data if it actually resolved to a
+          // non-zero signal — a 200 response whose data_points don't carry
+          // conversation_category in the exact shape/values expected here
+          // (an undocumented Graph API change, a dimension Meta silently
+          // dropped, etc.) would otherwise silently zero out an otherwise-
+          // correct DB-derived fallback below, which is worse than not
+          // having "live" data at all.
+          if (liveMarketingCount > 0 || liveUtilityCount > 0 || liveServiceCount > 0 || liveCostSum > 0) {
+            gotLiveData = true;
           }
         } catch {
           // Graceful fallback to exact Meta India Rate Card for this account
