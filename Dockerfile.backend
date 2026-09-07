@@ -50,6 +50,14 @@ COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
 # throws at runtime, even though the package itself is present.
 RUN npx prisma generate --schema=apps/backend/prisma/schema.prisma
 
+# Pre-create the uploads dir so it exists in the image at build time — the
+# app only mkdir's it lazily at runtime, but docker-compose now mounts a
+# named volume here, and Docker seeds a new volume's ownership from whatever
+# already exists at that path in the image. Without this, the volume gets
+# created root-owned (nothing to copy from), and every upload fails with
+# EACCES once the process drops to the non-root `node` user below.
+RUN mkdir -p /app/uploads
+
 # Run as a non-root user rather than the image default (root).
 RUN chown -R node:node /app
 USER node
