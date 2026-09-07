@@ -143,14 +143,15 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   ry += 8;
 
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(90);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(55);
   doc.text(`Subtotal: Rs. ${Number(invoice.subtotal).toFixed(2)}`, rightX, ry, { align: 'right' });
   ry += 6;
   doc.text(`Tax (18% GST): Rs. ${Number(invoice.taxAmount).toFixed(2)}`, rightX, ry, { align: 'right' });
   ry += 6;
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(8.5);
+  doc.setTextColor(110);
   doc.text('All costs for this transaction.', rightX, ry, { align: 'right' });
 
   y = Math.max(leftColBottom, ry + 10);
@@ -172,8 +173,8 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   y += 6;
 
   doc.setFontSize(9.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(60);
   const billToWidth = pageWidth - marginX * 2;
 
   if (organization?.billingAddress) {
@@ -220,8 +221,8 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   fy += 5.5;
 
   doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(70);
   if (settings?.invoiceAddress) {
     const addrLines = doc.splitTextToSize(settings.invoiceAddress, footerColWidth);
     doc.text(addrLines, marginX, fy);
@@ -261,7 +262,7 @@ export const generateInvoicePdf = async (invoice: any, settings: any, organizati
   fy += 3;
   doc.setFontSize(8);
   doc.setFont('helvetica', 'italic');
-  doc.setTextColor(140);
+  doc.setTextColor(120);
   doc.text('This is a computer-generated invoice and does not require a physical signature.', marginX, fy);
 
   doc.save(`${invoice.invoiceNumber}.pdf`);

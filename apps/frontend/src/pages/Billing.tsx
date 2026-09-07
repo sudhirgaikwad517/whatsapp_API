@@ -29,6 +29,8 @@ export const Billing: React.FC = () => {
   // working-looking buy button that will only 403.
   const canPurchase = user?.role === 'BUSINESS_OWNER' || user?.role === 'MANAGER';
   const [rechargeAmount, setRechargeAmount] = useState('1000');
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const LEDGER_PAGE_SIZE = 10;
   const queryClient = useQueryClient();
 
   const { data: walletData } = useQuery({
@@ -487,7 +489,7 @@ export const Billing: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-800/50 text-slate-300">
               {Array.isArray(ledgerData) && ledgerData.length > 0 ? (
-                ledgerData.map((item: any) => {
+                ledgerData.slice((ledgerPage - 1) * LEDGER_PAGE_SIZE, ledgerPage * LEDGER_PAGE_SIZE).map((item: any) => {
                   const isCredit = item.transactionType?.includes('CREDIT') || item.transactionType === 'RECHARGE';
                   return (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition-all">
@@ -527,6 +529,40 @@ export const Billing: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {Array.isArray(ledgerData) && ledgerData.length > LEDGER_PAGE_SIZE && (
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-[11px] text-slate-500">
+              Showing {(ledgerPage - 1) * LEDGER_PAGE_SIZE + 1}
+              –{Math.min(ledgerPage * LEDGER_PAGE_SIZE, ledgerData.length)} of {ledgerData.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                disabled={ledgerPage === 1}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-slate-400 font-mono">
+                Page {ledgerPage} / {Math.ceil(ledgerData.length / LEDGER_PAGE_SIZE)}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setLedgerPage((p) =>
+                    Math.min(Math.ceil(ledgerData.length / LEDGER_PAGE_SIZE), p + 1)
+                  )
+                }
+                disabled={ledgerPage >= Math.ceil(ledgerData.length / LEDGER_PAGE_SIZE)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Next 10
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Tax Invoices & Billing Receipts Section ── */}

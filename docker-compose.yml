@@ -45,6 +45,8 @@ services:
     restart: always
     ports:
       - "5050:5050"
+    volumes:
+      - prowexa_uploads:/app/uploads
     deploy:
       resources:
         limits:
@@ -121,3 +123,4 @@ services:
 volumes:
   prowexa_pgdata:
   prowexa_redisdata:
+  prowexa_uploads:
