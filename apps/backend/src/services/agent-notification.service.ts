@@ -69,13 +69,34 @@ export async function notifyAgentOfEscalation(
       },
     });
 
-    const { deductDirectWalletBalance } = await import('./billing-wallet.service.js');
-    await deductDirectWalletBalance(
-      organizationId,
-      ESCALATION_WHATSAPP_COST_INR,
-      `escalation_${conversationId}_${Date.now()}`,
-      `WhatsApp notification: chat assigned (${template.name})`
-    );
+    // Utility templates are free on Meta's side when sent while the
+    // customer's 24-hour service window is already open (i.e. they messaged
+    // in recently) — this was being billed unconditionally regardless of
+    // window status, overcharging the org's wallet for a message Meta itself
+    // never charged for.
+    const recentInboundFromCustomer = await prisma.message.findFirst({
+      where: {
+        conversationId,
+        direction: 'INBOUND',
+        createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+
+    if (!recentInboundFromCustomer) {
+      const { deductDirectWalletBalance } = await import('./billing-wallet.service.js');
+      await deductDirectWalletBalance(
+        organizationId,
+        ESCALATION_WHATSAPP_COST_INR,
+        `escalation_${conversationId}_${Date.now()}`,
+        `WhatsApp notification: chat assigned (${template.name})`
+      );
+    } else {
+      logger.info(
+        { organizationId, agentUserId, conversationId },
+        'Escalation WhatsApp notification sent free — customer service window is open.'
+      );
+    }
 
     logger.info({ organizationId, agentUserId, conversationId }, 'Agent notified of chat assignment via WhatsApp.');
   } catch (err) {
