@@ -786,6 +786,7 @@ export async function saveMasterAiKey(apiKey: string) {
 
   // Mass update all existing tenant organizations that don't have custom geminiApiKey set
   await prisma.organization.updateMany({
+    where: { geminiApiKey: null },
     data: {
       geminiApiKey: trimmedKey ? encryptToken(trimmedKey) : null,
     },

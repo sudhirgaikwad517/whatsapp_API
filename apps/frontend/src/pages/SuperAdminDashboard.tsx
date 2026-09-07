@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldAlert,
@@ -221,10 +221,14 @@ export const SuperAdminDashboard: React.FC = () => {
   };
 
   // Fetch Organizations List
+  const [orgsPage, setOrgsPage] = useState(1);
+  const ORGS_PAGE_SIZE = 30;
   const { data: orgsData, isLoading } = useQuery({
-    queryKey: ['superadmin-orgs', searchTerm],
+    queryKey: ['superadmin-orgs', searchTerm, orgsPage],
     queryFn: async () => {
-      const res = await apiClient.get(`/superadmin/organizations?search=${encodeURIComponent(searchTerm)}`);
+      const res = await apiClient.get(
+        `/superadmin/organizations?search=${encodeURIComponent(searchTerm)}&page=${orgsPage}&limit=${ORGS_PAGE_SIZE}`
+      );
       return res.data.data;
     },
   });
@@ -255,11 +259,15 @@ export const SuperAdminDashboard: React.FC = () => {
         organizationId: orgId,
         isSuspended,
       });
-      return res.data.data;
+      return { ...res.data.data, isSuspended };
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
       queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
+      toast.success(data.isSuspended ? 'Organization suspended.' : 'Organization activated.');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update suspension status', { description: err?.response?.data?.error?.message || err.message });
     },
   });
 
@@ -305,6 +313,85 @@ export const SuperAdminDashboard: React.FC = () => {
     },
     onError: (err: any) => toast.error('Failed to update plan tier', { description: err.message }),
   });
+
+  // Pricing Rules & Markups — one PricingRule row per (countryCode, category),
+  // countryCode fixed to 'IN' since this panel only ever showed India rates.
+  const PRICING_COUNTRY_CODE = 'IN';
+  type PricingCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+  const [metaRates, setMetaRates] = useState<Record<PricingCategory, string>>({
+    MARKETING: '0.8631',
+    UTILITY: '0.1150',
+    AUTHENTICATION: '0.1150',
+  });
+  const [clientRates, setClientRates] = useState<Record<PricingCategory, string>>({
+    MARKETING: '1.00',
+    UTILITY: '0.20',
+    AUTHENTICATION: '0.25',
+  });
+
+  useEffect(() => {
+    if (!Array.isArray(kpiData?.pricingRules)) return;
+    const byCategory: Record<string, any> = {};
+    for (const rule of kpiData.pricingRules) {
+      if (rule.countryCode === PRICING_COUNTRY_CODE) byCategory[rule.conversationCategory] = rule;
+    }
+    setMetaRates((prev) => {
+      const next = { ...prev };
+      (['MARKETING', 'UTILITY', 'AUTHENTICATION'] as PricingCategory[]).forEach((cat) => {
+        if (byCategory[cat]) next[cat] = Number(byCategory[cat].metaCost).toFixed(4);
+      });
+      return next;
+    });
+    setClientRates((prev) => {
+      const next = { ...prev };
+      (['MARKETING', 'UTILITY', 'AUTHENTICATION'] as PricingCategory[]).forEach((cat) => {
+        if (byCategory[cat]) next[cat] = Number(byCategory[cat].totalPrice).toFixed(2);
+      });
+      return next;
+    });
+  }, [kpiData?.pricingRules]);
+
+  const savePricingRuleMutation = useMutation({
+    mutationFn: async ({ category, metaCost, platformMarkup }: { category: PricingCategory; metaCost: number; platformMarkup: number }) => {
+      const res = await apiClient.post('/superadmin/pricing-rule', {
+        countryCode: PRICING_COUNTRY_CODE,
+        category,
+        metaCost,
+        platformMarkup,
+      });
+      return res.data.data;
+    },
+  });
+
+  const saveMetaBaseRates = async () => {
+    try {
+      const categories: PricingCategory[] = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+      for (const cat of categories) {
+        const metaCost = Number(metaRates[cat]);
+        const clientPrice = Number(clientRates[cat]);
+        await savePricingRuleMutation.mutateAsync({ category: cat, metaCost, platformMarkup: clientPrice - metaCost });
+      }
+      queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
+      toast.success('Meta base rate card updated successfully!');
+    } catch (err: any) {
+      toast.error('Failed to update Meta base rates', { description: err?.response?.data?.error?.message || err.message });
+    }
+  };
+
+  const saveClientMarkupRates = async () => {
+    try {
+      const categories: PricingCategory[] = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+      for (const cat of categories) {
+        const metaCost = Number(metaRates[cat]);
+        const clientPrice = Number(clientRates[cat]);
+        await savePricingRuleMutation.mutateAsync({ category: cat, metaCost, platformMarkup: clientPrice - metaCost });
+      }
+      queryClient.invalidateQueries({ queryKey: ['superadmin-kpis'] });
+      toast.success('Prowexa client markup & profit rates saved successfully!');
+    } catch (err: any) {
+      toast.error('Failed to save client markup rates', { description: err?.response?.data?.error?.message || err.message });
+    }
+  };
 
   // Grant AI Credits Mutation
   const grantCreditsMutation = useMutation({
@@ -760,7 +847,10 @@ export const SuperAdminDashboard: React.FC = () => {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setOrgsPage(1);
+                }}
                 placeholder="Search Organization / Slug..."
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
               />
@@ -917,6 +1007,36 @@ export const SuperAdminDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {orgsData?.total > ORGS_PAGE_SIZE && (
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-500">
+                Showing {(orgsPage - 1) * ORGS_PAGE_SIZE + 1}
+                –{Math.min(orgsPage * ORGS_PAGE_SIZE, orgsData.total)} of {orgsData.total}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrgsPage((p) => Math.max(1, p - 1))}
+                  disabled={orgsPage === 1}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-slate-400 font-mono">
+                  Page {orgsPage} / {Math.ceil(orgsData.total / ORGS_PAGE_SIZE)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOrgsPage((p) => Math.min(Math.ceil(orgsData.total / ORGS_PAGE_SIZE), p + 1))}
+                  disabled={orgsPage >= Math.ceil(orgsData.total / ORGS_PAGE_SIZE)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1081,7 +1201,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.0001"
-                    defaultValue="0.8631"
+                    value={metaRates.MARKETING}
+                    onChange={(e) => setMetaRates((prev) => ({ ...prev, MARKETING: e.target.value }))}
                     id="meta-rate-marketing"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
                   />
@@ -1096,7 +1217,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.0001"
-                    defaultValue="0.1150"
+                    value={metaRates.UTILITY}
+                    onChange={(e) => setMetaRates((prev) => ({ ...prev, UTILITY: e.target.value }))}
                     id="meta-rate-utility"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                   />
@@ -1111,7 +1233,8 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.0001"
-                    defaultValue="0.1150"
+                    value={metaRates.AUTHENTICATION}
+                    onChange={(e) => setMetaRates((prev) => ({ ...prev, AUTHENTICATION: e.target.value }))}
                     id="meta-rate-auth"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
                   />
@@ -1136,10 +1259,11 @@ export const SuperAdminDashboard: React.FC = () => {
 
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => toast.success('Meta base rate card updated successfully!')}
-                className="bg-amber-500/100 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                onClick={saveMetaBaseRates}
+                disabled={savePricingRuleMutation.isPending}
+                className="bg-amber-500/100 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Meta Base Rates
+                {savePricingRuleMutation.isPending ? 'Saving...' : 'Save Meta Base Rates'}
               </button>
             </div>
           </div>
@@ -1169,12 +1293,15 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.05"
-                    defaultValue="1.00"
+                    value={clientRates.MARKETING}
+                    onChange={(e) => setClientRates((prev) => ({ ...prev, MARKETING: e.target.value }))}
                     id="client-rate-marketing"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                <p className="text-[10px] text-emerald-400/80">Platform Profit: ~₹0.1369 / msg</p>
+                <p className="text-[10px] text-emerald-400/80">
+                  Platform Profit: ~₹{(Number(clientRates.MARKETING || 0) - Number(metaRates.MARKETING || 0)).toFixed(4)} / msg
+                </p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
@@ -1184,12 +1311,15 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.05"
-                    defaultValue="0.20"
+                    value={clientRates.UTILITY}
+                    onChange={(e) => setClientRates((prev) => ({ ...prev, UTILITY: e.target.value }))}
                     id="client-rate-utility"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500"
                   />
                 </div>
-                <p className="text-[10px] text-blue-400/80">Platform Profit: ~₹0.0850 / msg</p>
+                <p className="text-[10px] text-blue-400/80">
+                  Platform Profit: ~₹{(Number(clientRates.UTILITY || 0) - Number(metaRates.UTILITY || 0)).toFixed(4)} / msg
+                </p>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
@@ -1199,36 +1329,41 @@ export const SuperAdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     step="0.05"
-                    defaultValue="0.25"
+                    value={clientRates.AUTHENTICATION}
+                    onChange={(e) => setClientRates((prev) => ({ ...prev, AUTHENTICATION: e.target.value }))}
                     id="client-rate-auth"
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500"
                   />
                 </div>
-                <p className="text-[10px] text-purple-400/80">Platform Profit: ~₹0.1350 / msg</p>
+                <p className="text-[10px] text-purple-400/80">
+                  Platform Profit: ~₹{(Number(clientRates.AUTHENTICATION || 0) - Number(metaRates.AUTHENTICATION || 0)).toFixed(4)} / msg
+                </p>
               </div>
 
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2 opacity-60">
                 <span className="font-bold text-slate-300 uppercase block">International SMS Price</span>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 font-bold">₹</span>
                   <input
                     type="number"
                     step="0.10"
+                    disabled
                     defaultValue="3.00"
                     id="client-rate-intl"
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-slate-500"
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-white font-mono text-sm cursor-not-allowed"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Global outbound SMS rates</p>
+                <p className="text-[10px] text-slate-500">Not yet connected — no SMS billing category exists yet.</p>
               </div>
             </div>
 
             <div className="flex justify-end pt-2">
               <button
-                onClick={() => toast.success('Prowexa client markup & profit rates saved successfully!')}
-                className="bg-emerald-500/100 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer"
+                onClick={saveClientMarkupRates}
+                disabled={savePricingRuleMutation.isPending}
+                className="bg-emerald-500/100 hover:bg-emerald-400 text-slate-950 font-bold px-6 py-2 rounded-xl text-xs shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Client Markup Rates
+                {savePricingRuleMutation.isPending ? 'Saving...' : 'Save Client Markup Rates'}
               </button>
             </div>
           </div>
