@@ -86,15 +86,15 @@ export const ContactTimelineModal: React.FC<ContactTimelineModalProps> = ({
                     {getEventIcon(item.type)}
                   </div>
 
-                  <div className="bg-slate-950 border border-slate-800/80 p-3.5 rounded-2xl space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white">{item.title}</span>
-                      <span className="text-[10px] text-slate-500">
+                  <div className="bg-slate-950 border border-slate-800/80 p-3.5 rounded-2xl space-y-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-white break-words min-w-0">{item.title}</span>
+                      <span className="text-[10px] text-slate-500 shrink-0 whitespace-nowrap">
                         {new Date(item.createdAt).toLocaleString()}
                       </span>
                     </div>
                     {item.description && (
-                      <p className="text-xs text-slate-400">{item.description}</p>
+                      <p className="text-xs text-slate-400 break-words">{item.description}</p>
                     )}
                   </div>
                 </div>

@@ -42,6 +42,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [batchSize, setBatchSize] = useState<number>(50);
   const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
+  const [campaignKnowledgeBase, setCampaignKnowledgeBase] = useState('');
   const [mediaCompressStats, setMediaCompressStats] = useState<string | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [error, setError] = useState('');
@@ -189,6 +190,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         batchSize,
         batchIntervalMinutes,
         variableMapping,
+        campaignKnowledgeBase: campaignKnowledgeBase.trim() || undefined,
       });
       return res.data.data;
     },
@@ -347,6 +349,23 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
               </div>
             </div>
           )}
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Campaign Knowledge Base for AI (Optional)
+            </label>
+            <textarea
+              value={campaignKnowledgeBase}
+              onChange={(e) => setCampaignKnowledgeBase(e.target.value)}
+              rows={3}
+              placeholder="e.g. This campaign is a 20% off Diwali sale on all electronics, valid till Oct 31. Coupon code: DIWALI20..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+            />
+            <p className="text-[10px] text-slate-500 mt-1">
+              When a customer replies to this campaign, the AI auto-responder uses this (along with your organization's
+              general knowledge base) to answer questions about this specific offer.
+            </p>
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">

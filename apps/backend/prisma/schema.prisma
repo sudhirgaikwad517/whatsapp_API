@@ -486,6 +486,11 @@ model Campaign {
   batchSize            Int             @default(50)
   batchIntervalMinutes Int             @default(20)
   variableMapping      Json?           @default("{}")
+  // Optional campaign-specific context for the AI auto-responder — when a
+  // customer replies to this campaign's broadcast, the AI includes this
+  // (in addition to the org's general knowledge base) so it can answer
+  // questions about this specific offer/campaign accurately.
+  campaignKnowledgeBase String?        @db.Text
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 

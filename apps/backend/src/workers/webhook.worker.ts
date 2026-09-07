@@ -273,67 +273,43 @@ export const webhookWorker = new Worker(
                 { delay: 1000 }
               );
             } else {
+              // Priority order below is deliberate: an org admin's own
+              // explicit configuration (Flow, then Keyword Auto-Responder)
+              // always wins over the generic AI — AI only ever answers when
+              // NEITHER of those matched, regardless of whether AI
+              // auto-respond happens to be turned on. Previously AI being
+              // enabled skipped the keyword-bot check entirely, silently
+              // making any configured keyword rules unreachable.
+
               // 1. Check Visual Chatbot Flow Engine
               const { evaluateInboundFlow } = await import('../services/flow.service.js');
               const matchedFlow = await evaluateInboundFlow(waAccount.organizationId, textBody);
 
-            if (matchedFlow) {
-              const nodes = (matchedFlow.definition as any)?.nodes || [];
-              const replyNode = nodes.find((n: any) => n.id !== '1' && n.data?.label);
-              let flowReplyText = replyNode ? (replyNode.data.label as string) : null;
-              if (flowReplyText) {
-                // Clean node type prefix e.g. "💬 Send Message: "
-                flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
-                await autoResponderQueue.add(
-                  'flow-reply',
-                  {
-                    type: 'flow',
-                    organizationId: waAccount.organizationId,
-                    conversationId: conversation.id,
-                    text: flowReplyText,
-                  },
-                  { delay: 1000 }
-                );
-              }
-            } else {
-              // 2. Autonomous AI Auto-Responder Engine OR Keyword Auto-Responder
-              const org = await prisma.organization.findUnique({
-                where: { id: waAccount.organizationId },
-                select: { name: true, isAiAutoRespondEnabled: true },
-              });
-
-              if (org?.isAiAutoRespondEnabled) {
-                // Autonomous AI Auto-Responder Engine (Uses Organization Knowledgebase + FAQ + Catalog).
-                // Debounce per conversation: if several inbound messages land close together
-                // (e.g. a burst of retried/delayed webhooks, or a customer sending "hi" then
-                // "hello" seconds apart), only queue ONE ai-reply job — it fires after a short
-                // delay and reads the latest message history, so it still answers the newest
-                // message. Without this, each message queued its own reply, producing several
-                // near-duplicate greetings back to back.
-                const aiDebounceKey = `ai-pending:${conversation.id}`;
-                const shouldEnqueue = await redis.set(aiDebounceKey, '1', 'EX', 8, 'NX');
-                if (shouldEnqueue) {
+              if (matchedFlow) {
+                const nodes = (matchedFlow.definition as any)?.nodes || [];
+                const replyNode = nodes.find((n: any) => n.id !== '1' && n.data?.label);
+                let flowReplyText = replyNode ? (replyNode.data.label as string) : null;
+                if (flowReplyText) {
+                  // Clean node type prefix e.g. "💬 Send Message: "
+                  flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
                   await autoResponderQueue.add(
-                    'ai-reply',
+                    'flow-reply',
                     {
-                      type: 'ai',
+                      type: 'flow',
                       organizationId: waAccount.organizationId,
                       conversationId: conversation.id,
+                      text: flowReplyText,
                     },
                     { delay: 1000 }
                   );
                 }
               } else {
-                // Keyword Auto-Responder Engine (Fallback when AI Auto-Responder is OFF)
+                // 2. Keyword Auto-Responder Engine — checked before AI now,
+                // so a configured keyword rule always takes precedence.
                 const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
-                let autoReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
+                const keywordReplyText = await findMatchingAutoReply(waAccount.organizationId, textBody);
 
-                if (!autoReplyText && /^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
-                  const orgName = org?.name || 'our business';
-                  autoReplyText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
-                }
-
-                if (autoReplyText) {
+                if (keywordReplyText) {
                   // Dispatched as a durable, delayed BullMQ job (not a detached
                   // setTimeout) so a process restart within the delay window
                   // doesn't silently drop the reply.
@@ -343,15 +319,60 @@ export const webhookWorker = new Worker(
                       type: 'flow',
                       organizationId: waAccount.organizationId,
                       conversationId: conversation.id,
-                      text: autoReplyText,
+                      text: keywordReplyText,
                     },
                     { delay: 1000 }
                   );
+                } else {
+                  // 3. Autonomous AI Auto-Responder Engine (last resort before
+                  // the generic hardcoded greeting) — uses org Knowledgebase +
+                  // FAQ + Catalog + any recent campaign's own knowledge base.
+                  const org = await prisma.organization.findUnique({
+                    where: { id: waAccount.organizationId },
+                    select: { name: true, isAiAutoRespondEnabled: true },
+                  });
+
+                  if (org?.isAiAutoRespondEnabled) {
+                    // Debounce per conversation: if several inbound messages land
+                    // close together (e.g. a burst of retried/delayed webhooks, or
+                    // a customer sending "hi" then "hello" seconds apart), only
+                    // queue ONE ai-reply job — it fires after a short delay and
+                    // reads the latest message history, so it still answers the
+                    // newest message. Without this, each message queued its own
+                    // reply, producing several near-duplicate greetings back to back.
+                    const aiDebounceKey = `ai-pending:${conversation.id}`;
+                    const shouldEnqueue = await redis.set(aiDebounceKey, '1', 'EX', 8, 'NX');
+                    if (shouldEnqueue) {
+                      await autoResponderQueue.add(
+                        'ai-reply',
+                        {
+                          type: 'ai',
+                          organizationId: waAccount.organizationId,
+                          conversationId: conversation.id,
+                        },
+                        { delay: 1000 }
+                      );
+                    }
+                  } else if (/^(hi|hello|hey|start|hi+)$/i.test(textBody)) {
+                    // 4. Nothing configured at all (no flow, no keyword rule, AI
+                    // off) — fall back to a generic greeting for a bare "hi".
+                    const orgName = org?.name || 'our business';
+                    const greetingText = `👋 Hello ${contact.firstName || 'there'}! Welcome to *${orgName}*.\n\nThank you for reaching out! Our support team has received your message and will assist you shortly.`;
+                    await autoResponderQueue.add(
+                      'keyword-reply',
+                      {
+                        type: 'flow',
+                        organizationId: waAccount.organizationId,
+                        conversationId: conversation.id,
+                        text: greetingText,
+                      },
+                      { delay: 1000 }
+                    );
+                  }
                 }
               }
             }
           }
-        }
           // Track Campaign Reply Attribution
           try {
             const recentRecipient = await prisma.campaignRecipient.findFirst({

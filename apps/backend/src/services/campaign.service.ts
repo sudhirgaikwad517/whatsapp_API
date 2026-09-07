@@ -23,6 +23,7 @@ export interface CreateCampaignInput {
   batchSize?: number;
   batchIntervalMinutes?: number;
   variableMapping?: Record<string, string>;
+  campaignKnowledgeBase?: string;
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -168,6 +169,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       batchSize,
       batchIntervalMinutes,
       variableMapping: input.variableMapping || {},
+      campaignKnowledgeBase: input.campaignKnowledgeBase?.trim() || null,
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,

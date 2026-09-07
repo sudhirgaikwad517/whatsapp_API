@@ -325,6 +325,28 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
   const knowledgeBase = (org as any)?.aiKnowledgeBase || 'We offer high quality products and 24/7 customer support across major locations.';
   const effectiveApiKey = ((org as any)?.geminiApiKey || process.env.GEMINI_API_KEY || '').trim();
 
+  // If this customer recently received a campaign broadcast, give the AI
+  // that campaign's own name + optional knowledge base as extra context —
+  // otherwise the AI has no idea what offer/campaign the customer might be
+  // replying to when they ask something like "tell me more about this".
+  let campaignContext = '';
+  if (conversation?.contactId) {
+    try {
+      const recentRecipient = await prisma.campaignRecipient.findFirst({
+        where: {
+          contactId: conversation.contactId,
+          status: { in: ['SENT', 'DELIVERED', 'READ', 'REPLIED'] as any },
+          updatedAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+        },
+        orderBy: { updatedAt: 'desc' },
+        include: { campaign: { select: { name: true, campaignKnowledgeBase: true } } },
+      });
+      if (recentRecipient?.campaign) {
+        campaignContext = `\nRecent Campaign Context (this customer recently received this WhatsApp broadcast and may be replying to it):\nCampaign: ${recentRecipient.campaign.name}${recentRecipient.campaign.campaignKnowledgeBase ? `\nCampaign-Specific Details:\n${recentRecipient.campaign.campaignKnowledgeBase}` : ''}\n`;
+      }
+    } catch (e) {}
+  }
+
   const lastInboundMsg = [...messages].reverse().find((m) => m.direction === 'INBOUND');
   const lastInboundText = typeof lastInboundMsg?.content === 'object'
     ? (lastInboundMsg?.content as any)?.text || JSON.stringify(lastInboundMsg?.content)
@@ -381,7 +403,7 @@ async function evaluateAiAutonomousReply(organizationId: string, conversationId:
 
 Business Knowledgebase & FAQs:
 ${knowledgeBase}
-
+${campaignContext}
 Relevant Product Catalog (RAG):
 ${productCatalogText}
 
