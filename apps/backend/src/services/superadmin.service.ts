@@ -124,7 +124,8 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     totalMessages,
     walletsSum,
     planInvoicesSum,
-    usageInvoicesSum,
+    aiCreditsInvoicesSum,
+    messagingInvoicesSum,
     allLedgerDebits,
     supportTickets,
     auditLogs,
@@ -144,10 +145,11 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     }),
     prisma.invoice.aggregate({
       _sum: { grandTotal: true },
-      where: { 
-        NOT: { invoiceNumber: { startsWith: 'INV-PLAN-' } }, 
-        ...dateFilter 
-      },
+      where: { invoiceNumber: { startsWith: 'INV-AI-' }, ...dateFilter },
+    }),
+    prisma.invoice.aggregate({
+      _sum: { grandTotal: true },
+      where: { invoiceNumber: { startsWith: 'INV-USG-' }, ...dateFilter },
     }),
     prisma.walletLedger.aggregate({
       _sum: { amount: true },
@@ -290,14 +292,13 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
   const totalBilledUsage = Math.max(billedUsageSum, clientBilledCalculated);
   
   const planRevenue = Number(planInvoicesSum._sum.grandTotal || 0);
-  const creditsRevenue = Number(usageInvoicesSum._sum.grandTotal || 0);
+  const aiCreditsRevenue = Number(aiCreditsInvoicesSum._sum.grandTotal || 0);
+  const messagingRevenue = Number(messagingInvoicesSum._sum.grandTotal || 0);
 
   // Gross Platform Revenue is max of (Client Paid Recharges, Total Billed Messaging Usage, Paid Invoices)
-  const totalInvoicesSum = planRevenue + creditsRevenue;
+  const totalInvoicesSum = planRevenue + aiCreditsRevenue + messagingRevenue;
   const grossRevenue = Number(Math.max(actualPaidRecharges, totalBilledUsage, totalInvoicesSum).toFixed(2));
-  
-  const planGst = Number((planRevenue * 0.18 / 1.18).toFixed(2));
-  const creditsGst = Number((creditsRevenue * 0.18 / 1.18).toFixed(2));
+
   const totalGstTax = Number((grossRevenue * 0.18 / 1.18).toFixed(2));
   const netRevenue = Number((grossRevenue - totalGstTax).toFixed(2));
 
@@ -330,7 +331,8 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
         grossRevenue,
         netRevenue,
         planRevenue,
-        creditsRevenue,
+        aiCreditsRevenue,
+        messagingRevenue,
         totalGstTax,
         totalWalletBalance,
         totalReservedBalance,
@@ -389,7 +391,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
       const waAccount = org.whatsappAccounts?.[0];
 
       // Query actual ledger debits & recipient statuses strictly per-organization without leakage
-      const [ledgerDebitsSum, campaignRecipients] = await Promise.all([
+      const [ledgerDebitsSum, campaignRecipients, latestPlanInvoice] = await Promise.all([
         prisma.walletLedger.aggregate({
           _sum: { amount: true },
           where: {
@@ -402,6 +404,14 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
             campaign: { organizationId: org.id },
             status: { not: 'FAILED' },
           },
+        }),
+        // The current plan's start date isn't stored on Organization directly —
+        // derive it from the most recent plan-purchase invoice instead of adding
+        // a new column for it.
+        prisma.invoice.findFirst({
+          where: { organizationId: org.id, invoiceNumber: { startsWith: 'INV-PLAN-' } },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
         }),
       ]);
 
@@ -458,6 +468,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
           ...org.wallet,
           availableBalance: netBalance,
         } : null,
+        planActiveSince: latestPlanInvoice?.createdAt || null,
         financialTelemetry: {
           metaCost,
           markupProfit,

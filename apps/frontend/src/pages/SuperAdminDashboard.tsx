@@ -579,8 +579,16 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="text-3xl font-extrabold text-emerald-600">
             ₹{Number(kpi?.financials?.grossRevenue || 0).toFixed(2)}
           </div>
-          <div className="text-xs text-slate-500">
-            Plans: <span className="text-emerald-500 font-bold">₹{Number(kpi?.financials?.planRevenue || 0).toFixed(2)}</span> | Credits: <span className="text-blue-500 font-bold">₹{Number(kpi?.financials?.creditsRevenue || 0).toFixed(2)}</span>
+          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2 gap-y-0.5">
+            <span>
+              Plans: <span className="text-emerald-500 font-bold">₹{Number(kpi?.financials?.planRevenue || 0).toFixed(2)}</span>
+            </span>
+            <span>
+              Messaging: <span className="text-blue-500 font-bold">₹{Number(kpi?.financials?.messagingRevenue || 0).toFixed(2)}</span>
+            </span>
+            <span>
+              AI Credits: <span className="text-purple-400 font-bold">₹{Number(kpi?.financials?.aiCreditsRevenue || 0).toFixed(2)}</span>
+            </span>
           </div>
         </div>
 
@@ -1095,7 +1103,8 @@ export const SuperAdminDashboard: React.FC = () => {
                 <thead>
                   <tr className="bg-[#0b101e] border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold">
                     <th className="py-3 px-4">Organization</th>
-                    <th className="py-3 px-4">Plan Tier</th>
+                    <th className="py-3 px-4">Plan Tier & Validity</th>
+                    <th className="py-3 px-4">AI Credits</th>
                     <th className="py-3 px-4">Wallet Balance</th>
                     <th className="py-3 px-4">Client Billed Revenue</th>
                     <th className="py-3 px-4">Meta Payable Cost</th>
@@ -1106,21 +1115,33 @@ export const SuperAdminDashboard: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-xs text-slate-300">
                   {organizations.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-6 text-slate-400">No organizations found.</td>
+                      <td colSpan={8} className="text-center py-6 text-slate-400">No organizations found.</td>
                     </tr>
                   ) : (
                     organizations.map((org: any) => {
                       const metaCost = org.financialTelemetry?.metaCost || 0;
                       const clientBilled = org.financialTelemetry?.clientBilled || 0;
                       const markupProfit = org.financialTelemetry?.markupProfit || 0;
+                      const isPlanExpired = !org.planExpiryDate || new Date(org.planExpiryDate) < new Date();
+                      const fmtDate = (d: string | null) =>
+                        d ? new Date(d).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
                       return (
                         <tr key={org.id} className="hover:bg-[#0b101e] transition-all">
                           <td className="py-3.5 px-4 font-bold text-white">
                             <div>{org.name}</div>
                             <div className="text-[10px] text-slate-400 font-normal">slug: {org.slug}</div>
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-indigo-400 uppercase">
-                            {org.planTier || 'PRO'}
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-indigo-400 uppercase">{org.planTier || 'PRO'}</div>
+                            <div className="text-[10px] font-normal text-slate-400 mt-0.5">
+                              From: {fmtDate(org.planActiveSince)}
+                            </div>
+                            <div className={`text-[10px] font-normal mt-0.5 ${isPlanExpired ? 'text-rose-400' : 'text-slate-400'}`}>
+                              {isPlanExpired ? 'No Active Plan' : `Until: ${fmtDate(org.planExpiryDate)}`}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-bold text-purple-400">
+                            {Number(org.aiCreditsBalance || 0).toLocaleString('en-IN')}
                           </td>
                           <td className="py-3.5 px-4 font-bold text-white">
                             {Number(org.wallet?.availableBalance || 0).toFixed(2)} Credits
