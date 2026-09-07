@@ -648,7 +648,7 @@ export const Inbox: React.FC = () => {
                           className={`flex ${msg.direction === 'OUTBOUND' ? 'justify-end' : 'justify-start'}`}
                         >
                           <div
-                            className={`max-w-md px-4 py-2.5 rounded-2xl text-sm shadow-md ${
+                            className={`max-w-md min-w-0 px-4 py-2.5 rounded-2xl text-sm shadow-md break-words ${
                               msg.direction === 'OUTBOUND'
                                 ? 'bg-emerald-600 text-white rounded-br-none'
                                 : 'bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700'
@@ -660,14 +660,14 @@ export const Inbox: React.FC = () => {
                             {msg.type === 'IMAGE' && msg.content?.mediaUrl ? (
                               <div className="space-y-1">
                                 <img src={msg.content.mediaUrl} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-emerald-400/30" />
-                                {msg.content.caption && <p className="text-xs mt-1">{msg.content.caption}</p>}
+                                {msg.content.caption && <p className="text-xs mt-1 break-words">{msg.content.caption}</p>}
                               </div>
                             ) : msg.type === 'DOCUMENT' && msg.content?.mediaUrl ? (
                               <a href={msg.content.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center space-x-2 text-xs underline font-mono">
                                 📎 <span>{msg.content.filename || 'Download Document'}</span>
                               </a>
                             ) : (
-                              <p className="whitespace-pre-line">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
+                              <p className="whitespace-pre-line break-words">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
                             )}
                             <div className="flex items-center justify-end space-x-1.5 mt-1 text-[10px] opacity-90">
                               <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -933,7 +933,7 @@ export const Inbox: React.FC = () => {
                             <span className="font-semibold text-emerald-400">{note.author?.fullName || 'Agent'}</span>
                             <span className="text-slate-500 text-[10px]">{new Date(note.createdAt).toLocaleString()}</span>
                           </div>
-                          <p className="text-xs text-slate-200 leading-relaxed">{note.content}</p>
+                          <p className="text-xs text-slate-200 leading-relaxed break-words">{note.content}</p>
                         </div>
                       ))
                     )}
