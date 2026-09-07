@@ -31,7 +31,6 @@ import { confirmAction } from '../components/ui/ConfirmDialog';
 export const SuperAdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'pricing' | 'tickets' | 'leads' | 'audit'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
-  const [timeRange, setTimeRange] = useState<'all' | 'today' | 'week' | 'month' | 'year'>('all');
   const [globalGeminiKey, setGlobalGeminiKey] = useState('');
   
   // Settings States
@@ -163,11 +162,15 @@ export const SuperAdminDashboard: React.FC = () => {
     enabled: !!selectedFinanceOrgId,
   });
 
-  // Fetch Executive KPI Telemetry & ERP Data
+  // Fetch Executive KPI Telemetry & ERP Data — always all-time. The
+  // Today/Week/Month/Year filters were dropped: narrower windows produced
+  // unreliable ₹0 figures (an org's actual usage falling right at a
+  // date-boundary edge case), while All Time consistently matched reality,
+  // so it's simpler and more trustworthy to just always show all-time.
   const { data: kpiData, refetch } = useQuery({
-    queryKey: ['superadmin-kpis', timeRange],
+    queryKey: ['superadmin-kpis'],
     queryFn: async () => {
-      const res = await apiClient.get(`/superadmin/dashboard/kpi?timeRange=${timeRange}`);
+      const res = await apiClient.get(`/superadmin/dashboard/kpi?timeRange=all`);
       return res.data.data.kpi;
     },
     refetchInterval: 10000,
@@ -553,28 +556,6 @@ export const SuperAdminDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Dynamic Time Range Filter Bar */}
-        <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-none">
-          {[
-            { id: 'all', label: 'All Time' },
-            { id: 'today', label: 'Today' },
-            { id: 'week', label: 'This Week' },
-            { id: 'month', label: 'This Month' },
-            { id: 'year', label: 'This Year' },
-          ].map((range) => (
-            <button
-              key={range.id}
-              onClick={() => setTimeRange(range.id as any)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                timeRange === range.id
-                  ? 'bg-indigo-500/10 text-indigo-400 font-bold border border-indigo-500/20 shadow-none'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              {range.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Real-time Telemetry KPI Cards */}
