@@ -115,8 +115,15 @@ export interface UpdateContactInput {
 }
 
 export async function updateContact(organizationId: string, contactId: string, input: UpdateContactInput) {
+  // No deletedAt filter here (unlike the other lookups in this file) —
+  // a contact can still be soft-deleted yet remain the contactId an existing
+  // Conversation/CampaignRecipient points at (e.g. one resurrected by the
+  // now-fixed inbound-message lookup bug before that fix shipped). An agent
+  // explicitly editing it is a clear signal they want it back in their CRM,
+  // so the update below restores it rather than refusing with a confusing
+  // "not found" for a contact they can see and are actively looking at.
   const contact = await prisma.contact.findFirst({
-    where: { id: contactId, organizationId, deletedAt: null },
+    where: { id: contactId, organizationId },
   });
   if (!contact) throw new AppError('Contact not found.', 404, 'CONTACT_NOT_FOUND');
 
@@ -134,6 +141,7 @@ export async function updateContact(organizationId: string, contactId: string, i
   return prisma.contact.update({
     where: { id: contactId },
     data: {
+      ...(contact.deletedAt ? { deletedAt: null } : {}),
       ...(formattedPhone !== undefined ? { phoneNumber: formattedPhone } : {}),
       ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
       ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
