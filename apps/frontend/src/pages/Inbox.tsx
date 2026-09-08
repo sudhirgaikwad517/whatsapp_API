@@ -54,6 +54,8 @@ export const Inbox: React.FC = () => {
   const [paymentDesc, setPaymentDesc] = useState('');
   const [isRequestingPayment, setIsRequestingPayment] = useState(false);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
+  const [isAttaching, setIsAttaching] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
 
   const { data: catalogProducts } = useQuery({
     queryKey: ['products-list'],
@@ -108,6 +110,47 @@ export const Inbox: React.FC = () => {
       setIsCatalogModalOpen(false);
     } catch (err: any) {
       toast.error('Failed to send product', { description: err.message });
+    }
+  };
+
+  const handleAttachFile = async (file: File) => {
+    if (!activeConversationId) return;
+    setIsAttaching(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      let mediaUrl: string;
+      let waType: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
+
+      if (file.type.startsWith('image/')) {
+        // Images go through the compression endpoint — it also normalizes
+        // to JPEG, which is what WhatsApp's outbound image type requires.
+        const res = await apiClient.post('/media/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        mediaUrl = res.data.data.url;
+        waType = 'IMAGE';
+      } else {
+        // Video/audio/documents are stored as-is (Sharp can't process them).
+        const res = await apiClient.post('/media/upload-raw', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        mediaUrl = res.data.data.url;
+        waType = file.type.startsWith('video/') ? 'VIDEO' : file.type.startsWith('audio/') ? 'AUDIO' : 'DOCUMENT';
+      }
+
+      await apiClient.post(`/inbox/conversations/${activeConversationId}/media`, {
+        type: waType,
+        mediaUrl,
+        filename: file.name,
+      });
+      if (activeConversationId) pollNewMessages(activeConversationId);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    } catch (err: any) {
+      toast.error('Failed to attach file', { description: err.response?.data?.error?.message || err.message });
+    } finally {
+      setIsAttaching(false);
     }
   };
 
@@ -1064,27 +1107,25 @@ export const Inbox: React.FC = () => {
                     </button>
 
                     {/* Attachment, Input Field, and Send Button remain visible on all screen sizes */}
+                    <input
+                      ref={attachInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/mp4,video/3gpp,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleAttachFile(file);
+                        e.target.value = '';
+                      }}
+                    />
                     <button
                       type="button"
-                      onClick={async () => {
-                        const url = prompt('Enter Image / Document URL to attach:');
-                        if (!url) return;
-                        try {
-                          await apiClient.post(`/inbox/conversations/${activeConversationId}/media`, {
-                            type: 'IMAGE',
-                            mediaUrl: url,
-                            filename: 'Attachment.jpg',
-                          });
-                          if (activeConversationId) pollNewMessages(activeConversationId);
-                          queryClient.invalidateQueries({ queryKey: ['conversations'] });
-                        } catch (err: any) {
-                          toast.error('Failed to attach media', { description: err.message });
-                        }
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs shrink-0"
-                      title="Attach Image / Document"
+                      disabled={isAttaching}
+                      onClick={() => attachInputRef.current?.click()}
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all cursor-pointer text-xs shrink-0 disabled:opacity-50"
+                      title="Attach Image / Video / Audio / Document"
                     >
-                      📎
+                      {isAttaching ? '⏳' : '📎'}
                     </button>
 
                     <input

@@ -49,3 +49,25 @@ export async function compressAndSaveImage(
     compressionRatioPercent,
   };
 }
+
+export interface RawUploadResult {
+  filename: string;
+  url: string;
+  size: number;
+}
+
+// For video/audio/document attachments — unlike compressAndSaveImage, these
+// can't be re-encoded through Sharp (it only handles raster images), so the
+// original bytes are stored as-is, just under a random filename to avoid
+// collisions.
+export async function saveRawFile(buffer: Buffer, originalName: string, baseUrl: string): Promise<RawUploadResult> {
+  const ext = (originalName.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const filename = `raw_${crypto.randomUUID()}.${ext}`;
+  const filePath = path.join(UPLOADS_DIR, filename);
+
+  await fs.promises.writeFile(filePath, buffer);
+
+  const url = `${baseUrl.replace(/\/$/, '')}/uploads/${filename}`;
+
+  return { filename, url, size: buffer.length };
+}

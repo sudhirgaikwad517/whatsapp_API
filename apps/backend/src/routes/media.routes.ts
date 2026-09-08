@@ -32,4 +32,44 @@ router.use(tenantContext);
  */
 router.post('/upload', upload.single('file'), MediaController.uploadAndCompressMedia);
 
+// Video/audio/document attachments (Inbox "attach file" flow) — these can't
+// go through the Sharp image pipeline above, so a separate, broader-mimetype
+// route stores them as-is. Allow-list matches what WhatsApp's outbound
+// video/audio/document message types actually accept.
+const RAW_ALLOWED_MIME_TYPES = new Set([
+  'video/mp4',
+  'video/3gpp',
+  'audio/aac',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/amr',
+  'audio/ogg',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+]);
+
+const uploadRaw = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 90 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!RAW_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(new AppError(`Unsupported file type: ${file.mimetype}.`, 400, 'UNSUPPORTED_FILE_TYPE'));
+    }
+    cb(null, true);
+  },
+});
+
+/**
+ * @route   POST /api/v1/media/upload-raw
+ * @desc    Upload a video/audio/document attachment as-is (no compression) for Live Inbox
+ * @access  Bearer
+ */
+router.post('/upload-raw', uploadRaw.single('file'), MediaController.uploadRawMedia);
+
 export default router;
