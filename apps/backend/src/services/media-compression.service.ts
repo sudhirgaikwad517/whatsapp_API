@@ -23,12 +23,16 @@ export async function compressAndSaveImage(
 ): Promise<CompressionResult> {
   const originalSize = buffer.length;
   const fileHash = crypto.randomUUID();
-  const filename = `compressed_${fileHash}.webp`;
+  // WhatsApp's outbound "image" message type only accepts JPEG/PNG — WebP is
+  // rejected outright. This pipeline's output is sent straight to customers
+  // as a catalog-product image, so it must produce a format Meta will
+  // actually accept, not just whatever compresses smallest.
+  const filename = `compressed_${fileHash}.jpg`;
   const filePath = path.join(UPLOADS_DIR, filename);
 
   const compressedBuffer = await sharp(buffer)
     .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80 })
+    .jpeg({ quality: 80 })
     .toBuffer();
 
   await fs.promises.writeFile(filePath, compressedBuffer);
