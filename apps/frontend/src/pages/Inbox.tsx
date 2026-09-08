@@ -23,12 +23,17 @@ import {
   ShoppingBag,
   CheckCircle,
   X,
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
 import { SendTemplateModal } from '../components/inbox/SendTemplateModal';
+import { AddContactModal } from '../components/contacts/AddContactModal';
+import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Inbox: React.FC = () => {
   const { user } = useAuthStore();
@@ -56,6 +61,8 @@ export const Inbox: React.FC = () => {
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
   const [isAttaching, setIsAttaching] = useState(false);
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isEditingContact, setIsEditingContact] = useState(false);
 
   const { data: catalogProducts } = useQuery({
     queryKey: ['products-list'],
@@ -428,6 +435,16 @@ export const Inbox: React.FC = () => {
       }
     });
 
+    // Fired after Clear Chat or a disappearing-messages sweep — reload from
+    // scratch (not merge) since messages were actually deleted, not just
+    // added/updated.
+    socket.on('conversation_cleared', (payload: { conversationId: string }) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      if (activeConvRef.current && activeConvRef.current === payload.conversationId) {
+        fetchInitialMessages(activeConvRef.current);
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -506,6 +523,41 @@ export const Inbox: React.FC = () => {
     },
     onError: (err: any) => {
       toast.error('Failed to update conversation status', { description: err.response?.data?.error?.message || err.message });
+    },
+  });
+
+  // WhatsApp-style "Clear Chat" — wipes message history for this
+  // conversation on our side (customer's own device is unaffected).
+  const clearChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeConversationId) return;
+      await apiClient.delete(`/inbox/conversations/${activeConversationId}/messages`);
+    },
+    onSuccess: () => {
+      setMessages([]);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success('Chat cleared.');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to clear chat', { description: err.response?.data?.error?.message || err.message });
+    },
+  });
+
+  const disappearingMutation = useMutation({
+    mutationFn: async (durationSeconds: number) => {
+      if (!activeConversationId) return;
+      const res = await apiClient.patch(`/inbox/conversations/${activeConversationId}/disappearing-messages`, {
+        durationSeconds,
+      });
+      return res.data.data;
+    },
+    onSuccess: (data) => {
+      if (data) setMsgConversationMeta((prev: any) => (prev ? { ...prev, disappearingMessagesSeconds: data.disappearingMessagesSeconds } : prev));
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success('Disappearing messages updated.');
+    },
+    onError: (err: any) => {
+      toast.error('Failed to update disappearing messages', { description: err.response?.data?.error?.message || err.message });
     },
   });
 
@@ -785,6 +837,79 @@ export const Inbox: React.FC = () => {
                     <span>Mark Resolved</span>
                   </button>
                 )}
+
+                <div className="relative shrink-0">
+                  <button
+                    onClick={() => setIsMoreMenuOpen((v) => !v)}
+                    className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all cursor-pointer"
+                    title="More options"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                  {isMoreMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-20" onClick={() => setIsMoreMenuOpen(false)} />
+                      <div className="absolute right-0 top-full mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-30 py-1.5">
+                        <button
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            setIsEditingContact(true);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center text-xs text-slate-200 transition-all"
+                        >
+                          <Pencil className="w-3.5 h-3.5 mr-2 text-emerald-400 shrink-0" />
+                          Edit Contact
+                        </button>
+
+                        <div className="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                          Disappearing Messages
+                        </div>
+                        {[
+                          { label: 'Off', value: 0 },
+                          { label: '24 Hours', value: 24 * 60 * 60 },
+                          { label: '7 Days', value: 7 * 24 * 60 * 60 },
+                          { label: '90 Days', value: 90 * 24 * 60 * 60 },
+                        ].map((opt) => {
+                          const isActive = (currentConversation.disappearingMessagesSeconds || 0) === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              onClick={() => {
+                                setIsMoreMenuOpen(false);
+                                disappearingMutation.mutate(opt.value);
+                              }}
+                              className={`w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between text-xs transition-all ${
+                                isActive ? 'text-emerald-400 font-semibold' : 'text-slate-200'
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+                              {isActive && <Check className="w-3.5 h-3.5" />}
+                            </button>
+                          );
+                        })}
+
+                        <div className="border-t border-slate-800 mt-1.5 pt-1.5">
+                          <button
+                            onClick={async () => {
+                              setIsMoreMenuOpen(false);
+                              const ok = await confirmAction({
+                                title: 'Clear this chat?',
+                                message: 'All messages in this conversation will be permanently deleted from your Inbox. This only clears your side — it does not affect the customer\'s own WhatsApp.',
+                                danger: true,
+                                confirmLabel: 'Clear Chat',
+                              });
+                              if (ok) clearChatMutation.mutate();
+                            }}
+                            className="w-full text-left px-3 py-2 hover:bg-rose-500/10 flex items-center text-xs text-rose-400 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-2 shrink-0" />
+                            Clear Chat
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1322,6 +1447,17 @@ export const Inbox: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {isEditingContact && currentConversation?.contact && (
+        <AddContactModal
+          isOpen={isEditingContact}
+          editContact={currentConversation.contact}
+          onClose={() => setIsEditingContact(false)}
+          onSaved={() => {
+            if (activeConversationId) refreshRecentMessageStatuses(activeConversationId);
+          }}
+        />
       )}
 
       {viewingImageUrl && (

@@ -27,6 +27,17 @@ export async function createContact(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function updateContact(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const contactId = req.params.id;
+    const data = await ContactService.updateContact(orgId, contactId, req.body);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function importContacts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

@@ -130,6 +130,31 @@ export async function sendMedia(req: AuthenticatedRequest, res: Response, next: 
   }
 }
 
+export async function clearMessages(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const conversationId = req.params.id;
+    const data = await InboxService.clearConversationMessages(orgId, conversationId, requesterOf(req));
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function setDisappearingMessages(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const conversationId = req.params.id;
+    const durationSeconds = req.body.durationSeconds === null || req.body.durationSeconds === undefined
+      ? null
+      : Number(req.body.durationSeconds);
+    const data = await InboxService.setDisappearingMessages(orgId, conversationId, durationSeconds, requesterOf(req));
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function updateStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

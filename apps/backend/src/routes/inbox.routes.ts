@@ -52,6 +52,20 @@ router.patch(
 router.patch('/conversations/:id/status', InboxController.updateStatus);
 
 /**
+ * @route   DELETE /api/v1/inbox/conversations/:id/messages
+ * @desc    Clear this chat's message history (WhatsApp-style "Clear Chat" — our side only)
+ * @access  Bearer
+ */
+router.delete('/conversations/:id/messages', InboxController.clearMessages);
+
+/**
+ * @route   PATCH /api/v1/inbox/conversations/:id/disappearing-messages
+ * @desc    Set/clear the disappearing-messages duration for this chat (0/24h/7d/90d)
+ * @access  Bearer
+ */
+router.patch('/conversations/:id/disappearing-messages', InboxController.setDisappearingMessages);
+
+/**
  * @route   GET /api/v1/inbox/conversations/:id/notes
  * @desc    Get list of internal collaboration notes for conversation
  * @access  Bearer

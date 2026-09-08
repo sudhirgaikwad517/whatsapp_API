@@ -12,6 +12,7 @@ import './workers/autoresponder.worker.js';
 import './workers/media.worker.js';
 import './workers/payment-order-poll.worker.js';
 import './workers/sla-reassignment.worker.js';
+import './workers/disappearing-messages.worker.js';
 
 const app = createApp();
 const server = http.createServer(app);

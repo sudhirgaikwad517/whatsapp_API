@@ -105,6 +105,48 @@ export async function createContact(organizationId: string, input: CreateContact
   return contact;
 }
 
+export interface UpdateContactInput {
+  phoneNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  customAttributes?: Record<string, any>;
+  tags?: string[]; // Tag IDs — full replace of the contact's tag set
+}
+
+export async function updateContact(organizationId: string, contactId: string, input: UpdateContactInput) {
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, organizationId, deletedAt: null },
+  });
+  if (!contact) throw new AppError('Contact not found.', 404, 'CONTACT_NOT_FOUND');
+
+  let formattedPhone: string | undefined;
+  if (input.phoneNumber !== undefined && input.phoneNumber.trim()) {
+    formattedPhone = cleanPhone(input.phoneNumber);
+    if (formattedPhone !== contact.phoneNumber) {
+      const clash = await prisma.contact.findUnique({
+        where: { organizationId_phoneNumber: { organizationId, phoneNumber: formattedPhone } },
+      });
+      if (clash) throw new AppError('Another contact already uses this phone number.', 409, 'CONTACT_ALREADY_EXISTS');
+    }
+  }
+
+  return prisma.contact.update({
+    where: { id: contactId },
+    data: {
+      ...(formattedPhone !== undefined ? { phoneNumber: formattedPhone } : {}),
+      ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
+      ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.customAttributes !== undefined ? { customAttributes: input.customAttributes } : {}),
+      ...(input.tags !== undefined
+        ? { tags: { deleteMany: {}, create: input.tags.map((tagId) => ({ tagId })) } }
+        : {}),
+    },
+    include: { tags: { include: { tag: true } } },
+  });
+}
+
 export async function bulkImportContacts(organizationId: string, contacts: CreateContactInput[]) {
   let createdCount = 0;
   let skippedCount = 0;

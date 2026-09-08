@@ -26,6 +26,13 @@ router.get('/', ContactController.getContacts);
 router.post('/', ContactController.createContact);
 
 /**
+ * @route   PUT /api/v1/contacts/:id
+ * @desc    Edit an existing contact's details
+ * @access  Bearer (Manager, Agent, Business Owner)
+ */
+router.put('/:id', ContactController.updateContact);
+
+/**
  * @route   POST /api/v1/contacts/import
  * @desc    Bulk import contacts array (CSV)
  * @access  Bearer (Manager, Business Owner)

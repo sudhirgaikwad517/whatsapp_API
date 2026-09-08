@@ -1,24 +1,54 @@
-import React, { useState } from 'react';
-import { X, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, Pencil } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api.client';
+
+interface EditableContact {
+  id: string;
+  phoneNumber: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}
 
 interface AddContactModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // Present => modal edits this contact instead of creating a new one.
+  editContact?: EditableContact | null;
+  onSaved?: () => void;
 }
 
-export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose }) => {
+export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, editContact, onSaved }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
 
+  const isEditing = Boolean(editContact);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setPhoneNumber(editContact?.phoneNumber || '');
+    setFirstName(editContact?.firstName || '');
+    setLastName(editContact?.lastName || '');
+    setEmail(editContact?.email || '');
+    setError('');
+  }, [isOpen, editContact]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (isEditing && editContact) {
+        const res = await apiClient.put(`/contacts/${editContact.id}`, {
+          phoneNumber,
+          firstName,
+          lastName,
+          email,
+        });
+        return res.data.data;
+      }
       const res = await apiClient.post('/contacts', {
         phoneNumber,
         firstName,
@@ -29,15 +59,17 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setPhoneNumber('');
       setFirstName('');
       setLastName('');
       setEmail('');
       setError('');
+      onSaved?.();
       onClose();
     },
     onError: (err: any) => {
-      setError(err.response?.data?.error?.message || 'Failed to create contact');
+      setError(err.response?.data?.error?.message || `Failed to ${isEditing ? 'update' : 'create'} contact`);
     },
   });
 
@@ -48,8 +80,12 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-6 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center">
-            <UserPlus className="w-5 h-5 mr-2 text-emerald-400" />
-            Add New WhatsApp Contact
+            {isEditing ? (
+              <Pencil className="w-5 h-5 mr-2 text-emerald-400" />
+            ) : (
+              <UserPlus className="w-5 h-5 mr-2 text-emerald-400" />
+            )}
+            {isEditing ? 'Edit Contact' : 'Add New WhatsApp Contact'}
           </h3>
           <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />
@@ -141,7 +177,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
               disabled={createMutation.isPending || !phoneNumber}
               className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50"
             >
-              {createMutation.isPending ? 'Saving...' : 'Save Contact'}
+              {createMutation.isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Save Contact'}
             </button>
           </div>
         </form>

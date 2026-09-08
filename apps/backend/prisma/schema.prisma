@@ -401,6 +401,10 @@ model Conversation {
   status             ConversationStatus @default(OPEN)
   firstResponseTimeMs Int?
   resolvedAt         DateTime?
+  // Seconds after which a message in this chat is auto-deleted (WhatsApp-style
+  // disappearing messages) — null/0 means off. Swept by a periodic worker,
+  // not enforced at write time.
+  disappearingMessagesSeconds Int?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 

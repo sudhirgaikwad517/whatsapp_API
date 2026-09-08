@@ -331,6 +331,71 @@ export async function updateConversationStatus(
   return updated;
 }
 
+/**
+ * WhatsApp-style "Clear Chat" — wipes the message history for this
+ * conversation from our side only (Meta/the customer's own device are
+ * unaffected, same as WhatsApp's own client-side clear). The conversation
+ * and contact stay intact; only its Message rows and the sidebar preview
+ * snippet are reset.
+ */
+export async function clearConversationMessages(organizationId: string, conversationId: string, requester?: Requester) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, organizationId },
+  });
+
+  if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
+  if (requester) assertConversationAccess(conversation, requester);
+
+  await prisma.message.deleteMany({ where: { conversationId } });
+
+  const updated = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageSnippet: null, lastMessageAt: null, unreadCount: 0 },
+  });
+
+  try {
+    const { emitToOrganization } = await import('../socket/inbox.gateway.js');
+    emitToOrganization(organizationId, 'conversation_cleared', { conversationId });
+  } catch {
+    // Ignore socket error
+  }
+
+  return updated;
+}
+
+const DISAPPEARING_DURATIONS = new Set([0, 24 * 60 * 60, 7 * 24 * 60 * 60, 90 * 24 * 60 * 60]);
+
+/**
+ * WhatsApp-style disappearing messages — sets how long (in seconds) a
+ * message in this chat lives before disappearing-messages.worker.ts's
+ * periodic sweep deletes it. 0/null turns it off. Only ever affects new
+ * messages going forward (matches WhatsApp's own client behavior of not
+ * retroactively deleting existing history when the setting changes).
+ */
+export async function setDisappearingMessages(
+  organizationId: string,
+  conversationId: string,
+  durationSeconds: number | null,
+  requester?: Requester
+) {
+  const normalized = durationSeconds || 0;
+  if (!DISAPPEARING_DURATIONS.has(normalized)) {
+    throw new AppError('Invalid disappearing-messages duration.', 400, 'INVALID_DURATION');
+  }
+
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, organizationId },
+  });
+
+  if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
+  if (requester) assertConversationAccess(conversation, requester);
+
+  return prisma.conversation.update({
+    where: { id: conversationId },
+    data: { disappearingMessagesSeconds: normalized || null },
+  });
+}
+
 export async function addInternalNote(
   organizationId: string,
   conversationId: string,

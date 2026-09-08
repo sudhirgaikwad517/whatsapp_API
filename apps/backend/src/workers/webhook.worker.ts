@@ -274,20 +274,52 @@ export const webhookWorker = new Worker(
             const textBody = extractedText.trim();
             const cleanTextLower = textBody.toLowerCase();
 
-            // 0. Autonomous Commerce Engine (Auto-Product & Auto-Payment Bot)
-            const matchedProduct = await prisma.productCatalog.findFirst({
-              where: {
-                organizationId: waAccount.organizationId,
-                isActive: true,
-                OR: [
-                  { title: { contains: cleanTextLower, mode: 'insensitive' } },
-                  { description: { contains: cleanTextLower, mode: 'insensitive' } },
-                  { sku: { equals: cleanTextLower, mode: 'insensitive' } },
-                ],
-              },
-            });
+            // -1. STOP / unsubscribe compliance keyword — takes priority over
+            // every other automation below (commerce, flow, keyword-bot, AI).
+            // A carrier/WhatsApp opt-out request must be honored reliably
+            // regardless of whatever else is configured; campaign.service.ts
+            // already excludes isOptedIn: false contacts from every broadcast
+            // send, so flipping this flag is enough to stop future marketing
+            // sends without touching anything else.
+            const isOptOutRequest = /^(stop|stop all|unsubscribe)$/i.test(cleanTextLower);
+            if (isOptOutRequest) {
+              if (contact.isOptedIn !== false) {
+                await prisma.contact.update({
+                  where: { id: contact.id },
+                  data: { isOptedIn: false, optedInAt: null },
+                });
+              }
+              await autoResponderQueue.add(
+                'keyword-reply',
+                {
+                  type: 'flow',
+                  organizationId: waAccount.organizationId,
+                  conversationId: conversation.id,
+                  text: "You've been unsubscribed and won't receive further messages from us. Contact us directly if you'd like to resubscribe.",
+                },
+                { delay: 1000 }
+              );
+            }
 
-            if (matchedProduct && cleanTextLower.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower)) {
+            // 0. Autonomous Commerce Engine (Auto-Product & Auto-Payment Bot)
+            const matchedProduct = isOptOutRequest
+              ? null
+              : await prisma.productCatalog.findFirst({
+                  where: {
+                    organizationId: waAccount.organizationId,
+                    isActive: true,
+                    OR: [
+                      { title: { contains: cleanTextLower, mode: 'insensitive' } },
+                      { description: { contains: cleanTextLower, mode: 'insensitive' } },
+                      { sku: { equals: cleanTextLower, mode: 'insensitive' } },
+                    ],
+                  },
+                });
+
+            if (isOptOutRequest) {
+              // Already handled above — no commerce/flow/keyword/AI reply for
+              // an opt-out message.
+            } else if (matchedProduct && cleanTextLower.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower)) {
               await autoResponderQueue.add(
                 'commerce-link',
                 {

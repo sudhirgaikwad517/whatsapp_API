@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, UserPlus, Upload, Tag, Trash2, CheckCircle2, XCircle, History } from 'lucide-react';
+import { Users, Search, UserPlus, Upload, Tag, Trash2, CheckCircle2, XCircle, History, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../services/api.client';
 import { AddContactModal } from '../components/contacts/AddContactModal';
@@ -15,6 +15,7 @@ export const Contacts: React.FC = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedTimelineId, setSelectedTimelineId] = useState<string | null>(null);
+  const [editingContact, setEditingContact] = useState<any>(null);
 
   const queryClient = useQueryClient();
 
@@ -215,6 +216,14 @@ export const Contacts: React.FC = () => {
                     </td>
                     <td className="py-4 px-6 text-right flex items-center justify-end space-x-2">
                       <button
+                        onClick={() => setEditingContact(c)}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center transition-all"
+                        title="Edit contact"
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+                        Edit
+                      </button>
+                      <button
                         onClick={() => setSelectedTimelineId(c.id)}
                         className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center transition-all"
                         title="View Contact Timeline"
@@ -278,6 +287,7 @@ export const Contacts: React.FC = () => {
       )}
 
       <AddContactModal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} />
+      <AddContactModal isOpen={Boolean(editingContact)} editContact={editingContact} onClose={() => setEditingContact(null)} />
       <ImportCsvModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
       <ContactTimelineModal
         isOpen={Boolean(selectedTimelineId)}

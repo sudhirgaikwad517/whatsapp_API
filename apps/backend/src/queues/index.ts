@@ -92,3 +92,17 @@ export const slaReassignQueue = new Queue('sla-reassignment', {
     attempts: 2,
   },
 });
+
+/**
+ * Disappearing Messages Queue — repeating sweep that deletes messages older
+ * than a conversation's configured disappearingMessagesSeconds (WhatsApp-
+ * style disappearing chats), mirroring the SLA-reassignment sweep pattern.
+ */
+export const disappearingMessagesQueue = new Queue('disappearing-messages', {
+  connection: createRedisConnection(),
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 200,
+    attempts: 2,
+  },
+});
