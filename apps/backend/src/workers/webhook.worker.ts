@@ -90,6 +90,25 @@ export const webhookWorker = new Worker(
             });
           }
 
+          // Extract text for all inbound message types (text, button quick
+          // reply, interactive list/button) — moved up from where the
+          // message-save logic below still uses it, because the human-
+          // assignment decision now needs to know the message text too (see
+          // botCanHandle below).
+          const rawMsg = msg as any;
+          let extractedText: string | null = null;
+          if (msg.type === 'text' && msg.text) {
+            extractedText = msg.text.body;
+          } else if (msg.type === 'button' && rawMsg.button) {
+            extractedText = rawMsg.button.text || rawMsg.button.payload;
+          } else if (msg.type === 'interactive' && rawMsg.interactive) {
+            if (rawMsg.interactive.type === 'button_reply') {
+              extractedText = rawMsg.interactive.button_reply?.title || rawMsg.interactive.button_reply?.id;
+            } else if (rawMsg.interactive.type === 'list_reply') {
+              extractedText = rawMsg.interactive.list_reply?.title || rawMsg.interactive.list_reply?.id;
+            }
+          }
+
           // Upsert conversation (24-hour window)
           const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
           // Check existing conversation & assign via Round-Robin if unassigned
@@ -109,56 +128,125 @@ export const webhookWorker = new Worker(
 
           const isAiEnabled = orgInfo?.isAiAutoRespondEnabled !== false && (orgInfo?.isAiAutoRespondEnabled === true || Boolean(orgInfo?.aiKnowledgeBase && orgInfo.aiKnowledgeBase.trim().length > 0));
 
+          // ── Can one of the org's own automations answer this message at all? ──
+          // A human is only ever round-robin-assigned below as a last resort
+          // when NOTHING configured can handle it. This used to be decided
+          // purely by "is AI on or off" — an org with AI off but a working
+          // Chatbot Flow or Keyword Auto-Responder rule still had every
+          // single message yanked straight to a human, even ones the bot
+          // was about to correctly answer on its own a moment later (see the
+          // "Automated Multi-Tenant Keyword Auto-Responder & Flow Engine"
+          // block further down, which independently re-checks the same
+          // three things to actually send the reply — duplicating these
+          // cheap, indexed lookups here is far safer than trying to thread
+          // their results across the conversation-creation boundary between
+          // the two blocks).
+          let botCanHandle = isAiEnabled;
+          if (!botCanHandle && extractedText) {
+            const textBody0 = extractedText.trim();
+            const cleanTextLower0 = textBody0.toLowerCase();
+            const isOptOutRequest0 = /^(stop|stop all|unsubscribe)$/i.test(cleanTextLower0);
+            if (isOptOutRequest0) {
+              botCanHandle = true;
+            } else {
+              const matchedProduct0 = await prisma.productCatalog.findFirst({
+                where: {
+                  organizationId: waAccount.organizationId,
+                  isActive: true,
+                  OR: [
+                    { title: { contains: cleanTextLower0, mode: 'insensitive' } },
+                    { description: { contains: cleanTextLower0, mode: 'insensitive' } },
+                    { sku: { equals: cleanTextLower0, mode: 'insensitive' } },
+                  ],
+                },
+                select: { id: true },
+              });
+              const isCommerceMatch = Boolean(matchedProduct0) && cleanTextLower0.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower0);
+              if (isCommerceMatch) {
+                botCanHandle = true;
+              } else {
+                const { evaluateInboundFlow } = await import('../services/flow.service.js');
+                const matchedFlow0 = await evaluateInboundFlow(waAccount.organizationId, textBody0);
+                if (matchedFlow0) {
+                  botCanHandle = true;
+                } else {
+                  const { findMatchingAutoReply } = await import('../services/auto-responder.service.js');
+                  const keywordReply0 = await findMatchingAutoReply(waAccount.organizationId, textBody0);
+                  botCanHandle = Boolean(keywordReply0);
+                }
+              }
+            }
+          }
+
           let assignedAgentId = existingConv?.assignedAgentId || null;
 
-          if (isAiEnabled) {
-            // When AI Auto-Responder is ON: clear assignedAgentId so AI
-            // handles the message 24/7 — UNLESS a human already has this
-            // conversation (assigned via a real AI escalation, OR simply by
-            // having replied to it themselves). Checking status === 'ESCALATED'
-            // here (rather than "is it currently assigned at all") used to
-            // wipe out a plain human claim-by-replying on the customer's very
-            // next message, since claiming a conversation doesn't set that
+          if (botCanHandle) {
+            // Clear assignedAgentId so the bot/AI handles the message —
+            // UNLESS a human already has this conversation (assigned via a
+            // real escalation, OR simply by having replied to it
+            // themselves). Checking status === 'ESCALATED' here (rather
+            // than "is it currently assigned at all") used to wipe out a
+            // plain human claim-by-replying on the customer's very next
+            // message, since claiming a conversation doesn't set that
             // status — AI would silently take the conversation right back
             // and reply over the agent.
             if (!existingConv || !existingConv.assignedAgentId) {
               assignedAgentId = null;
             }
-          } else {
-            // Only auto-assign agent on new incoming conversation if AI Auto-Responder is OFF
-            if (!existingConv || !assignedAgentId) {
-              const members = await prisma.organizationMember.findMany({
-                where: {
-                  organizationId: waAccount.organizationId,
-                  role: { in: ['BUSINESS_OWNER', 'MANAGER', 'AGENT'] },
-                },
+          } else if (!existingConv || !assignedAgentId) {
+            // Nothing configured can answer this — hand it to a human.
+            // Round-robin across Managers/Agents ONLY; the Business Owner is
+            // a last-resort fallback for a solo org with no hired staff yet
+            // (same convention ai.service.ts's real AI-escalation path
+            // already uses), not just another name in the rotation.
+            // Previously BUSINESS_OWNER was included in the regular pool —
+            // with everyone's open-chat count typically starting at 0, ties
+            // routinely settled on whichever member the DB happened to
+            // return first, almost always the owner (the org's very first
+            // member), so support agents never actually got new chats.
+            let members = await prisma.organizationMember.findMany({
+              where: {
+                organizationId: waAccount.organizationId,
+                role: { in: ['MANAGER', 'AGENT'] },
+                isActive: true,
+              },
+              select: { userId: true },
+            });
+            if (members.length === 0) {
+              members = await prisma.organizationMember.findMany({
+                where: { organizationId: waAccount.organizationId, role: 'BUSINESS_OWNER', isActive: true },
                 select: { userId: true },
               });
-              if (members.length > 0) {
-                const memberIds = members.map((m) => m.userId);
-                const groupedCounts = await prisma.conversation.groupBy({
-                  by: ['assignedAgentId'],
-                  where: {
-                    organizationId: waAccount.organizationId,
-                    assignedAgentId: { in: memberIds },
-                    status: 'OPEN',
-                  },
-                  _count: { id: true },
-                });
+            }
+            if (members.length > 0) {
+              const memberIds = members.map((m) => m.userId);
+              const groupedCounts = await prisma.conversation.groupBy({
+                by: ['assignedAgentId'],
+                where: {
+                  organizationId: waAccount.organizationId,
+                  assignedAgentId: { in: memberIds },
+                  status: 'OPEN',
+                },
+                _count: { id: true },
+              });
 
-                const countMap = new Map(memberIds.map((id) => [id, 0]));
-                groupedCounts.forEach((g) => {
-                  if (g.assignedAgentId) {
-                    countMap.set(g.assignedAgentId, g._count.id);
-                  }
-                });
+              const countMap = new Map(memberIds.map((id) => [id, 0]));
+              groupedCounts.forEach((g) => {
+                if (g.assignedAgentId) {
+                  countMap.set(g.assignedAgentId, g._count.id);
+                }
+              });
 
-                const openCounts = Array.from(countMap.entries()).map(([id, count]) => ({ id, count }));
-                openCounts.sort((a, b) => a.count - b.count);
-                assignedAgentId = openCounts[0]?.id || null;
-              }
+              const openCounts = Array.from(countMap.entries()).map(([id, count]) => ({ id, count }));
+              openCounts.sort((a, b) => a.count - b.count);
+              assignedAgentId = openCounts[0]?.id || null;
             }
           }
+
+          // Whether this inbound message is the reason a human is newly
+          // getting this conversation, for the "notify the agent" call
+          // right after the upsert below.
+          const isNewRoundRobinAssignment = !botCanHandle && Boolean(assignedAgentId) && (!existingConv || !existingConv.assignedAgentId);
 
           const conversation = await prisma.conversation.upsert({
             where: {
@@ -171,13 +259,10 @@ export const webhookWorker = new Worker(
               windowExpiresAt,
               status: existingConv?.status === 'ESCALATED' ? 'ESCALATED' : 'OPEN',
               // Same fix as the assignedAgentId variable above, applied to the
-              // actual DB write: only let AI reclaim a conversation nobody is
-              // already handling. This used to check status !== 'ESCALATED'
-              // instead of "is it already assigned", which wiped out a human
-              // agent's claim (made by simply replying, which doesn't set
-              // ESCALATED) the moment the customer sent their next message.
-              ...(isAiEnabled && !existingConv?.assignedAgentId ? { assignedAgentId: null } : {}),
-              ...(!isAiEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
+              // actual DB write: only let the bot/AI reclaim a conversation
+              // nobody is already handling.
+              ...(botCanHandle && !existingConv?.assignedAgentId ? { assignedAgentId: null } : {}),
+              ...(!botCanHandle && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {
               organizationId: waAccount.organizationId,
@@ -189,19 +274,9 @@ export const webhookWorker = new Worker(
             },
           });
 
-          // Extract text for all inbound message types (text, button quick reply, interactive list/button)
-          const rawMsg = msg as any;
-          let extractedText: string | null = null;
-          if (msg.type === 'text' && msg.text) {
-            extractedText = msg.text.body;
-          } else if (msg.type === 'button' && rawMsg.button) {
-            extractedText = rawMsg.button.text || rawMsg.button.payload;
-          } else if (msg.type === 'interactive' && rawMsg.interactive) {
-            if (rawMsg.interactive.type === 'button_reply') {
-              extractedText = rawMsg.interactive.button_reply?.title || rawMsg.interactive.button_reply?.id;
-            } else if (rawMsg.interactive.type === 'list_reply') {
-              extractedText = rawMsg.interactive.list_reply?.title || rawMsg.interactive.list_reply?.id;
-            }
+          if (isNewRoundRobinAssignment && assignedAgentId) {
+            const { notifyAgentOfEscalation } = await import('../services/agent-notification.service.js');
+            void notifyAgentOfEscalation(waAccount.organizationId, assignedAgentId, conversation.id);
           }
 
           // Build content payload

@@ -298,6 +298,15 @@ export async function assignConversation(
     include: { assignedAgent: { select: { id: true, fullName: true, email: true } } },
   });
 
+  // Same notification a real AI escalation or SLA reassignment already
+  // sends — an owner/manager handing a chat to someone via this dropdown is
+  // just as much "you have a new chat" as either of those, and the agent
+  // had no way to know otherwise short of noticing it in the Inbox UI.
+  if (agentId && agentId !== conversation.assignedAgentId) {
+    const { notifyAgentOfEscalation } = await import('./agent-notification.service.js');
+    void notifyAgentOfEscalation(organizationId, agentId, conversationId);
+  }
+
   return updated;
 }
 
