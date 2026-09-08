@@ -99,7 +99,7 @@ export const Billing: React.FC = () => {
 
   const createRazorpayAiCreditsOrderMutation = useMutation({
     mutationFn: async (amount: number) => {
-      const res = await apiClient.post('/billing/create-razorpay-order', { amount });
+      const res = await apiClient.post('/billing/create-razorpay-order', { amount, purpose: 'ai_credits' });
       return res.data.data;
     },
     onSuccess: async (data, amount) => {
@@ -166,7 +166,7 @@ export const Billing: React.FC = () => {
 
   const createRazorpayOrderMutation = useMutation({
     mutationFn: async ({ baseAmount, finalAmount }: { baseAmount: number; finalAmount: number }) => {
-      const res = await apiClient.post('/billing/create-razorpay-order', { amount: finalAmount });
+      const res = await apiClient.post('/billing/create-razorpay-order', { amount: finalAmount, purpose: 'wallet' });
       return res.data.data;
     },
     onSuccess: (data, variables) => {

@@ -421,13 +421,18 @@ export const Team: React.FC = () => {
                         </label>
                       ))}
                     </div>
+                    {inviteAllowedPages.length === 0 && (
+                      <p className="text-[10px] text-rose-400">
+                        Select at least one page — an empty selection is treated as unrestricted (full) access, the opposite of what turning this off is for.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
 
               <button
                 onClick={() => inviteMutation.mutate()}
-                disabled={inviteMutation.isPending || !fullName || !email}
+                disabled={inviteMutation.isPending || !fullName || !email || (!inviteFullAccess && inviteAllowedPages.length === 0)}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm flex items-center justify-center cursor-pointer disabled:opacity-50"
               >
                 {inviteMutation.isPending ? 'Creating Account...' : 'Create Team Account'}
@@ -555,13 +560,18 @@ export const Team: React.FC = () => {
                         </label>
                       ))}
                     </div>
+                    {editAllowedPages.length === 0 && (
+                      <p className="text-[10px] text-rose-400">
+                        Select at least one page — an empty selection is treated as unrestricted (full) access, the opposite of what turning this off is for.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
 
               <button
                 onClick={() => updateMemberMutation.mutate()}
-                disabled={updateMemberMutation.isPending}
+                disabled={updateMemberMutation.isPending || (!editFullAccess && editAllowedPages.length === 0)}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20 transition-all text-sm cursor-pointer disabled:opacity-50"
               >
                 {updateMemberMutation.isPending ? 'Saving...' : 'Save Changes'}

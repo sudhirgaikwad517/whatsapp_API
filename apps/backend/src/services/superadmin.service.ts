@@ -506,7 +506,11 @@ export async function impersonateTenant(organizationId: string, actorAdminId?: s
 }
 
 async function assertOrganizationExists(organizationId: string): Promise<void> {
-  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true } });
+  // deletedAt: null matters here — without it, a soft-deleted org could be
+  // un-suspended (toggleOrganizationSuspension), plan-tier-changed, or
+  // AI-credited right back into a working state, since tenantContext only
+  // checks isSuspended and never checks deletedAt.
+  const org = await prisma.organization.findUnique({ where: { id: organizationId, deletedAt: null }, select: { id: true } });
   if (!org) {
     throw new AppError('Organization not found.', 404, 'ORGANIZATION_NOT_FOUND');
   }

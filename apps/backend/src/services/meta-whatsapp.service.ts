@@ -91,22 +91,34 @@ export async function syncMetaTemplates(organizationId: string) {
   }
 
   const decryptedToken = decryptToken(waAccount.encryptedAccessToken);
-  const url = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${waAccount.wabaId}/message_templates`;
+  let url: string | undefined = `${env.META_GRAPH_BASE_URL}/${env.META_API_VERSION}/${waAccount.wabaId}/message_templates?limit=100`;
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
-    },
-  });
+  // Meta paginates this endpoint (default page size well under what most
+  // real orgs accumulate over time). Reading only the first page and then
+  // deleting every local template whose name wasn't on it used to purge
+  // still-live, still-APPROVED templates the moment an org had enough of
+  // them to span more than one page — a real data-loss bug, not just a
+  // display gap, since createCampaign looks templates up locally.
+  const allTemplates: any[] = [];
+  while (url) {
+    const response: Response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${env.META_SYSTEM_USER_TOKEN || decryptedToken}`,
+      },
+    });
 
-  if (!response.ok) {
-    const errBody = await response.json();
-    logger.error({ errBody }, 'Failed to fetch templates from Meta Graph API');
-    throw new AppError('Failed to fetch templates from Meta API.', 502, 'META_API_ERROR');
+    if (!response.ok) {
+      const errBody = await response.json();
+      logger.error({ errBody }, 'Failed to fetch templates from Meta Graph API');
+      throw new AppError('Failed to fetch templates from Meta API.', 502, 'META_API_ERROR');
+    }
+
+    const page = (await response.json()) as { data: Array<any>; paging?: { next?: string } };
+    allTemplates.push(...page.data);
+    url = page.paging?.next;
   }
 
-  const metaData = (await response.json()) as { data: Array<any> };
-  const fetchedMetaNames = metaData.data.map((t) => t.name);
+  const fetchedMetaNames = allTemplates.map((t) => t.name);
 
   // Purge ALL templates in DB for this organization that no longer exist in Meta live account
   await prisma.template.deleteMany({
@@ -118,7 +130,7 @@ export async function syncMetaTemplates(organizationId: string) {
 
   // Upsert templates into database
   const syncedTemplates = [];
-  for (const tpl of metaData.data) {
+  for (const tpl of allTemplates) {
     const template = await prisma.template.upsert({
       where: {
         whatsappAccountId_name_language: {

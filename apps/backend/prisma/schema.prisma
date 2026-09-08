@@ -486,6 +486,13 @@ model Campaign {
   batchSize            Int             @default(50)
   batchIntervalMinutes Int             @default(20)
   variableMapping      Json?           @default("{}")
+  // Persisted (not just passed through to the initial send job) so a
+  // campaign using an IMAGE-header template can actually be resumed later —
+  // without this, retryCampaign had no way to recover the original header
+  // media at all once the initial job payloads were consumed, so every
+  // "Resume" on an IMAGE-header campaign sent its remaining recipients with
+  // no header component, which Meta rejects.
+  headerMediaUrl       String?         @db.Text
   // Optional campaign-specific context for the AI auto-responder — when a
   // customer replies to this campaign's broadcast, the AI includes this
   // (in addition to the org's general knowledge base) so it can answer
@@ -680,7 +687,13 @@ model Invoice {
   taxAmount       Decimal      @db.Decimal(12, 2)
   grandTotal      Decimal      @db.Decimal(12, 2)
   currency        String       @default("INR") @db.VarChar(3)
-  paymentId       String       @db.VarChar(255)
+  // Unique so a race between two concurrent confirmations of the same
+  // Razorpay payment (a double-click, a client retry after a timeout, or
+  // the webhook fallback losing to the client-side confirmation) can only
+  // ever create one invoice for it — the loser's insert fails the
+  // constraint and its whole transaction (credit grant included) rolls
+  // back, instead of double-crediting the org.
+  paymentId       String       @unique @db.VarChar(255)
   gatewayName     String       @db.VarChar(50)
   status          InvoiceStatus @default(PAID)
   createdAt       DateTime     @default(now())

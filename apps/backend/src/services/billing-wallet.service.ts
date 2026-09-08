@@ -56,16 +56,27 @@ export async function reconcileUnbilledUsage(organizationId: string, tx: Queryab
     });
   }
 
-  const { marketingSent, utilitySent } = await getTemplateSentCounts(tx, { organizationId });
-  const rates = await getPricingRates(tx);
-  const calculatedCharges = Number((marketingSent * rates.marketingClientPrice + utilitySent * rates.utilityClientPrice).toFixed(2));
-
-  const ledgerDebitsSum = await tx.walletLedger.aggregate({
-    _sum: { amount: true },
-    where: { organizationId, transactionType: { in: ['DEBIT', 'MANUAL_DEBIT'] } },
+  // Only price usage sent SINCE the last time this function billed the org,
+  // at today's rates — not "recompute the org's entire lifetime message
+  // count at today's rate and diff against what's already been debited".
+  // The latter silently re-prices every already-billed historical message
+  // the instant a SuperAdmin edits a PricingRule: a rate increase would
+  // mass-debit the org for messages it already paid for at the old (lower)
+  // rate, and a rate decrease would silently "forgive" the difference with
+  // no refund. Scoping the count to only messages sent after the last USAGE
+  // debit means a rate change only ever affects usage billed going forward.
+  const lastUsageDebit = await tx.walletLedger.findFirst({
+    where: { organizationId, transactionType: 'DEBIT', referenceId: { startsWith: 'USAGE_' } },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
   });
-  const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
-  const unbilledCharges = calculatedCharges > ledgerDebits ? calculatedCharges - ledgerDebits : 0;
+
+  const { marketingSent, utilitySent } = await getTemplateSentCounts(tx, {
+    organizationId,
+    startDate: lastUsageDebit?.createdAt,
+  });
+  const rates = await getPricingRates(tx);
+  const unbilledCharges = Number((marketingSent * rates.marketingClientPrice + utilitySent * rates.utilityClientPrice).toFixed(2));
 
   if (unbilledCharges <= 0) return wallet;
 
@@ -96,12 +107,21 @@ export async function reconcileUnbilledUsage(organizationId: string, tx: Queryab
 
 /**
  * Wallet Top-Up / Recharge
+ *
+ * `invoiceInput`, when passed (the real Razorpay-payment recharge path,
+ * not SuperAdmin's manual wallet-credit action which has no payment to
+ * invoice), creates the tax invoice inside this SAME transaction — relying
+ * on Invoice.paymentId's unique constraint so that two concurrent
+ * confirmations of the same payment can't both credit the wallet: only one
+ * transaction's invoice insert can succeed, and the loser's whole
+ * transaction (wallet credit included) rolls back instead of double-crediting.
  */
 export async function rechargeWallet(
   organizationId: string,
   amountNumber: number,
   referenceId: string,
-  description: string
+  description: string,
+  invoiceInput?: { invoicePrefix: 'INV-USG'; grandTotal: number; paymentId: string; gatewayName: string; description: string }
 ) {
   const amount = new Prisma.Decimal(amountNumber);
 
@@ -136,7 +156,13 @@ export async function rechargeWallet(
       },
     });
 
-    return updatedWallet;
+    let invoice: Awaited<ReturnType<typeof import('./invoice.service.js').createInvoiceRecord>> | null = null;
+    if (invoiceInput) {
+      const { createInvoiceRecord } = await import('./invoice.service.js');
+      invoice = await createInvoiceRecord({ organizationId, ...invoiceInput }, tx);
+    }
+
+    return { ...updatedWallet, invoice };
   });
 }
 

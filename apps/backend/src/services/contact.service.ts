@@ -58,7 +58,15 @@ export async function listContacts(
 }
 
 export function cleanPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
+  let digits = phone.replace(/\D/g, '');
+  // Indian domestic trunk-prefix format (a leading 0 before the real
+  // 10-digit number — common when pasted from a phone's call log). Without
+  // stripping it, this fell straight through to the `+${cleanDigits}`
+  // return below untouched, producing an invalid `+0XXXXXXXXXX` MSISDN that
+  // Meta's WhatsApp API rejects or silently fails to deliver to.
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
   const cleanDigits = digits.length === 10 ? `91${digits}` : digits;
   return `+${cleanDigits}`;
 }
@@ -103,11 +111,18 @@ export async function bulkImportContacts(organizationId: string, contacts: Creat
 
   for (const item of contacts) {
     try {
+      // Without this, a CSV row's raw phone format (whatever the file
+      // happened to contain — with or without +91, spaces, a leading 0)
+      // never matched an existing contact created via the single-add form
+      // (which does normalize), so the same real number imported in a
+      // different raw format created a duplicate contact instead of
+      // updating the existing one.
+      const formattedPhone = cleanPhone(item.phoneNumber);
       await prisma.contact.upsert({
         where: {
           organizationId_phoneNumber: {
             organizationId,
-            phoneNumber: item.phoneNumber,
+            phoneNumber: formattedPhone,
           },
         },
         update: {
@@ -117,7 +132,7 @@ export async function bulkImportContacts(organizationId: string, contacts: Creat
         },
         create: {
           organizationId,
-          phoneNumber: item.phoneNumber,
+          phoneNumber: formattedPhone,
           firstName: item.firstName,
           lastName: item.lastName,
           email: item.email,

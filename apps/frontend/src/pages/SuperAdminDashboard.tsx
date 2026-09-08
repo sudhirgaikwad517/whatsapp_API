@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ShieldAlert,
@@ -338,8 +338,15 @@ export const SuperAdminDashboard: React.FC = () => {
     AUTHENTICATION: '0.25',
   });
 
+  // Hydrates metaRates/clientRates from the server exactly once (the first
+  // time pricingRules data arrives) — the KPI query polls every 10s, and
+  // without this guard, that poll kept re-overwriting these controlled
+  // inputs on every tick, silently reverting any in-progress edit an admin
+  // hadn't saved within that window.
+  const hasHydratedPricingRef = useRef(false);
   useEffect(() => {
-    if (!Array.isArray(kpiData?.pricingRules)) return;
+    if (!Array.isArray(kpiData?.pricingRules) || hasHydratedPricingRef.current) return;
+    hasHydratedPricingRef.current = true;
     const byCategory: Record<string, any> = {};
     for (const rule of kpiData.pricingRules) {
       if (rule.countryCode === PRICING_COUNTRY_CODE) byCategory[rule.conversationCategory] = rule;

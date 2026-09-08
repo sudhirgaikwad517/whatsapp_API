@@ -143,16 +143,39 @@ export async function topupAiCredits(req: AuthenticatedRequest, res: Response, n
     if (amount >= 3500) creditsToAdd = 10000;
     else if (amount >= 1500) creditsToAdd = 3500;
 
-    const newBalance = await addAiCredits(orgId, creditsToAdd);
-
-    const aiInvoice = await createInvoiceRecord({
-      organizationId: orgId,
-      invoicePrefix: 'INV-AI',
-      grandTotal: amount,
-      paymentId: razorpay_payment_id,
-      gatewayName: 'RAZORPAY',
-      description: `AI Credits Top-up (${creditsToAdd.toLocaleString()} credits)`,
-    });
+    // Invoice creation and the credit grant happen in one transaction, with
+    // the invoice insert relying on paymentId's unique constraint — if two
+    // concurrent requests for the same payment both got past the
+    // findFirst check above (a genuine race: double-click, a client retry
+    // after a slow response), only one transaction's invoice insert can
+    // succeed; the other's unique-violation rolls its whole transaction
+    // back, undoing that duplicate credit grant too, not just its invoice.
+    let newBalance: number;
+    let aiInvoice: Awaited<ReturnType<typeof createInvoiceRecord>>;
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const balance = await addAiCredits(orgId, creditsToAdd, tx);
+        const invoice = await createInvoiceRecord(
+          {
+            organizationId: orgId,
+            invoicePrefix: 'INV-AI',
+            grandTotal: amount,
+            paymentId: razorpay_payment_id,
+            gatewayName: 'RAZORPAY',
+            description: `AI Credits Top-up (${creditsToAdd.toLocaleString()} credits)`,
+          },
+          tx
+        );
+        return { balance, invoice };
+      });
+      newBalance = result.balance;
+      aiInvoice = result.invoice;
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new AppError('This payment has already been processed.', 409, 'ALREADY_PROCESSED');
+      }
+      throw err;
+    }
     void sendPurchaseEmail(req.user!.userId, aiInvoice.description!, amount, aiInvoice.invoiceNumber);
 
     res.status(200).json({
@@ -218,24 +241,41 @@ export async function purchasePlan(req: AuthenticatedRequest, res: Response, nex
       planExpiryDate.setDate(planExpiryDate.getDate() + 30);
     }
 
-    // Update the organization's planTier, increment AI credits, and set expiry date
-    await prisma.organization.update({
-      where: { id: orgId },
-      data: { 
-        planTier,
-        aiCreditsBalance: { increment: creditsToAdd },
-        planExpiryDate,
-      },
-    });
+    // Plan/credits update and invoice creation happen in one transaction —
+    // see the matching comment in topupAiCredits above for why: only one
+    // concurrent confirmation of the same paymentId can win the invoice
+    // insert, and the loser's whole transaction (including the plan/credit
+    // update) rolls back instead of double-applying.
+    let planInvoice: Awaited<ReturnType<typeof createInvoiceRecord>>;
+    try {
+      planInvoice = await prisma.$transaction(async (tx) => {
+        await tx.organization.update({
+          where: { id: orgId },
+          data: {
+            planTier,
+            aiCreditsBalance: { increment: creditsToAdd },
+            planExpiryDate,
+          },
+        });
 
-    const planInvoice = await createInvoiceRecord({
-      organizationId: orgId,
-      invoicePrefix: 'INV-PLAN',
-      grandTotal: amount,
-      paymentId: razorpay_payment_id,
-      gatewayName: 'RAZORPAY',
-      description: `${planTier} Plan Subscription — ${billingCycle === 'ANNUAL' ? 'Annual' : 'Monthly'} Billing`,
-    });
+        return createInvoiceRecord(
+          {
+            organizationId: orgId,
+            invoicePrefix: 'INV-PLAN',
+            grandTotal: amount,
+            paymentId: razorpay_payment_id,
+            gatewayName: 'RAZORPAY',
+            description: `${planTier} Plan Subscription — ${billingCycle === 'ANNUAL' ? 'Annual' : 'Monthly'} Billing`,
+          },
+          tx
+        );
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new AppError('This payment has already been processed.', 409, 'ALREADY_PROCESSED');
+      }
+      throw err;
+    }
     void sendPurchaseEmail(req.user!.userId, planInvoice.description!, amount, planInvoice.invoiceNumber);
 
     res.status(200).json({
@@ -274,10 +314,11 @@ export async function validatePlanPurchase(req: AuthenticatedRequest, res: Respo
 
 export async function createRazorpayOrder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { amount } = req.body;
+    const { amount, purpose } = req.body;
     if (!amount || amount <= 0) {
       throw new AppError('Invalid amount', 400, 'INVALID_AMOUNT');
     }
+    const orgId = req.user!.organizationId;
 
     const keyId = process.env.RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -305,6 +346,14 @@ export async function createRazorpayOrder(req: AuthenticatedRequest, res: Respon
         amount: Math.round(amount * 100),
         currency: 'INR',
         receipt: `rcpt_${Date.now()}`,
+        // Razorpay copies order notes onto the resulting payment object —
+        // this is what lets the webhook (payment-webhook.service.ts) know
+        // which org and which purchase flow to credit if a payment is
+        // captured by Razorpay but the client never completes its own
+        // confirmation call (closed tab, crashed browser, lost network).
+        // Without this, that payment would be captured with no wallet
+        // credit, no invoice, and no way to recover it automatically.
+        notes: { organizationId: orgId, purpose: purpose || 'wallet' },
       },
       {
         headers: {
@@ -357,16 +406,22 @@ export async function rechargeWallet(req: AuthenticatedRequest, res: Response, n
     const referenceId = razorpay_payment_id;
     const description = `Credits Purchased via ${gateway || 'Razorpay'}`;
 
-    const wallet = await BillingService.rechargeWallet(orgId, subtotal, referenceId, description);
-
-    const usgInvoice = await createInvoiceRecord({
-      organizationId: orgId,
-      invoicePrefix: 'INV-USG',
-      grandTotal,
-      paymentId: razorpay_payment_id,
-      gatewayName: gateway || 'RAZORPAY',
-      description: 'Credits Purchased via Razorpay',
-    });
+    let wallet: Awaited<ReturnType<typeof BillingService.rechargeWallet>>;
+    try {
+      wallet = await BillingService.rechargeWallet(orgId, subtotal, referenceId, description, {
+        invoicePrefix: 'INV-USG',
+        grandTotal,
+        paymentId: razorpay_payment_id,
+        gatewayName: gateway || 'RAZORPAY',
+        description: 'Credits Purchased via Razorpay',
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new AppError('This payment has already been processed.', 409, 'ALREADY_PROCESSED');
+      }
+      throw err;
+    }
+    const usgInvoice = wallet.invoice!;
     void sendPurchaseEmail(req.user!.userId, usgInvoice.description!, grandTotal, usgInvoice.invoiceNumber);
 
     res.status(200).json({

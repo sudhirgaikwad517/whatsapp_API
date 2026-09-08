@@ -118,6 +118,23 @@ export async function registerUser(input: RegisterInput, isWebsiteRegistration =
   const accessToken = generateAccessToken(tokenPayload);
   const refreshToken = generateRefreshToken(tokenPayload);
 
+  // Without this, refreshAccessToken (auth.service.ts:refreshAccessToken)
+  // finds no matching row for this token's hash and rejects every refresh
+  // attempt with INVALID_REFRESH_TOKEN. Since access tokens are short-lived
+  // (JWT_EXPIRES_IN, 15m by default) and loginUser rejects unverified
+  // accounts with EMAIL_NOT_VERIFIED, a brand-new user who hasn't verified
+  // their email within that first 15 minutes was getting locked out of the
+  // account they just created, with no way back in except the verification
+  // email — this mirrors loginUser's own refreshToken.create call.
+  const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  await prisma.refreshToken.create({
+    data: {
+      userId: result.user.id,
+      tokenHash: refreshTokenHash,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+  });
+
   return {
     user: {
       id: result.user.id,

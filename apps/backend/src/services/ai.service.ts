@@ -291,6 +291,19 @@ export async function processAutonomousAiResponse(organizationId: string, conver
         void notifyAgentOfEscalation(organizationId, bestAgentId, conversationId);
       }
     } else if (result.replyText) {
+      // Re-check right before sending — evaluateAiAutonomousReply can take
+      // several seconds (up to 3 chained Gemini attempts), long enough for a
+      // human agent to have claimed this conversation in the meantime. Sending
+      // the AI's already-generated reply after that would talk over them.
+      const freshConversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { assignedAgentId: true, status: true },
+      });
+      if (freshConversation?.assignedAgentId || freshConversation?.status === 'RESOLVED') {
+        logger.info({ conversationId, organizationId }, 'Skipped sending AI reply — conversation was claimed by a human agent while AI was generating a response.');
+        return;
+      }
+
       // Send automated AI response to customer on WhatsApp
       const { sendOutboundTextMessage } = await import('./inbox.service.js');
       await sendOutboundTextMessage(organizationId, conversationId, result.replyText);
@@ -464,8 +477,13 @@ CRITICAL TASK:
     return { isEscalated: true, reason: 'Keyword Human Escalation' };
   }
 
+  // Every model attempt failed — log the real reason server-side only; a
+  // customer must never see internal diagnostics like an API key length or
+  // raw error string in their WhatsApp chat.
+  logger.error({ organizationId, apiKeyLength: effectiveApiKey.length, lastError }, 'All Gemini model attempts failed for autonomous AI reply — sending generic fallback.');
+
   return {
-    replyText: `[DEBUG: API Key Len: ${effectiveApiKey.length}, Err: ${lastError}] Hi ${customerName}! Thank you for reaching out to ${orgName}. How can we assist you today?`,
+    replyText: `Hi ${customerName}! Thank you for reaching out to ${orgName}. How can we assist you today?`,
     isEscalated: false,
   };
 }

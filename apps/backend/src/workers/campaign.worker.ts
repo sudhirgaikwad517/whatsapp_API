@@ -27,9 +27,24 @@ export const campaignWorker = new Worker(
     logger.info({ jobId: job.id, campaignId: data.campaignId, phone: data.phoneNumber }, 'Processing campaign broadcast job');
 
     try {
+      // Resolved early (not just at message-save time below) so the template
+      // lookup can be scoped to the exact WABA + language actually used —
+      // matching only on (organizationId, name) let it pick an unrelated
+      // Template row when an org has a same-named template on more than one
+      // WhatsApp number or in more than one language, corrupting both the
+      // rendered body text/variables and the billing category snapshot.
+      const waAccount = await prisma.whatsappAccount.findFirst({
+        where: { organizationId: data.organizationId, deletedAt: null },
+      });
+
       // Fetch template definition & campaign to check for variables
       const tpl = await prisma.template.findFirst({
-        where: { organizationId: data.organizationId, name: data.templateName },
+        where: {
+          organizationId: data.organizationId,
+          name: data.templateName,
+          language: data.templateLanguage || 'en_US',
+          ...(waAccount ? { whatsappAccountId: waAccount.id } : {}),
+        },
       });
 
       const campaign = await prisma.campaign.findUnique({
@@ -122,15 +137,32 @@ export const campaignWorker = new Worker(
         templateObject.components = componentsList;
       }
 
+      // Idempotency guard: if a PRIOR attempt at this exact job already got
+      // as far as a successful Meta send (recipient has a wamid), don't
+      // send again. Without this, any error anywhere after the Meta call —
+      // DB blip on the message/conversation/campaign-counter writes below,
+      // none of which are AppErrors — was classified retryable by
+      // isRetryableMetaError and rethrown, so BullMQ retried the *entire*
+      // job from the top: a real second WhatsApp message billed and
+      // delivered to the customer, a duplicate row in their Live Inbox
+      // thread, and campaign.sentCount incremented a second time for the
+      // same recipient, permanently inflating it past the true recipient count.
+      const existingRecipient = await prisma.campaignRecipient.findFirst({
+        where: { campaignId: data.campaignId, contactId: data.contactId },
+        select: { wamid: true, status: true },
+      });
+      if (existingRecipient?.wamid) {
+        logger.info(
+          { jobId: job.id, campaignId: data.campaignId, contactId: data.contactId, wamid: existingRecipient.wamid },
+          'Campaign job retried after already dispatching successfully — skipping duplicate Meta send.'
+        );
+        return;
+      }
+
       // 1. Dispatch template message via Meta Graph API
       const metaRes = await sendMetaOutboundMessage(data.organizationId, data.phoneNumber, {
         type: 'template',
         template: templateObject,
-      });
-
-      // 2. Resolve WhatsApp Account for this organization
-      const waAccount = await prisma.whatsappAccount.findFirst({
-        where: { organizationId: data.organizationId, deletedAt: null },
       });
 
       if (waAccount) {
@@ -175,6 +207,7 @@ export const campaignWorker = new Worker(
               headerMediaUrl: data.headerMediaUrl,
               templateName: data.templateName,
               language: data.templateLanguage,
+              templateCategory: tpl?.category || null,
             },
             status: 'SENT',
             sentAt: new Date(),

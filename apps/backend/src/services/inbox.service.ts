@@ -31,9 +31,15 @@ function assertConversationAccess(conversation: { assignedAgentId: string | null
  */
 async function claimConversationIfUnassigned(conversationId: string, actingAgent?: Requester): Promise<void> {
   if (!actingAgent) return;
+  // Marking this ESCALATED (not just setting assignedAgentId) matters: the
+  // inbound webhook worker only preserves assignedAgentId across the
+  // customer's next message when status === 'ESCALATED' — otherwise, with AI
+  // auto-respond on, it wipes assignedAgentId back to null on every inbound
+  // message. Without this, a human agent claiming a chat by replying would
+  // have AI take it right back over as soon as the customer wrote again.
   await prisma.conversation.updateMany({
     where: { id: conversationId, assignedAgentId: null },
-    data: { assignedAgentId: actingAgent.id, assignedAt: new Date(), agentOpenedAt: new Date() },
+    data: { assignedAgentId: actingAgent.id, assignedAt: new Date(), agentOpenedAt: new Date(), status: 'ESCALATED' },
   });
 }
 
@@ -119,7 +125,7 @@ export async function getConversationMessages(
   conversationId: string,
   organizationId: string,
   requester?: Requester,
-  options: { before?: Date; limit?: number } = {}
+  options: { before?: Date; after?: Date; limit?: number } = {}
 ) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, organizationId },
@@ -134,10 +140,10 @@ export async function getConversationMessages(
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
   if (requester) assertConversationAccess(conversation, requester);
 
-  // Only the initial (non-paginated) load counts as "opening" the
-  // conversation — a "load older messages" request shouldn't re-stamp
-  // agentOpenedAt or re-mark it read.
-  if (!options.before) {
+  // Only the initial (uncursored) load counts as "opening" the conversation —
+  // neither "load older messages" (before) nor the live-poll incremental
+  // sync (after, see below) should re-stamp agentOpenedAt or re-mark it read.
+  if (!options.before && !options.after) {
     const isFirstOpenByAssignedAgent =
       requester?.role === 'AGENT' && conversation.assignedAgentId === requester.id && !conversation.agentOpenedAt;
 
@@ -148,6 +154,23 @@ export async function getConversationMessages(
         ...(isFirstOpenByAssignedAgent ? { agentOpenedAt: new Date() } : {}),
       },
     });
+  }
+
+  // `after` powers incremental polling: the frontend re-requests only
+  // messages newer than the latest one it already has and merges them in,
+  // rather than re-fetching "the latest N" from scratch every 3s — a fixed
+  // "latest N" window quietly slides forward as new messages arrive, and a
+  // page that had already paginated back into older history would lose
+  // whatever fell out of that window with no way to recover it without
+  // reopening the conversation. Ascending order, no take-side pagination
+  // (this range is only ever "since the last poll", so it's never large).
+  if (options.after) {
+    const newMessages = await prisma.message.findMany({
+      where: { conversationId, createdAt: { gt: options.after } },
+      orderBy: { createdAt: 'asc' },
+      take: 500,
+    });
+    return { conversation, messages: newMessages, hasMore: false };
   }
 
   // A conversation with a long-running history returned every message on
@@ -378,6 +401,19 @@ export async function sendOutboundTemplateMessage(
     template: templatePayload,
   });
 
+  // Snapshot the template's category at send time, scoped to the exact WABA
+  // + language this message actually used — usage-metrics.service.ts's
+  // billing/telemetry count reads this first (falling back to a live
+  // Template join only for older messages sent before this existed), which
+  // avoids two real bugs: double-counting when an org has a same-named
+  // template on more than one WhatsApp number or in more than one language,
+  // and a template's category being reassigned by Meta later silently
+  // rewriting the price of every historical message ever sent under that name.
+  const templateRow = await prisma.template.findFirst({
+    where: { whatsappAccountId: conversation.whatsappAccountId, name: templateName, language },
+    select: { category: true },
+  });
+
   // Save to database
   const message = await prisma.message.create({
     data: {
@@ -386,7 +422,7 @@ export async function sendOutboundTemplateMessage(
       wamid: metaRes.wamid,
       direction: 'OUTBOUND',
       type: 'TEMPLATE',
-      content: { templateName, components },
+      content: { templateName, components, templateCategory: templateRow?.category || null },
       status: 'SENT',
       sentAt: new Date(),
     },

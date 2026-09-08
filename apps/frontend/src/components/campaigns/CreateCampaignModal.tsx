@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -43,6 +43,14 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
   const [campaignKnowledgeBase, setCampaignKnowledgeBase] = useState('');
+
+  // A mapping picked while on one audience source (e.g. a CSV column key)
+  // is meaningless for the other (CRM contacts have no CSV columns) — left
+  // in place, the backend's resolveVal falls through to "Valued Customer"
+  // for every recipient with no error or warning anywhere in the flow.
+  useEffect(() => {
+    setVariableMapping({});
+  }, [audienceSource]);
   const [mediaCompressStats, setMediaCompressStats] = useState<string | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [error, setError] = useState('');

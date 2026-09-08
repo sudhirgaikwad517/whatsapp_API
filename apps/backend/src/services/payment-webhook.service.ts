@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
 import { rechargeWallet } from './billing-wallet.service.js';
@@ -48,6 +47,7 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
     const paymentId = payment.id;
     const amountPaid = payment.amount / 100; // Razorpay amounts are in paise
     const organizationId = payment.notes?.organizationId;
+    const purpose = payment.notes?.purpose;
 
     if (!organizationId) {
       // Permanent condition — this payment will never gain an organizationId on
@@ -55,6 +55,17 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
       // Razorpay retry the same webhook indefinitely, flooding the logs.
       logger.error({ paymentId }, 'Razorpay webhook payment carries no organizationId in notes — rejecting rather than guessing a tenant.');
       return { success: true, processed: false, reason: 'MISSING_ORGANIZATION_ID' };
+    }
+
+    // This fallback only knows how to credit a wallet recharge — AI-credits
+    // and plan purchases have their own gateway-amount-tier/plan-quote logic
+    // that lives in billing.controller.ts and isn't safe to duplicate here
+    // from notes alone. Those purposes still rely on the client-side
+    // confirmation call completing; only 'wallet' purchases get this
+    // server-side fallback for now.
+    if (purpose && purpose !== 'wallet') {
+      logger.warn({ paymentId, purpose }, 'Razorpay webhook received a captured payment for a purpose this fallback does not handle — skipping.');
+      return { success: true, processed: false, reason: 'UNHANDLED_PURPOSE' };
     }
 
     // Idempotency Check: Prevent duplicate wallet recharges
@@ -69,39 +80,42 @@ export async function processRazorpayWebhook(rawBody: string, signature: string)
 
     // Calculate subtotal & 18% GST tax
     const subtotal = Number((amountPaid / 1.18).toFixed(2));
-    const taxAmount = Number((amountPaid - subtotal).toFixed(2));
 
-    // Recharge Wallet
-    const wallet = await rechargeWallet(
-      organizationId,
-      subtotal,
-      paymentId,
-      `Credits Purchased via Razorpay (${paymentId})`
-    );
-
-    // Generate Tax Invoice
-    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
-    const invoice = await prisma.invoice.create({
-      data: {
+    // Recharge Wallet + create the invoice in the same transaction (see the
+    // comment on rechargeWallet itself) — INV-USG matches the prefix every
+    // other wallet-recharge invoice uses (the hand-rolled `INV-` prefix this
+    // replaced was invisible to every revenue-by-source query that filters
+    // by prefix).
+    let wallet: Awaited<ReturnType<typeof rechargeWallet>>;
+    try {
+      wallet = await rechargeWallet(
         organizationId,
-        invoiceNumber,
-        description: 'Credits Purchased via Razorpay',
-        subtotal: new Prisma.Decimal(subtotal),
-        taxAmount: new Prisma.Decimal(taxAmount),
-        grandTotal: new Prisma.Decimal(amountPaid),
-        currency: payment.currency || 'INR',
+        subtotal,
         paymentId,
-        gatewayName: 'RAZORPAY',
-        status: 'PAID',
-      },
-    });
+        `Credits Purchased via Razorpay (${paymentId})`,
+        {
+          invoicePrefix: 'INV-USG',
+          grandTotal: amountPaid,
+          paymentId,
+          gatewayName: 'RAZORPAY',
+          description: 'Credits Purchased via Razorpay',
+        }
+      );
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        logger.info({ paymentId }, 'Razorpay webhook lost an idempotency race to the client-side confirmation. Skipping duplicate.');
+        return { success: true, processed: false, reason: 'ALREADY_PROCESSED' };
+      }
+      throw err;
+    }
+    const invoice = wallet.invoice!;
 
     logger.info(
-      { organizationId, paymentId, invoiceNumber, amountPaid, walletBalance: wallet.availableBalance.toString() },
+      { organizationId, paymentId, invoiceNumber: invoice.invoiceNumber, amountPaid, walletBalance: wallet.availableBalance.toString() },
       '✅ Razorpay Payment Processed: Wallet Credited & Invoice Generated!'
     );
 
-    void sendPurchaseEmailToOwner(organizationId, invoice.description!, amountPaid, invoiceNumber);
+    void sendPurchaseEmailToOwner(organizationId, invoice.description!, amountPaid, invoice.invoiceNumber);
 
     return { success: true, invoice, wallet };
   }

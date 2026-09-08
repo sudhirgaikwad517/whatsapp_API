@@ -2,8 +2,7 @@ import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { sendMail, buildChatAssignedEmail } from '../utils/mailer.js';
-
-const ESCALATION_WHATSAPP_COST_INR = 0.2; // Same per-message utility rate used elsewhere in billing.
+import { getPricingRates } from './usage-metrics.service.js';
 
 /**
  * Notifies a human agent that the AI Copilot handed a conversation off to
@@ -70,24 +69,43 @@ export async function notifyAgentOfEscalation(
     });
 
     // Utility templates are free on Meta's side when sent while the
-    // customer's 24-hour service window is already open (i.e. they messaged
-    // in recently) — this was being billed unconditionally regardless of
-    // window status, overcharging the org's wallet for a message Meta itself
-    // never charged for.
-    const recentInboundFromCustomer = await prisma.message.findFirst({
-      where: {
-        conversationId,
-        direction: 'INBOUND',
-        createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      },
+    // *recipient's* 24-hour service window is already open — the recipient
+    // of THIS message is the agent (agent.phoneNumber), not the customer, so
+    // the window check has to be against the agent's own conversation with
+    // the business number, not the customer's. Checking the customer's
+    // conversation (the original version of this fix) almost always found a
+    // recent inbound message there — that's typically what triggers an
+    // escalation in the first place — so it was classifying nearly every
+    // escalation notification as "free" and skipping billing, even though
+    // Meta was actually charging the org for it (agents essentially never
+    // have their own open window with the business number).
+    const agentContact = await prisma.contact.findFirst({
+      where: { organizationId, phoneNumber: agent.phoneNumber },
       select: { id: true },
     });
+    const agentConversation = agentContact
+      ? await prisma.conversation.findFirst({
+          where: { organizationId, contactId: agentContact.id },
+          select: { id: true },
+        })
+      : null;
+    const recentInboundFromAgent = agentConversation
+      ? await prisma.message.findFirst({
+          where: {
+            conversationId: agentConversation.id,
+            direction: 'INBOUND',
+            createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+          select: { id: true },
+        })
+      : null;
 
-    if (!recentInboundFromCustomer) {
+    if (!recentInboundFromAgent) {
+      const rates = await getPricingRates(prisma);
       const { deductDirectWalletBalance } = await import('./billing-wallet.service.js');
       await deductDirectWalletBalance(
         organizationId,
-        ESCALATION_WHATSAPP_COST_INR,
+        rates.utilityClientPrice,
         `escalation_${conversationId}_${Date.now()}`,
         `WhatsApp notification: chat assigned (${template.name})`
       );

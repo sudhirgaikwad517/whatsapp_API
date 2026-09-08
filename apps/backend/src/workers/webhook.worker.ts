@@ -196,8 +196,21 @@ export const webhookWorker = new Worker(
           }
           if (msg.type === 'location' && msg.location) content.location = msg.location;
 
-          // Save message to database
-          const msgTypeStr = ['text', 'button', 'interactive'].includes(msg.type) ? 'TEXT' : msg.type.toUpperCase();
+          // Save message to database. Meta sends message types this schema's
+          // MessageType enum has no value for (reaction, sticker, contacts,
+          // order, system, unsupported/unknown) — inserting one of those
+          // unmapped would throw a Prisma enum-validation error. Since the
+          // dedup key for this wamid is already claimed by this point, an
+          // uncaught throw here would permanently blackhole that message
+          // (Meta won't redeliver, and our own 24h dedup TTL blocks a retry)
+          // instead of just losing type-specific rendering — so fall back to
+          // TEXT and preserve the real Meta type in content for later use.
+          const KNOWN_TYPES = ['TEXT', 'IMAGE', 'AUDIO', 'VIDEO', 'DOCUMENT', 'LOCATION', 'INTERACTIVE', 'TEMPLATE'];
+          const rawTypeUpper = ['text', 'button', 'interactive'].includes(msg.type) ? 'TEXT' : msg.type.toUpperCase();
+          const msgTypeStr = KNOWN_TYPES.includes(rawTypeUpper) ? rawTypeUpper : 'TEXT';
+          if (msgTypeStr !== rawTypeUpper) {
+            content.unsupportedMetaType = msg.type;
+          }
 
           const savedMessage = await prisma.message.create({
             data: {
@@ -287,9 +300,25 @@ export const webhookWorker = new Worker(
               const matchedFlow = await evaluateInboundFlow(waAccount.organizationId, textBody);
 
               if (matchedFlow) {
-                const nodes = (matchedFlow.definition as any)?.nodes || [];
-                const replyNode = nodes.find((n: any) => n.id !== '1' && n.data?.label);
-                let flowReplyText = replyNode ? (replyNode.data.label as string) : null;
+                // Follows the actual edge out of the start node ('1') to find
+                // the real first step, instead of grabbing whichever non-start
+                // node happens to come first in the builder's array (purely
+                // insertion order — the order a user dragged nodes onto the
+                // canvas, unrelated to how they're actually connected). For a
+                // flow with more than one node after the start, that could
+                // reply with a node the start node isn't even wired to.
+                // Known limitation, not fixed here: this only ever executes
+                // one step per matched trigger — there's no persisted
+                // per-conversation "which node are we on" state, so a
+                // multi-step flow (branches, an "Assign Agent" node partway
+                // through, a second message) can't advance past this first
+                // reply on later messages the way the builder implies it should.
+                const definition = (matchedFlow.definition as any) || {};
+                const nodes = definition.nodes || [];
+                const edges = definition.edges || [];
+                const firstEdge = edges.find((e: any) => e.source === '1');
+                const replyNode = firstEdge ? nodes.find((n: any) => n.id === firstEdge.target) : null;
+                let flowReplyText = replyNode?.data?.label ? (replyNode.data.label as string) : null;
                 if (flowReplyText) {
                   // Clean node type prefix e.g. "💬 Send Message: "
                   flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
@@ -341,8 +370,13 @@ export const webhookWorker = new Worker(
                     // reads the latest message history, so it still answers the
                     // newest message. Without this, each message queued its own
                     // reply, producing several near-duplicate greetings back to back.
+                    // TTL is a safety-net upper bound, not the primary release
+                    // mechanism — autoresponder.worker.ts deletes this key as
+                    // soon as the AI job actually finishes. This just covers a
+                    // worker crash/restart that skips that cleanup, so a stuck
+                    // key can't block AI replies on this conversation forever.
                     const aiDebounceKey = `ai-pending:${conversation.id}`;
-                    const shouldEnqueue = await redis.set(aiDebounceKey, '1', 'EX', 8, 'NX');
+                    const shouldEnqueue = await redis.set(aiDebounceKey, '1', 'EX', 45, 'NX');
                     if (shouldEnqueue) {
                       await autoResponderQueue.add(
                         'ai-reply',
@@ -487,10 +521,22 @@ export const webhookWorker = new Worker(
             });
 
             if (matchedContact) {
+              // wamid: null is required here — without it, this could match
+              // (and overwrite the wamid of) a DIFFERENT campaign's already
+              // correctly-linked recipient row for the same contact, purely
+              // because it happened to be the most recently updated one.
+              // That both corrupts that other campaign's future status
+              // matching and misattributes this status event's
+              // delivered/read/failed counter to the wrong campaign
+              // entirely. Still not a perfect fix (if a contact has more
+              // than one truly *unlinked* recipient row at once, the most
+              // recent one remains a best-effort guess), but it eliminates
+              // the concrete already-linked-row collision.
               recipient = await prisma.campaignRecipient.findFirst({
                 where: {
                   contactId: matchedContact.id,
                   campaign: { organizationId: waAccount.organizationId },
+                  wamid: null,
                 },
                 orderBy: { updatedAt: 'desc' },
                 select: { id: true, campaignId: true, contactId: true, status: true },

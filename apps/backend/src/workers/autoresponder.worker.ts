@@ -1,5 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { createRedisConnection } from '../config/redis.js';
+import { redis } from '../config/redis.js';
 import { logger } from '../utils/logger.js';
 
 export const autoResponderWorker = new Worker(
@@ -27,6 +28,18 @@ export const autoResponderWorker = new Worker(
     } catch (err) {
       logger.error({ err, data }, `Auto-responder job execution failed for type ${data.type}`);
       throw err;
+    } finally {
+      // Release the webhook worker's debounce lock the moment this job is
+      // actually done (success or failure) instead of relying purely on its
+      // fixed TTL — evaluateAiAutonomousReply can chain up to 3 Gemini model
+      // attempts and take longer than a short fixed window, during which a
+      // customer's follow-up message would otherwise queue a second AI reply
+      // job, producing duplicate/overlapping replies.
+      if (data.type === 'ai' && data.conversationId) {
+        try {
+          await redis.del(`ai-pending:${data.conversationId}`);
+        } catch {}
+      }
     }
   },
   {

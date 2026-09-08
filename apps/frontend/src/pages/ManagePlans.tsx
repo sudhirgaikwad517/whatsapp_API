@@ -115,7 +115,7 @@ export const ManagePlans: React.FC = () => {
         }
       }
 
-      const orderRes = await apiClient.post('/billing/create-razorpay-order', { amount: quote.payableAmount });
+      const orderRes = await apiClient.post('/billing/create-razorpay-order', { amount: quote.payableAmount, purpose: 'plan' });
       const orderData = orderRes.data.data;
 
       if (orderData.isMock) {
@@ -159,7 +159,7 @@ export const ManagePlans: React.FC = () => {
     setProcessingId(packId);
     const finalAmount = Number((priceValue * 1.18).toFixed(2));
     apiClient
-      .post('/billing/create-razorpay-order', { amount: finalAmount })
+      .post('/billing/create-razorpay-order', { amount: finalAmount, purpose: 'ai_credits' })
       .then(async ({ data }) => {
         const orderData = data.data;
         if (orderData.isMock) {

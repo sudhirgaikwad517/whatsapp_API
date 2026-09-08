@@ -78,11 +78,29 @@ export async function getTemplateSentCounts(
 ): Promise<TemplateSentCounts> {
   const { organizationId, startDate } = options;
 
+  // Category is resolved with COALESCE(m.content->>'templateCategory', t.category):
+  // outbound sends now snapshot the template's category into the Message row
+  // at send time (scoped to the exact WABA + language actually used), which
+  // is what this prefers. The Template JOIN is only a fallback for messages
+  // sent before that snapshot existed — it's kept as a LEFT JOIN (not INNER)
+  // so a message whose Template row was later deleted/renamed still counts
+  // correctly as long as it has its own snapshot. Relying only on the JOIN
+  // used to double-count an org's messages whenever a same-named template
+  // existed on more than one WhatsApp number or in more than one language
+  // (the JOIN only matched on name, not whatsappAccountId/language), and
+  // silently retroactively re-priced a template's entire send history
+  // whenever Meta reclassified its category on a later sync.
+  // Category resolution uses a scalar subquery (LIMIT 1), not a JOIN — a JOIN
+  // on name+organizationId alone can match more than one Template row (same
+  // template name reused across WhatsApp numbers or languages), which fans
+  // out into duplicate physical rows per Message and inflates COUNT(*)
+  // regardless of which category value ends up selected from them. The
+  // scalar subquery guarantees exactly one output row per Message.
   const rows = await client.$queryRaw<{ marketing_sent: bigint | number; utility_sent: bigint | number }[]>`
     SELECT
-      COUNT(*) FILTER (WHERE t."category" ILIKE 'marketing') as marketing_sent,
+      COUNT(*) FILTER (WHERE category ILIKE 'marketing') as marketing_sent,
       COUNT(*) FILTER (
-        WHERE t."category" ILIKE 'utility'
+        WHERE category ILIKE 'utility'
           AND NOT EXISTS (
             SELECT 1 FROM "Message" im
             WHERE im."conversationId" = m."conversationId"
@@ -91,13 +109,24 @@ export async function getTemplateSentCounts(
               AND im."createdAt" > m."createdAt" - INTERVAL '24 hours'
           )
       ) as utility_sent
-    FROM "Message" m
-    INNER JOIN "Template" t ON m."content"->>'templateName' = t."name" AND t."organizationId" = m."organizationId"
-    WHERE m."direction" = 'OUTBOUND'
-      AND m."type" = 'TEMPLATE'
-      AND m."status" != 'FAILED'
-      ${organizationId ? Prisma.sql`AND m."organizationId" = ${organizationId}::uuid` : Prisma.empty}
-      ${startDate ? Prisma.sql`AND m."createdAt" >= ${startDate}` : Prisma.empty}
+    FROM (
+      SELECT
+        m.*,
+        COALESCE(
+          m."content"->>'templateCategory',
+          (
+            SELECT t."category" FROM "Template" t
+            WHERE t."name" = m."content"->>'templateName' AND t."organizationId" = m."organizationId"
+            LIMIT 1
+          )
+        ) as category
+      FROM "Message" m
+      WHERE m."direction" = 'OUTBOUND'
+        AND m."type" = 'TEMPLATE'
+        AND m."status" != 'FAILED'
+        ${organizationId ? Prisma.sql`AND m."organizationId" = ${organizationId}::uuid` : Prisma.empty}
+        ${startDate ? Prisma.sql`AND m."createdAt" >= ${startDate}` : Prisma.empty}
+    ) m
   `;
 
   return {

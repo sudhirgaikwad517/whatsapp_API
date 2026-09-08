@@ -170,6 +170,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       batchIntervalMinutes,
       variableMapping: input.variableMapping || {},
       campaignKnowledgeBase: input.campaignKnowledgeBase?.trim() || null,
+      headerMediaUrl: input.headerMediaUrl?.trim() || null,
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,
@@ -404,6 +405,13 @@ export async function retryCampaign(organizationId: string, campaignId: string) 
         phoneNumber: rec.contact.phoneNumber,
         templateName: campaign.template.name,
         templateLanguage: campaign.template.language,
+        // Omitting this (as this re-enqueue previously did) meant resuming
+        // any campaign that used an IMAGE-header template sent every
+        // remaining recipient's message with no header component at all —
+        // Meta rejects that as a permanent failure, so "Resume" on exactly
+        // the campaigns most likely to have partially failed (a media URL
+        // issue) reliably failed all of them again.
+        headerMediaUrl: campaign.headerMediaUrl || undefined,
       },
       {
         attempts: 5,

@@ -70,7 +70,7 @@ export const Inbox: React.FC = () => {
         amount: Number(paymentAmount),
         description: paymentDesc || 'WhatsApp Order Payment',
       });
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConversationId) pollNewMessages(activeConversationId);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
@@ -101,7 +101,7 @@ export const Inbox: React.FC = () => {
           text: caption,
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConversationId) pollNewMessages(activeConversationId);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setIsCatalogModalOpen(false);
     } catch (err: any) {
@@ -186,47 +186,119 @@ export const Inbox: React.FC = () => {
     }
   }, [contactIdParam, conversationIdParam, convData?.length]);
 
-  // Fetch messages for selected conversation — always the latest page;
-  // older history is loaded on demand into `olderMessages` below.
-  const { data: msgData, isLoading: loadingMsgs, isError: msgError, refetch: refetchMsgs } = useQuery({
-    queryKey: ['messages', activeConversationId],
-    queryFn: async () => {
-      if (!activeConversationId) return null;
-      const res = await apiClient.get(`/inbox/conversations/${activeConversationId}/messages`);
-      return res.data.data;
-    },
-    enabled: !!activeConversationId,
-    refetchInterval: 3000,
-  });
-
-  // Manually-loaded older pages, prepended before whatever the live/polled
-  // query currently holds — reset whenever the active conversation changes.
-  const [olderMessages, setOlderMessages] = useState<any[]>([]);
+  // Messages for the selected conversation — a single deduped-by-id list,
+  // synced incrementally instead of re-fetching "the latest 50" on every 3s
+  // poll. A fixed "latest N" window slides forward as new messages arrive;
+  // combined with manually-loaded older history, that used to silently drop
+  // whatever fell out of the middle (e.g. messages 51-60 vanish once the
+  // live window slides from [51-100] to [61-110] after 10 new messages
+  // arrive, since neither the "older" batch nor the new live batch contains
+  // them). Polling for only what's newer than the last message we already
+  // have, and merging rather than replacing, means nothing already on
+  // screen can ever fall out of view.
+  const [messages, setMessages] = useState<any[]>([]);
+  const [msgConversationMeta, setMsgConversationMeta] = useState<any>(null);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const [msgError, setMsgError] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const messagesRef = useRef<any[]>([]);
   useEffect(() => {
-    setOlderMessages([]);
-    setHasMoreOlder(false);
-  }, [activeConversationId]);
-  useEffect(() => {
-    // Once the user has paged back manually, hasMoreOlder is owned by
-    // loadOlderMessages's own response instead — the latest-page poll's
-    // hasMore always describes "older than the live page", which is a
-    // separate question once earlier pages are already loaded here.
-    if (msgData && olderMessages.length === 0) {
-      setHasMoreOlder(Boolean(msgData.hasMore));
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const mergeMessages = (prev: any[], incoming: any[], prepend: boolean) => {
+    if (incoming.length === 0) return prev;
+    const existingIds = new Set(prev.map((m) => m.id));
+    const fresh = incoming.filter((m) => !existingIds.has(m.id));
+    if (fresh.length === 0) return prev;
+    return prepend ? [...fresh, ...prev] : [...prev, ...fresh];
+  };
+
+  const fetchInitialMessages = async (convId: string) => {
+    setLoadingMsgs(true);
+    setMsgError(false);
+    try {
+      const res = await apiClient.get(`/inbox/conversations/${convId}/messages`);
+      setMessages(res.data.data.messages || []);
+      setMsgConversationMeta(res.data.data.conversation || null);
+      setHasMoreOlder(Boolean(res.data.data.hasMore));
+    } catch {
+      setMsgError(true);
+    } finally {
+      setLoadingMsgs(false);
     }
-  }, [msgData?.hasMore]);
-  const allMessages = [...olderMessages, ...(msgData?.messages || [])];
+  };
+
+  const pollNewMessages = async (convId: string) => {
+    const current = messagesRef.current;
+    try {
+      const params: any = {};
+      if (current.length > 0) {
+        params.after = current[current.length - 1].createdAt;
+      }
+      const res = await apiClient.get(`/inbox/conversations/${convId}/messages`, { params });
+      setMessages((prev) => mergeMessages(prev, res.data.data.messages || [], false));
+      if (current.length === 0) {
+        setMsgConversationMeta(res.data.data.conversation || null);
+        setHasMoreOlder(Boolean(res.data.data.hasMore));
+      }
+    } catch {
+      // Silent — a transient poll failure shouldn't disrupt the open chat;
+      // the next 3s tick tries again.
+    }
+  };
+
+  useEffect(() => {
+    setMessages([]);
+    setMsgConversationMeta(null);
+    setHasMoreOlder(false);
+    if (activeConversationId) {
+      fetchInitialMessages(activeConversationId);
+    }
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const interval = setInterval(() => pollNewMessages(activeConversationId), 3000);
+    return () => clearInterval(interval);
+  }, [activeConversationId]);
+
+  // For status changes on messages already on screen (delivered → read,
+  // etc.) — pollNewMessages only ever adds messages newer than the last one
+  // it has, so it can't pick up a status flip on an existing message.
+  // Re-fetches the latest page and merges by id, UPDATING any row that
+  // already exists (as well as adding genuinely new ones) instead of either
+  // ignoring status changes or blindly replacing state (which would drop
+  // any earlier history the user had paged back into).
+  const refreshRecentMessageStatuses = async (convId: string) => {
+    try {
+      const res = await apiClient.get(`/inbox/conversations/${convId}/messages`);
+      setMsgConversationMeta(res.data.data.conversation || null);
+      const latest = res.data.data.messages || [];
+      if (latest.length === 0) return;
+      setMessages((prev) => {
+        const byId = new Map(prev.map((m) => [m.id, m]));
+        for (const m of latest) byId.set(m.id, m);
+        return Array.from(byId.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      });
+    } catch {
+      // silent — the periodic poll or next socket event will catch up
+    }
+  };
+
+  const allMessages = messages;
   const loadOlderMessages = async () => {
-    const oldest = olderMessages[0] || msgData?.messages?.[0];
+    const oldest = messagesRef.current[0];
     if (!activeConversationId || !oldest) return;
     setLoadingOlder(true);
     try {
       const res = await apiClient.get(`/inbox/conversations/${activeConversationId}/messages`, {
         params: { before: oldest.createdAt, limit: 50 },
       });
-      setOlderMessages((prev) => [...(res.data.data.messages || []), ...prev]);
+      setMessages((prev) => mergeMessages(prev, res.data.data.messages || [], true));
       setHasMoreOlder(Boolean(res.data.data.hasMore));
     } catch (err: any) {
       toast.error('Failed to load older messages', { description: err.response?.data?.error?.message || err.message });
@@ -269,13 +341,13 @@ export const Inbox: React.FC = () => {
     socket.on('new_message', () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (activeConvRef.current) {
-        queryClient.invalidateQueries({ queryKey: ['messages', activeConvRef.current] });
+        pollNewMessages(activeConvRef.current);
       }
     });
 
     socket.on('message_status_update', () => {
       if (activeConvRef.current) {
-        queryClient.invalidateQueries({ queryKey: ['messages', activeConvRef.current] });
+        refreshRecentMessageStatuses(activeConvRef.current);
       }
     });
 
@@ -295,7 +367,7 @@ export const Inbox: React.FC = () => {
     },
     onSuccess: () => {
       setMessageText('');
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConversationId) pollNewMessages(activeConversationId);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (err: any) => {
@@ -331,7 +403,10 @@ export const Inbox: React.FC = () => {
       return res.data.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      // Reassignment doesn't add a new message — it changes the
+      // conversation's own assignedAgent, which pollNewMessages doesn't
+      // refresh once messages already exist.
+      if (activeConversationId) refreshRecentMessageStatuses(activeConversationId);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (err: any) => {
@@ -349,7 +424,7 @@ export const Inbox: React.FC = () => {
       return res.data.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+      if (activeConversationId) refreshRecentMessageStatuses(activeConversationId);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (err: any) => {
@@ -384,7 +459,7 @@ export const Inbox: React.FC = () => {
     noteMutation.mutate();
   };
 
-  const currentConversation = msgData?.conversation || convData?.find((c: any) => c.id === activeConversationId);
+  const currentConversation = msgConversationMeta || convData?.find((c: any) => c.id === activeConversationId);
   const isWindowExpired = currentConversation?.windowExpiresAt && new Date(currentConversation.windowExpiresAt) < new Date();
   // A plain agent has no access to a chat assigned to someone else — the
   // backend already rejects any send/resolve attempt with a 403, this just
@@ -691,7 +766,7 @@ export const Inbox: React.FC = () => {
                       <div className="text-center text-xs text-rose-400 space-y-2 py-8">
                         <p>Failed to load messages.</p>
                         <button
-                          onClick={() => refetchMsgs()}
+                          onClick={() => activeConversationId && fetchInitialMessages(activeConversationId)}
                           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
                         >
                           Retry
@@ -952,7 +1027,7 @@ export const Inbox: React.FC = () => {
                             mediaUrl: url,
                             filename: 'Attachment.jpg',
                           });
-                          queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+                          if (activeConversationId) pollNewMessages(activeConversationId);
                           queryClient.invalidateQueries({ queryKey: ['conversations'] });
                         } catch (err: any) {
                           toast.error('Failed to attach media', { description: err.message });

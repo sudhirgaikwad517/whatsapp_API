@@ -65,6 +65,34 @@ export async function deleteRule(organizationId: string, ruleId: string) {
   });
 }
 
+// Splits into lowercased words, punctuation treated as a separator (not
+// stripped to nothing) — used for multi-word keyword matching so word
+// boundaries survive normalization.
+function normalizeWords(text: string): string[] {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// True if keywordWords appears as a contiguous run inside textWords.
+function containsWordSequence(textWords: string[], keywordWords: string[]): boolean {
+  if (keywordWords.length === 0 || keywordWords.length > textWords.length) return false;
+  for (let i = 0; i <= textWords.length - keywordWords.length; i++) {
+    let match = true;
+    for (let j = 0; j < keywordWords.length; j++) {
+      if (textWords[i + j] !== keywordWords[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
 /**
  * Intelligent Keyword Matcher for Webhook Worker
  * Matches inbound text like "Hi", "Hiii", "HIIII", "hello", "Hello!" against tenant rules.
@@ -79,12 +107,31 @@ export async function findMatchingAutoReply(organizationId: string, inboundText:
     return null;
   }
 
+  // All-spaces-stripped form, kept for single-word keyword matching (loose
+  // substring matching is intentional there, e.g. keyword "help" matching
+  // inside "helpful").
   const cleanedText = inboundText.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const textWords = normalizeWords(inboundText);
 
   for (const rule of rules) {
     for (const keyword of rule.keywords) {
-      const cleanKeyword = keyword.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (!cleanKeyword) continue;
+      const keywordWords = normalizeWords(keyword);
+      if (keywordWords.length === 0) continue;
+
+      if (keywordWords.length > 1) {
+        // Multi-word keyword: require its words to appear as a contiguous,
+        // word-boundary-respecting sequence in the message — stripping all
+        // spaces before matching (the old approach) collapsed word
+        // boundaries and could match unrelated text, e.g. keyword "help me"
+        // (stripped to "helpme") false-matched "...help meeting..." because
+        // "helpme" is a contiguous substring of "helpmeeting".
+        if (containsWordSequence(textWords, keywordWords)) {
+          return rule.replyMessage;
+        }
+        continue;
+      }
+
+      const cleanKeyword = keywordWords[0];
 
       // 1. Direct contains or exact match
       if (cleanedText === cleanKeyword || cleanedText.includes(cleanKeyword)) {

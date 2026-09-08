@@ -1,5 +1,8 @@
+import { PrismaClient, Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+
+type QueryableClient = PrismaClient | Prisma.TransactionClient;
 
 export async function deductAiCredit(organizationId: string, source: string = 'AI_COPILOT'): Promise<number> {
   const org = await prisma.organization.findUnique({
@@ -32,8 +35,8 @@ export async function deductAiCredit(organizationId: string, source: string = 'A
   return updated.aiCreditsBalance;
 }
 
-export async function addAiCredits(organizationId: string, creditsAmount: number): Promise<number> {
-  const updated = await prisma.organization.update({
+export async function addAiCredits(organizationId: string, creditsAmount: number, client: QueryableClient = prisma): Promise<number> {
+  const updated = await client.organization.update({
     where: { id: organizationId },
     data: {
       aiCreditsBalance: { increment: creditsAmount },
