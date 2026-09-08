@@ -22,6 +22,7 @@ import {
   CreditCard,
   ShoppingBag,
   CheckCircle,
+  X,
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
@@ -52,6 +53,7 @@ export const Inbox: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDesc, setPaymentDesc] = useState('');
   const [isRequestingPayment, setIsRequestingPayment] = useState(false);
+  const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
 
   const { data: catalogProducts } = useQuery({
     queryKey: ['products-list'],
@@ -206,6 +208,38 @@ export const Inbox: React.FC = () => {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Auto-scroll: jump straight to the newest message when a conversation is
+  // opened/switched (instead of leaving the view parked at the oldest one,
+  // which needed a long manual scroll), and keep following new messages as
+  // they arrive — but only while the agent is already near the bottom, so
+  // scrolling up to read older history isn't yanked back down by a poll tick.
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
+  const justSwitchedConvRef = useRef(false);
+
+  useEffect(() => {
+    justSwitchedConvRef.current = true;
+    isNearBottomRef.current = true;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el || messages.length === 0) return;
+    const forceJump = justSwitchedConvRef.current;
+    if (forceJump || isNearBottomRef.current) {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: forceJump ? 'auto' : 'smooth' });
+      });
+    }
+    justSwitchedConvRef.current = false;
+  }, [messages]);
+
+  const handleMessagesScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  };
 
   const mergeMessages = (prev: any[], incoming: any[], prepend: boolean) => {
     if (incoming.length === 0) return prev;
@@ -759,7 +793,7 @@ export const Inbox: React.FC = () => {
               {activeTab === 'messages' ? (
                 <>
                   {/* Messages Feed */}
-                  <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
+                  <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
                     {loadingMsgs ? (
                       <div className="text-center text-xs text-slate-500">Loading thread history...</div>
                     ) : msgError ? (
@@ -798,11 +832,21 @@ export const Inbox: React.FC = () => {
                             }`}
                           >
                             {msg.content?.headerMediaUrl && (
-                              <img src={msg.content.headerMediaUrl} alt="Header" className="rounded-lg max-h-48 w-full object-cover mb-2 border border-emerald-400/30" />
+                              <img
+                                src={msg.content.headerMediaUrl}
+                                alt="Header"
+                                onClick={() => setViewingImageUrl(msg.content.headerMediaUrl)}
+                                className="rounded-lg max-h-48 w-full object-cover mb-2 border border-emerald-400/30 cursor-pointer hover:opacity-90 transition-opacity"
+                              />
                             )}
                             {msg.type === 'IMAGE' && msg.content?.mediaUrl ? (
                               <div className="space-y-1">
-                                <img src={msg.content.mediaUrl} alt="Attachment" className="rounded-lg max-h-48 object-cover border border-emerald-400/30" />
+                                <img
+                                  src={msg.content.mediaUrl}
+                                  alt="Attachment"
+                                  onClick={() => setViewingImageUrl(msg.content.mediaUrl)}
+                                  className="rounded-lg max-h-48 object-cover border border-emerald-400/30 cursor-pointer hover:opacity-90 transition-opacity"
+                                />
                                 {msg.content.caption && <p className="text-xs mt-1 break-words">{msg.content.caption}</p>}
                               </div>
                             ) : msg.type === 'DOCUMENT' && msg.content?.mediaUrl ? (
@@ -1236,6 +1280,26 @@ export const Inbox: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {viewingImageUrl && (
+        <div
+          className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setViewingImageUrl(null)}
+        >
+          <button
+            onClick={() => setViewingImageUrl(null)}
+            className="absolute top-4 right-4 text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-full p-2 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={viewingImageUrl}
+            alt="Full size attachment"
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full rounded-lg shadow-2xl object-contain"
+          />
         </div>
       )}
     </div>
