@@ -56,10 +56,17 @@ export const webhookWorker = new Worker(
           const formattedPhone = `+${digitsOnly}`;
           const senderName = value.contacts?.find((c: { wa_id: string; profile: { name: string } }) => c.wa_id === msg.from)?.profile?.name;
 
-          // Robust contact matching (find existing contact regardless of spaces or country code prefix)
+          // Robust contact matching (find existing contact regardless of spaces or country code prefix).
+          // deletedAt: null is required here — without it, a contact the org
+          // deliberately deleted (e.g. to fix a wrong name saved during a
+          // campaign import) got silently resurrected — same row, same stale
+          // name — the instant that customer sent another message, and it
+          // stayed invisible in Contacts CRM (which does filter deletedAt)
+          // while still being fully active in Live Inbox.
           let contact = await prisma.contact.findFirst({
             where: {
               organizationId: waAccount.organizationId,
+              deletedAt: null,
               OR: [
                 { phoneNumber: { contains: tenDigits } },
                 { phoneNumber: formattedPhone },

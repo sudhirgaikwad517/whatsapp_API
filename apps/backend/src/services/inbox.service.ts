@@ -84,6 +84,16 @@ export async function listConversations(
     // avoiding massive N+1 database spikes on every inbox refresh.
   }
 
+  // Self-heal orphaned escalations org-wide on every list load — see
+  // clearConversationMessages for why this state (ESCALATED with no
+  // assignedAgentId) is never legitimate. Doing it here means the sidebar's
+  // "Escalated to Live Agent" badge stops being shown for these without the
+  // agent needing to open each one individually first.
+  await prisma.conversation.updateMany({
+    where: { organizationId, status: 'ESCALATED', assignedAgentId: null },
+    data: { status: 'OPEN' },
+  });
+
   const where: any = { organizationId };
   if (options.status) where.status = options.status;
   if (options.assignedAgentId) where.assignedAgentId = options.assignedAgentId;
@@ -147,14 +157,20 @@ export async function getConversationMessages(
   if (!options.before && !options.after) {
     const isFirstOpenByAssignedAgent =
       requester?.role === 'AGENT' && conversation.assignedAgentId === requester.id && !conversation.agentOpenedAt;
+    // See clearConversationMessages for why this self-heal exists — an
+    // ESCALATED status with no assignedAgentId is a leftover from an
+    // already-fixed routing bug, never a real reachable state.
+    const isOrphanedEscalation = conversation.status === 'ESCALATED' && !conversation.assignedAgentId;
 
     await prisma.conversation.update({
       where: { id: conversationId },
       data: {
         unreadCount: 0,
         ...(isFirstOpenByAssignedAgent ? { agentOpenedAt: new Date() } : {}),
+        ...(isOrphanedEscalation ? { status: 'OPEN' } : {}),
       },
     });
+    if (isOrphanedEscalation) conversation.status = 'OPEN';
   }
 
   // `after` powers incremental polling: the frontend re-requests only
@@ -350,7 +366,20 @@ export async function clearConversationMessages(organizationId: string, conversa
 
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
-    data: { lastMessageSnippet: null, lastMessageAt: null, unreadCount: 0 },
+    data: {
+      lastMessageSnippet: null,
+      // lastMessageAt is deliberately left untouched, not nulled — Postgres
+      // sorts NULLs FIRST on a DESC order by default, so nulling this out
+      // used to jump a just-cleared chat straight to the TOP of the sidebar
+      // list (the opposite of what clearing a chat should visually do).
+      unreadCount: 0,
+      // An ESCALATED status with no assignedAgentId is never a real,
+      // reachable state (real AI handoff always sets both together) — it's
+      // a leftover from an already-fixed routing bug earlier this
+      // deployment. Self-heals here since Clear Chat is a natural moment an
+      // agent notices/acts on a chat that looks stuck this way.
+      ...(conversation.status === 'ESCALATED' && !conversation.assignedAgentId ? { status: 'OPEN' } : {}),
+    },
   });
 
   try {

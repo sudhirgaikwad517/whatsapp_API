@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -35,8 +35,12 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [scheduledAt, setScheduledAt] = useState<string>('');
   const [audienceSource, setAudienceSource] = useState<'CRM' | 'CSV'>('CRM');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [csvContacts, setCsvContacts] = useState<CsvParsedContact[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRawRows, setCsvRawRows] = useState<string[][]>([]);
+  const [phoneColIdx, setPhoneColIdx] = useState<number>(-1);
+  const [nameColIdx, setNameColIdx] = useState<number>(-1);
+  const [emailColIdx, setEmailColIdx] = useState<number>(-1);
+  const [saveContactsToCrm, setSaveContactsToCrm] = useState<boolean>(true);
   const [csvFileName, setCsvFileName] = useState<string>('');
   const [isBatchEnabled, setIsBatchEnabled] = useState<boolean>(true);
   const [batchSize, setBatchSize] = useState<number>(50);
@@ -129,60 +133,64 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         if (lines.length === 0) throw new Error('Uploaded CSV file is empty.');
 
         const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/["']/g, ''));
-        const headers = rawHeaders.map((h) => h.toLowerCase());
-        setCsvHeaders(rawHeaders);
+        const headersLower = rawHeaders.map((h) => h.toLowerCase());
+        const rows = lines.slice(1).map((line) => line.split(',').map((c) => c.trim().replace(/["']/g, '')));
 
-        const phoneIdx = headers.findIndex((h) =>
+        if (rows.length === 0) {
+          throw new Error('No data rows found below the header row.');
+        }
+
+        // Best-guess defaults — the agent confirms/overrides via the column
+        // pickers below rather than this being final. Multiple similarly-
+        // named columns (e.g. "Business Name" and "Contact Name") used to
+        // silently pick whichever came first, which is how a wrong name got
+        // saved to CRM during a real campaign.
+        const guessedPhoneIdx = headersLower.findIndex((h) =>
           ['phone', 'phonenumber', 'mobile', 'number', 'contact'].some((k) => h.includes(k))
         );
+        const guessedNameIdx = headersLower.findIndex((h) => ['name', 'firstname', 'first_name'].some((k) => h.includes(k)));
+        const guessedEmailIdx = headersLower.findIndex((h) => h.includes('email'));
 
-        if (phoneIdx === -1) {
-          throw new Error('CSV must contain a header named "phone", "phoneNumber", or "mobile".');
-        }
-
-        const nameIdx = headers.findIndex((h) => ['name', 'firstname', 'first_name'].some((k) => h.includes(k)));
-        const emailIdx = headers.findIndex((h) => ['email'].some((k) => h.includes(k)));
-
-        const parsedList: CsvParsedContact[] = [];
-
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(',').map((c) => c.trim().replace(/["']/g, ''));
-          const phone = cols[phoneIdx];
-          if (!phone) continue;
-
-          const rawName = nameIdx !== -1 ? cols[nameIdx] : undefined;
-
-          // Parse all columns into customAttributes for dynamic variable mapping
-          const customAttrs: Record<string, string> = {};
-          rawHeaders.forEach((headerName, idx) => {
-            if (cols[idx] !== undefined) {
-              customAttrs[headerName] = cols[idx];
-            }
-          });
-
-          parsedList.push({
-            phoneNumber: phone,
-            firstName: cleanAndFormatFirstName(rawName),
-            email: emailIdx !== -1 ? cols[emailIdx] : undefined,
-            customAttributes: customAttrs,
-          });
-        }
-
-        if (parsedList.length === 0) {
-          throw new Error('No valid phone number rows found in CSV.');
-        }
-
-        setCsvContacts(parsedList);
+        setCsvHeaders(rawHeaders);
+        setCsvRawRows(rows);
+        setPhoneColIdx(guessedPhoneIdx);
+        setNameColIdx(guessedNameIdx);
+        setEmailColIdx(guessedEmailIdx);
         setError('');
       } catch (err: any) {
         setError(err.message || 'Failed to parse CSV file.');
-        setCsvContacts([]);
         setCsvHeaders([]);
+        setCsvRawRows([]);
+        setPhoneColIdx(-1);
+        setNameColIdx(-1);
+        setEmailColIdx(-1);
       }
     };
 
     reader.readAsText(file);
   };
+
+  // Recomputed live from the raw rows whenever the agent changes a column
+  // mapping — nothing is finalized at parse time anymore.
+  const csvContacts: CsvParsedContact[] = useMemo(() => {
+    if (phoneColIdx === -1 || csvRawRows.length === 0) return [];
+    return csvRawRows.reduce<CsvParsedContact[]>((acc, cols) => {
+      const phone = cols[phoneColIdx];
+      if (!phone) return acc;
+      const rawName = nameColIdx !== -1 ? cols[nameColIdx] : undefined;
+      const customAttrs: Record<string, string> = {};
+      csvHeaders.forEach((headerName, idx) => {
+        if (cols[idx] !== undefined) customAttrs[headerName] = cols[idx];
+      });
+      acc.push({
+        phoneNumber: phone,
+        firstName: cleanAndFormatFirstName(rawName),
+        email: emailColIdx !== -1 ? cols[emailColIdx] : undefined,
+        customAttributes: customAttrs,
+      });
+      return acc;
+    }, []);
+  }, [csvRawRows, csvHeaders, phoneColIdx, nameColIdx, emailColIdx]);
 
   const launchMutation = useMutation({
     mutationFn: async () => {
@@ -194,6 +202,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         audienceSource,
         tagIds: audienceSource === 'CRM' ? selectedTagIds : undefined,
         csvContacts: audienceSource === 'CSV' ? csvContacts : undefined,
+        saveContactsToCrm: audienceSource === 'CSV' ? saveContactsToCrm : undefined,
         isBatchEnabled,
         batchSize,
         batchIntervalMinutes,
@@ -211,8 +220,12 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setScheduledAt('');
       setAudienceSource('CRM');
       setSelectedTagIds([]);
-      setCsvContacts([]);
       setCsvHeaders([]);
+      setCsvRawRows([]);
+      setPhoneColIdx(-1);
+      setNameColIdx(-1);
+      setEmailColIdx(-1);
+      setSaveContactsToCrm(true);
       setCsvFileName('');
       setIsBatchEnabled(true);
       setBatchSize(50);
@@ -643,6 +656,86 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                     <span className="font-semibold truncate max-w-[200px]">{csvFileName}</span>
                   </div>
                   <span className="font-bold">{csvContacts.length} Contacts Parsed</span>
+                </div>
+              )}
+
+              {csvHeaders.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] font-semibold text-slate-300">
+                    Map CSV Columns {csvHeaders.length > 3 && <span className="text-slate-500 font-normal">— your sheet has {csvHeaders.length} columns, confirm which one is which</span>}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label htmlFor="csv-col-phone" className="block text-[10px] text-slate-500 mb-1">
+                        Phone Number Column *
+                      </label>
+                      <select
+                        id="csv-col-phone"
+                        value={phoneColIdx}
+                        onChange={(e) => setPhoneColIdx(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={-1}>— Select column —</option>
+                        {csvHeaders.map((h, idx) => (
+                          <option key={idx} value={idx}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="csv-col-name" className="block text-[10px] text-slate-500 mb-1">
+                        Name Column
+                      </label>
+                      <select
+                        id="csv-col-name"
+                        value={nameColIdx}
+                        onChange={(e) => setNameColIdx(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={-1}>— None —</option>
+                        {csvHeaders.map((h, idx) => (
+                          <option key={idx} value={idx}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="csv-col-email" className="block text-[10px] text-slate-500 mb-1">
+                        Email Column
+                      </label>
+                      <select
+                        id="csv-col-email"
+                        value={emailColIdx}
+                        onChange={(e) => setEmailColIdx(Number(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value={-1}>— None —</option>
+                        {csvHeaders.map((h, idx) => (
+                          <option key={idx} value={idx}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {phoneColIdx === -1 ? (
+                    <p className="text-[11px] text-rose-400">Select which column has the phone number to continue.</p>
+                  ) : nameColIdx === -1 ? (
+                    <p className="text-[11px] text-amber-400">No name column selected — recipients will be saved/addressed as "Customer".</p>
+                  ) : null}
+
+                  <label className="flex items-start space-x-2 pt-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveContactsToCrm}
+                      onChange={(e) => setSaveContactsToCrm(e.target.checked)}
+                      className="mt-0.5 accent-emerald-500"
+                    />
+                    <span className="text-[11px] text-slate-400">
+                      Save these contacts to Contacts CRM.{' '}
+                      <span className="text-slate-500">
+                        Uncheck for a one-off send (e.g. a purchased/rented list) — recipients still receive the
+                        message and delivery is still tracked, but new contacts from this file won't show up in
+                        your saved Contacts list. Existing CRM contacts are never removed.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
             </div>

@@ -24,6 +24,12 @@ export interface CreateCampaignInput {
   batchIntervalMinutes?: number;
   variableMapping?: Record<string, string>;
   campaignKnowledgeBase?: string;
+  // CSV audience only — when false, a phone number that doesn't already
+  // exist as a CRM contact is still created (CampaignRecipient.contactId is
+  // a required FK, so a row must exist to track delivery), but immediately
+  // soft-deleted so it never shows up in Contacts CRM. Existing CRM contacts
+  // matched by phone are never touched by this flag either way.
+  saveContactsToCrm?: boolean;
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -85,6 +91,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
     // ── Option B: CSV Upload Specific Audience (Full Name in CRM, First Name in Campaign) ──
     const processedPhones = new Set<string>();
+    const saveToCrm = input.saveContactsToCrm !== false;
 
     for (const rawContact of input.csvContacts) {
       if (!rawContact.phoneNumber) continue;
@@ -103,6 +110,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
           },
         },
       });
+      const isNewlyCreatedThisRun = !contact;
 
       if (!contact) {
         contact = await prisma.contact.create({
@@ -114,6 +122,14 @@ export async function createCampaign(organizationId: string, input: CreateCampai
             email: rawContact.email,
             customAttributes: rawContact.customAttributes || {},
             isOptedIn: true,
+            // A CampaignRecipient row always needs a real contactId (required
+            // FK, used for delivery-status tracking/analytics) — when the
+            // agent declined to save this as a real CRM contact, mark it
+            // deleted immediately so it's invisible in Contacts CRM from the
+            // start. If this number messages in later, the inbound-message
+            // contact lookup only matches non-deleted contacts, so it gets a
+            // fresh, visible contact rather than resurrecting this one.
+            ...(saveToCrm ? {} : { deletedAt: new Date() }),
           },
         });
       } else {
@@ -127,7 +143,12 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         });
       }
 
-      if (contact.isOptedIn !== false && !contact.deletedAt) {
+      // A contact we ourselves just soft-deleted a moment ago (the
+      // saveContactsToCrm: false path above) must still receive this
+      // campaign — only a genuinely pre-existing deleted/opted-out contact
+      // is meant to be excluded here.
+      const intentionallyHiddenJustNow = isNewlyCreatedThisRun && !saveToCrm;
+      if (contact.isOptedIn !== false && (!contact.deletedAt || intentionallyHiddenJustNow)) {
         targetContacts.push({
           id: contact.id,
           phoneNumber: contact.phoneNumber,

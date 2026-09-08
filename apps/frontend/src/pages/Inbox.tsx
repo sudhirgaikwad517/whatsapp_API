@@ -204,7 +204,14 @@ export const Inbox: React.FC = () => {
 
   // Fetch active conversations list with pagination & search
   const { data: convDataResponse, isLoading: loadingConvs, isError: convError, refetch: refetchConvs } = useQuery({
-    queryKey: ['conversations', filterTab, user?.id, contactIdParam, page, search],
+    // contactIdParam is intentionally NOT part of this key — it only drives
+    // a one-time "ensure a conversation exists for this deep-linked contact"
+    // side effect in queryFn below, never a result filter. Including it here
+    // used to make React Query treat every single chat click as a brand new,
+    // uncached query (the sidebar wrote contactId into the URL on every
+    // click), which reset the whole list's scroll position back to the top
+    // each time an agent picked a different chat.
+    queryKey: ['conversations', filterTab, user?.id, page, search],
     queryFn: async () => {
       const params: any = { page, limit: 50 };
       if (filterTab === 'mine' && user?.id) {
@@ -666,10 +673,7 @@ export const Inbox: React.FC = () => {
             convData?.map((chat: any) => (
               <button
                 key={chat.id}
-                onClick={() => {
-                  setActiveConversationId(chat.id);
-                  setSearchParams({ contactId: chat.contactId });
-                }}
+                onClick={() => setActiveConversationId(chat.id)}
                 className={`w-full p-4 text-left hover:bg-slate-800/50 transition-all flex items-start space-x-3 ${
                   activeConversationId === chat.id ? 'bg-slate-800 border-l-4 border-emerald-500' : ''
                 }`}
