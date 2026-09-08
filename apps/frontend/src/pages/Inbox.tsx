@@ -809,6 +809,10 @@ export const Inbox: React.FC = () => {
                               <a href={msg.content.mediaUrl} target="_blank" rel="noreferrer" className="flex items-center space-x-2 text-xs underline font-mono">
                                 📎 <span>{msg.content.filename || 'Download Document'}</span>
                               </a>
+                            ) : msg.type === 'AUDIO' && msg.content?.mediaUrl ? (
+                              <audio controls src={msg.content.mediaUrl} className="max-w-full" style={{ height: 36 }} />
+                            ) : msg.type === 'VIDEO' && msg.content?.mediaUrl ? (
+                              <video controls src={msg.content.mediaUrl} className="rounded-lg max-h-56 max-w-full" />
                             ) : (
                               <p className="whitespace-pre-line break-words">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
                             )}
