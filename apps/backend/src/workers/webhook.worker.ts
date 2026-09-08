@@ -105,9 +105,16 @@ export const webhookWorker = new Worker(
           let assignedAgentId = existingConv?.assignedAgentId || null;
 
           if (isAiEnabled) {
-            // When AI Auto-Responder is ON:
-            // Unless chat is actively ESCALATED for human intervention, clear assignedAgentId to null so AI handles the message 24/7!
-            if (!existingConv || existingConv.status !== 'ESCALATED') {
+            // When AI Auto-Responder is ON: clear assignedAgentId so AI
+            // handles the message 24/7 — UNLESS a human already has this
+            // conversation (assigned via a real AI escalation, OR simply by
+            // having replied to it themselves). Checking status === 'ESCALATED'
+            // here (rather than "is it currently assigned at all") used to
+            // wipe out a plain human claim-by-replying on the customer's very
+            // next message, since claiming a conversation doesn't set that
+            // status — AI would silently take the conversation right back
+            // and reply over the agent.
+            if (!existingConv || !existingConv.assignedAgentId) {
               assignedAgentId = null;
             }
           } else {
@@ -156,7 +163,13 @@ export const webhookWorker = new Worker(
             update: {
               windowExpiresAt,
               status: existingConv?.status === 'ESCALATED' ? 'ESCALATED' : 'OPEN',
-              ...(isAiEnabled && existingConv?.status !== 'ESCALATED' ? { assignedAgentId: null } : {}),
+              // Same fix as the assignedAgentId variable above, applied to the
+              // actual DB write: only let AI reclaim a conversation nobody is
+              // already handling. This used to check status !== 'ESCALATED'
+              // instead of "is it already assigned", which wiped out a human
+              // agent's claim (made by simply replying, which doesn't set
+              // ESCALATED) the moment the customer sent their next message.
+              ...(isAiEnabled && !existingConv?.assignedAgentId ? { assignedAgentId: null } : {}),
               ...(!isAiEnabled && assignedAgentId && !existingConv?.assignedAgentId ? { assignedAgentId } : {}),
             },
             create: {

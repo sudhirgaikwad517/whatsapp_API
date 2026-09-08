@@ -31,15 +31,16 @@ function assertConversationAccess(conversation: { assignedAgentId: string | null
  */
 async function claimConversationIfUnassigned(conversationId: string, actingAgent?: Requester): Promise<void> {
   if (!actingAgent) return;
-  // Marking this ESCALATED (not just setting assignedAgentId) matters: the
-  // inbound webhook worker only preserves assignedAgentId across the
-  // customer's next message when status === 'ESCALATED' — otherwise, with AI
-  // auto-respond on, it wipes assignedAgentId back to null on every inbound
-  // message. Without this, a human agent claiming a chat by replying would
-  // have AI take it right back over as soon as the customer wrote again.
+  // Setting assignedAgentId alone is enough — webhook.worker.ts's AI-routing
+  // logic now preserves any already-assigned conversation regardless of its
+  // status label (previously it only preserved status === 'ESCALATED', which
+  // this function had to fake-set here purely to keep AI from reclaiming a
+  // plain human claim, and that leaked into the Inbox UI showing "Escalated
+  // to Live Agent" on every ordinary agent-initiated send — including things
+  // like sending a catalog product, not just a real AI handoff).
   await prisma.conversation.updateMany({
     where: { id: conversationId, assignedAgentId: null },
-    data: { assignedAgentId: actingAgent.id, assignedAt: new Date(), agentOpenedAt: new Date(), status: 'ESCALATED' },
+    data: { assignedAgentId: actingAgent.id, assignedAt: new Date(), agentOpenedAt: new Date() },
   });
 }
 
@@ -456,6 +457,22 @@ export async function sendOutboundMediaMessage(
 
   if (!conversation) throw new AppError('Conversation not found.', 404, 'CONVERSATION_NOT_FOUND');
   if (actingAgent) assertConversationAccess(conversation, actingAgent);
+
+  // Same 24-hour service window check sendOutboundTextMessage already has —
+  // a raw media/image message (e.g. sending a catalog product) is a
+  // free-form message just like text, and Meta rejects it the same way
+  // outside an open window. Without this the agent got no warning at all:
+  // the initial API call could still return 200 with a wamid, and the
+  // message only showed as failed later via an async delivery-status
+  // webhook — easy to miss, and by then the agent had already moved on
+  // thinking it was sent.
+  if (env.NODE_ENV === 'production' && conversation.windowExpiresAt && conversation.windowExpiresAt < new Date()) {
+    throw new AppError(
+      'The 24-hour customer service window has expired. You must use an approved WhatsApp Template message to re-engage this contact.',
+      400,
+      'SERVICE_WINDOW_EXPIRED'
+    );
+  }
 
   // Actually dispatch via the Meta Graph API — this previously just wrote a
   // Message row with a fabricated wamid and never sent anything to WhatsApp.

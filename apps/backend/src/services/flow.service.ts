@@ -1,5 +1,6 @@
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { canonicalizeGreeting, isKnownGreeting } from './auto-responder.service.js';
 
 export interface CreateFlowInput {
   name: string;
@@ -70,7 +71,17 @@ export async function evaluateInboundFlow(organizationId: string, text: string) 
   });
 
   for (const flow of activeFlows) {
-    if (flow.triggerKeyword && flow.triggerKeyword.toLowerCase() === cleanText) {
+    if (!flow.triggerKeyword) continue;
+    const trigger = flow.triggerKeyword.toLowerCase();
+    if (trigger === cleanText) {
+      return flow;
+    }
+    // Tolerate common greeting misspellings/variants — a flow configured to
+    // trigger on "hi" should also fire on "hey"/"hie"/"hii"/"hello" etc.,
+    // not just that exact string. Only kicks in when the configured trigger
+    // is itself a recognized greeting, so a non-greeting trigger like "order
+    // status" is never loosened.
+    if (isKnownGreeting(trigger) && canonicalizeGreeting(cleanText) === canonicalizeGreeting(trigger)) {
       return flow;
     }
   }

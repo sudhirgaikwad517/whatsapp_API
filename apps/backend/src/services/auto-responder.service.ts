@@ -77,6 +77,34 @@ function normalizeWords(text: string): string[] {
     .filter(Boolean);
 }
 
+// Common real-world spellings/variants of a greeting all resolve to the same
+// canonical word. Runs AFTER repeated-character collapsing ("heyyy" -> "hey")
+// so both cases share one lookup. Anything not a recognized greeting is
+// returned unchanged (lowercased, NOT collapsed) so this can never rewrite an
+// unrelated keyword like "book"/"order" into something it isn't.
+const GREETING_CANONICAL_MAP: Record<string, string> = {
+  hi: 'hi', hey: 'hi', hie: 'hi', hii: 'hi', heya: 'hi', hiya: 'hi',
+  helo: 'hi', hello: 'hi', hallo: 'hi', hola: 'hi', hai: 'hi', yo: 'hi',
+  namaste: 'hi', namaskar: 'hi',
+};
+
+export function canonicalizeGreeting(word: string): string {
+  const lower = word.trim().toLowerCase();
+  const collapsed = lower.replace(/(.)\1+/g, '$1');
+  return GREETING_CANONICAL_MAP[collapsed] || GREETING_CANONICAL_MAP[lower] || lower;
+}
+
+// True only when `word` is itself a recognized greeting spelling — used to
+// gate the fuzzy-greeting check so it never fires for a non-greeting keyword
+// (canonicalizeGreeting() alone can't distinguish "already canonical" from
+// "not a greeting at all", since both return the input unchanged). Exported
+// for flow.service.ts's evaluateInboundFlow, which needs the same gate.
+export function isKnownGreeting(word: string): boolean {
+  const lower = word.trim().toLowerCase();
+  const collapsed = lower.replace(/(.)\1+/g, '$1');
+  return Boolean(GREETING_CANONICAL_MAP[collapsed] || GREETING_CANONICAL_MAP[lower]);
+}
+
 // True if keywordWords appears as a contiguous run inside textWords.
 function containsWordSequence(textWords: string[], keywordWords: string[]): boolean {
   if (keywordWords.length === 0 || keywordWords.length > textWords.length) return false;
@@ -141,6 +169,13 @@ export async function findMatchingAutoReply(organizationId: string, inboundText:
       // 2. Flexible repeated character match (e.g., "hiii", "hiiii" -> matches keyword "hi")
       const regexPattern = new RegExp(`^${cleanKeyword.replace(/(.)\1*/g, '$1+')}$`, 'i');
       if (regexPattern.test(cleanedText)) {
+        return rule.replyMessage;
+      }
+
+      // 3. Greeting-variant match (e.g. keyword "hi" also matches a message
+      // that's just "hey"/"hie"/"hello" — different letters entirely, so
+      // neither the substring nor repeated-character checks above catch it).
+      if (isKnownGreeting(cleanKeyword) && canonicalizeGreeting(cleanedText) === canonicalizeGreeting(cleanKeyword)) {
         return rule.replyMessage;
       }
     }
