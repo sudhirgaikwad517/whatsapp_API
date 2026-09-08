@@ -42,6 +42,7 @@ export async function getSlaAndAgentAnalytics(organizationId: string) {
       select: {
         id: true,
         assignedAgentId: true,
+        resolvedByAgentId: true,
         firstResponseTimeMs: true,
         status: true,
         createdAt: true,
@@ -80,7 +81,12 @@ export async function getSlaAndAgentAnalytics(organizationId: string) {
     : 0;
 
   const agentLeaderboard = members.map((member) => {
-    const agentConvs = conversations.filter((c) => c.assignedAgentId === member.userId);
+    // Resolving a conversation now clears assignedAgentId (hands it back to
+    // AI/bot auto-response) and snapshots who resolved it into
+    // resolvedByAgentId instead — so an agent's resolved conversations have
+    // to be pulled in via that field too, not just assignedAgentId, or a
+    // resolved chat would silently drop off their leaderboard count.
+    const agentConvs = conversations.filter((c) => c.assignedAgentId === member.userId || c.resolvedByAgentId === member.userId);
     const agentFRTConvs = agentConvs.filter((c) => c.firstResponseTimeMs !== null && c.firstResponseTimeMs !== undefined);
     const agentAvgFRT = agentFRTConvs.length > 0
       ? Number(((agentFRTConvs.reduce((acc, c) => acc + (c.firstResponseTimeMs || 0), 0) / agentFRTConvs.length) / 60000).toFixed(1))

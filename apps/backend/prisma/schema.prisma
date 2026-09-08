@@ -401,6 +401,13 @@ model Conversation {
   status             ConversationStatus @default(OPEN)
   firstResponseTimeMs Int?
   resolvedAt         DateTime?
+  // Snapshot of who resolved this conversation, taken at resolve time —
+  // separate from assignedAgentId because resolving now clears that field
+  // (handing the conversation back to AI/bot auto-response, matching the
+  // "Resolved (AI Active)" label already shown in the UI). Without this
+  // snapshot the per-agent resolved-count analytics would lose the
+  // attribution the moment assignedAgentId was cleared.
+  resolvedByAgentId  String?         @db.Uuid
   // Seconds after which a message in this chat is auto-deleted (WhatsApp-style
   // disappearing messages) — null/0 means off. Swept by a periodic worker,
   // not enforced at write time.

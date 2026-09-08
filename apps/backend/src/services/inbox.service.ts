@@ -338,11 +338,25 @@ export async function updateConversationStatus(
     where: { id: conversationId },
     data: {
       status: validatedStatus,
-      // Keep assignedAgentId intact on resolve — every round-robin/open-chat
-      // count query already scopes by status:'OPEN', so clearing it here
-      // served no purpose except erasing which agent resolved the chat,
-      // which broke the analytics leaderboard's per-agent resolved count.
-      ...(isResolved ? { resolvedAt: new Date() } : {}),
+      ...(isResolved
+        ? {
+            resolvedAt: new Date(),
+            // Resolving hands the conversation back to AI/bot auto-response
+            // (the sidebar already promises this via its "Resolved (AI
+            // Active)" badge) — webhook.worker.ts's routing and
+            // ai.service.ts's own eligibility check both treat a set
+            // assignedAgentId as "a human already owns this, don't
+            // respond," so leaving it in place after resolve permanently
+            // locked AI out of ever answering this conversation again, no
+            // matter how long ago it was resolved. Who resolved it is
+            // preserved separately in resolvedByAgentId for the analytics
+            // leaderboard, which used to rely on assignedAgentId for that.
+            resolvedByAgentId: conversation.assignedAgentId,
+            assignedAgentId: null,
+            assignedAt: null,
+            agentOpenedAt: null,
+          }
+        : {}),
     },
   });
 
