@@ -138,6 +138,17 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   );
   const templateVars: string[] = rawVars.sort((a: string, b: string) => Number(a) - Number(b));
 
+  // A template with an IMAGE/VIDEO/DOCUMENT header is incomplete without
+  // that media on every send — Meta rejects it with a cryptic per-recipient
+  // (#132012) error instead of explaining anything, so this is caught here
+  // before the agent can even submit rather than after every recipient
+  // shows up FAILED.
+  const headerComp = (selectedTemplate?.components as any[])?.find((c) => String(c?.type).toUpperCase() === 'HEADER');
+  const requiredHeaderFormat = headerComp && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(String(headerComp.format).toUpperCase())
+    ? String(headerComp.format).toLowerCase()
+    : null;
+  const missingRequiredHeader = Boolean(requiredHeaderFormat) && !headerMediaUrl.trim();
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -409,8 +420,9 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Header Image / Media (Optional)
+              <label className={`block text-xs font-semibold uppercase tracking-wider ${requiredHeaderFormat ? 'text-amber-400' : 'text-slate-400'}`}>
+                Header {requiredHeaderFormat ? requiredHeaderFormat.charAt(0).toUpperCase() + requiredHeaderFormat.slice(1) : 'Image / Media'}
+                {requiredHeaderFormat ? ' (Required by this template)' : ' (Optional)'}
               </label>
               <label className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center">
                 <span>⚡ Upload & Compress (WebP)</span>
@@ -434,6 +446,11 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
             )}
             {mediaCompressStats && (
               <p className="text-[10px] text-emerald-400 mt-1 font-mono">{mediaCompressStats}</p>
+            )}
+            {missingRequiredHeader && (
+              <p className="text-[10px] text-amber-400 mt-1 font-semibold">
+                This template's approved format has a {requiredHeaderFormat} header — Meta will reject the send without one.
+              </p>
             )}
           </div>
 
@@ -774,6 +791,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                 launchMutation.isPending ||
                 !name ||
                 !templateId ||
+                missingRequiredHeader ||
                 (audienceSource === 'CSV' && csvContacts.length === 0)
               }
               className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center"

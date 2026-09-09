@@ -88,6 +88,24 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     );
   }
 
+  // A template with an IMAGE/VIDEO/DOCUMENT header is structurally
+  // incomplete without that media on every single send — Meta rejects the
+  // whole message with a cryptic (#132012) "Parameter format does not
+  // match" error per-recipient instead of a clear upfront explanation.
+  // Catching it here means one clear error at campaign-creation time
+  // instead of every recipient silently ending up FAILED.
+  const headerComp = Array.isArray(template.components)
+    ? (template.components as any[]).find((c) => String(c?.type).toUpperCase() === 'HEADER')
+    : null;
+  const requiresMediaHeader = headerComp && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(String(headerComp.format).toUpperCase());
+  if (requiresMediaHeader && !input.headerMediaUrl?.trim()) {
+    throw new AppError(
+      `Template "${template.name}" requires a ${String(headerComp.format).toLowerCase()} header — upload one before launching this campaign.`,
+      400,
+      'TEMPLATE_HEADER_MEDIA_REQUIRED'
+    );
+  }
+
   let targetContacts: Array<{ id: string; phoneNumber: string; firstName?: string | null }> = [];
 
   if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
@@ -262,6 +280,20 @@ export async function relaunchCampaign(organizationId: string, campaignId: strin
   const repeatContactIds = Array.from(new Set(original.recipients.map((r) => r.contactId)));
   if (repeatContactIds.length === 0) {
     throw new AppError('This campaign has no recipients to relaunch to.', 400, 'NO_TARGET_CONTACTS');
+  }
+
+  if (!original.headerMediaUrl?.trim()) {
+    const template = await prisma.template.findFirst({ where: { id: original.templateId, organizationId } });
+    const headerComp = Array.isArray(template?.components)
+      ? (template!.components as any[]).find((c) => String(c?.type).toUpperCase() === 'HEADER')
+      : null;
+    if (headerComp && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(String(headerComp.format).toUpperCase())) {
+      throw new AppError(
+        `This campaign's template requires a ${String(headerComp.format).toLowerCase()} header, but the original campaign wasn't saved with one — Meta will reject every send without it. Use "Copy" instead, which lets you upload one before launching.`,
+        400,
+        'TEMPLATE_HEADER_MEDIA_REQUIRED'
+      );
+    }
   }
 
   return createCampaign(organizationId, {
