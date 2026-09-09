@@ -207,6 +207,7 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [isMobilePaletteOpen, setIsMobilePaletteOpen] = useState(false);
 
   const { data: flowData } = useQuery({
@@ -291,9 +292,23 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
     setIsMobilePaletteOpen(false);
   };
 
+  // Trigger node's on-canvas label mirrors the header's Trigger field live,
+  // so what's drawn always matches what's actually configured.
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => (n.id === '1' ? { ...n, data: { ...n.data, label: `⚡ Trigger: Customer sends "${triggerKeyword || '...'}"` } } : n))
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerKeyword]);
+
   const handleNodeClick = (_: any, node: Node) => {
-    if (node.id === '1') return; // trigger node has no editable content here — use the header field
+    setSelectedEdge(null);
     setSelectedNode(node);
+  };
+
+  const handleEdgeClick = (_: any, edge: Edge) => {
+    setSelectedNode(null);
+    setSelectedEdge(edge);
   };
 
   const updateSelectedNodeData = (patch: Record<string, any>) => {
@@ -313,6 +328,12 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
     setNodes((nds) => nds.filter((node) => node.id !== selectedNode.id));
     setEdges((eds) => eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id));
     setSelectedNode(null);
+  };
+
+  const deleteSelectedEdge = () => {
+    if (!selectedEdge) return;
+    setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
+    setSelectedEdge(null);
   };
 
   const paletteButtons: { type: NodeType; label: string; icon: React.ReactNode }[] = [
@@ -447,6 +468,12 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodeClick={handleNodeClick}
+              onEdgeClick={handleEdgeClick}
+              onPaneClick={() => {
+                setSelectedNode(null);
+                setSelectedEdge(null);
+              }}
+              deleteKeyCode={['Backspace', 'Delete']}
               fitView
             >
               <Controls className="bg-slate-900 text-white border-slate-800" />
@@ -457,7 +484,32 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
         </div>
 
         {/* Selected Node Inspector Drawer */}
-        {selectedNode && (
+        {selectedNode && selectedNode.id === '1' ? (
+          <div className="fixed md:relative bottom-0 left-0 right-0 md:right-auto md:left-auto w-full md:w-80 bg-slate-900/95 border-t md:border-t-0 md:border-l border-slate-800 p-5 space-y-4 shrink-0 z-30 backdrop-blur-md rounded-t-2xl md:rounded-none shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Trigger</span>
+              <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-white p-1 rounded-md">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
+                Trigger Keyword — starts this flow when a customer's message matches
+              </label>
+              <input
+                type="text"
+                value={triggerKeyword}
+                onChange={(e) => setTriggerKeyword(e.target.value)}
+                placeholder="hi, order status, book appointment..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-amber-300 font-mono focus:outline-none focus:border-emerald-500"
+              />
+              <p className="text-[10px] text-slate-500 mt-2">
+                Common greeting spellings ("hey", "hii", "hello"...) are automatically tolerated when this is set to a
+                greeting word. This node is the flow's single starting point — every other node connects out from it.
+              </p>
+            </div>
+          </div>
+        ) : selectedNode ? (
           <div className="fixed md:relative bottom-0 left-0 right-0 md:right-auto md:left-auto w-full md:w-80 bg-slate-900/95 border-t md:border-t-0 md:border-l border-slate-800 p-5 space-y-4 shrink-0 z-30 backdrop-blur-md rounded-t-2xl md:rounded-none shadow-2xl max-h-[70vh] md:max-h-none overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: NODE_META[(selectedNode.data?.nodeType as NodeType) || 'message'].color }}>
@@ -478,7 +530,28 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
               Delete Node
             </button>
           </div>
-        )}
+        ) : selectedEdge ? (
+          <div className="fixed md:relative bottom-0 left-0 right-0 md:right-auto md:left-auto w-full md:w-80 bg-slate-900/95 border-t md:border-t-0 md:border-l border-slate-800 p-5 space-y-4 shrink-0 z-30 backdrop-blur-md rounded-t-2xl md:rounded-none shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Connection</span>
+              <button onClick={() => setSelectedEdge(null)} className="text-slate-400 hover:text-white p-1 rounded-md">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              This wire connects two steps. Delete it to disconnect them — you can then drag a new connection from
+              either node's dot to reconnect it elsewhere. (Tip: selecting a wire on the canvas and pressing
+              Backspace/Delete does the same thing.)
+            </p>
+            <button
+              onClick={deleteSelectedEdge}
+              className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold py-2 rounded-xl text-xs flex items-center justify-center transition-all cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              Delete Connection
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
