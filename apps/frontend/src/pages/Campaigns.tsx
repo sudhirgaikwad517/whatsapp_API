@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw, BarChart3, Eye } from 'lucide-react';
+import { Megaphone, Plus, Calendar, CheckCircle2, Clock, Trash2, RotateCw, BarChart3, Eye, Repeat, Copy } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { CreateCampaignModal } from '../components/campaigns/CreateCampaignModal';
 import { CampaignAnalyticsModal } from '../components/campaigns/CampaignAnalyticsModal';
@@ -9,9 +9,11 @@ import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Campaigns: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [copyFromCampaign, setCopyFromCampaign] = useState<any>(null);
   const [selectedAnalyticsId, setSelectedAnalyticsId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [relaunchingId, setRelaunchingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: campaigns, isLoading } = useQuery({
@@ -34,6 +36,27 @@ export const Campaigns: React.FC = () => {
       toast.error('Failed to retry campaign', { description: err?.response?.data?.error?.message || err.message });
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleRelaunchCampaign = async (id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ok = await confirmAction({
+      title: `Relaunch "${name}"?`,
+      message: 'A new campaign will be sent immediately using the same template and settings, to the same contacts this campaign originally reached (anyone who unsubscribed or was deleted since then is automatically excluded). This will incur new messaging charges.',
+      confirmLabel: 'Relaunch',
+    });
+    if (!ok) return;
+
+    try {
+      setRelaunchingId(id);
+      await apiClient.post(`/campaigns/${id}/relaunch`);
+      toast.success(`"${name}" relaunched!`, { description: 'A new campaign was created for the same audience.' });
+      await queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    } catch (err: any) {
+      toast.error('Failed to relaunch campaign', { description: err?.response?.data?.error?.message || err.message });
+    } finally {
+      setRelaunchingId(null);
     }
   };
 
@@ -163,6 +186,26 @@ export const Campaigns: React.FC = () => {
                           </button>
                         )}
                         <button
+                          onClick={(e) => handleRelaunchCampaign(camp.id, camp.name, e)}
+                          disabled={relaunchingId === camp.id}
+                          title="Relaunch — same template & same recipients, sent again now"
+                          className="px-2.5 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-lg text-xs font-semibold flex items-center transition-all disabled:opacity-50"
+                        >
+                          <Repeat className={`w-3.5 h-3.5 mr-1.5 ${relaunchingId === camp.id ? 'animate-spin' : ''}`} />
+                          Relaunch
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCopyFromCampaign(camp);
+                          }}
+                          title="Copy — same template & settings, pick a different audience"
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center transition-all"
+                        >
+                          <Copy className="w-3.5 h-3.5 mr-1.5" />
+                          Copy
+                        </button>
+                        <button
                           onClick={(e) => handleDeleteCampaign(camp.id, camp.name, e)}
                           disabled={deletingId === camp.id}
                           title="Delete Campaign"
@@ -181,6 +224,11 @@ export const Campaigns: React.FC = () => {
       )}
 
       <CreateCampaignModal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} />
+      <CreateCampaignModal
+        isOpen={Boolean(copyFromCampaign)}
+        onClose={() => setCopyFromCampaign(null)}
+        copyFrom={copyFromCampaign}
+      />
       <CampaignAnalyticsModal
         isOpen={Boolean(selectedAnalyticsId)}
         campaignId={selectedAnalyticsId}

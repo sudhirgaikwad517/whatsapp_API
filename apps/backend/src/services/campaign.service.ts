@@ -16,9 +16,11 @@ export interface CreateCampaignInput {
   templateId: string;
   headerMediaUrl?: string;
   scheduledAt?: string;
-  audienceSource?: 'CRM' | 'CSV';
+  audienceSource?: 'CRM' | 'CSV' | 'REPEAT';
   tagIds?: string[];
   csvContacts?: CsvContactItem[];
+  // REPEAT audience only — Relaunch's "same customers as before" targeting.
+  repeatContactIds?: string[];
   isBatchEnabled?: boolean;
   batchSize?: number;
   batchIntervalMinutes?: number;
@@ -156,6 +158,15 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         });
       }
     }
+  } else if (input.audienceSource === 'REPEAT' && input.repeatContactIds?.length) {
+    // ── Relaunch: the exact same contacts as a previous campaign ───────────
+    // Re-checked against current deletedAt/isOptedIn state rather than
+    // trusting the old recipient list blindly — someone who unsubscribed or
+    // was deleted since the original send must not receive this one either.
+    targetContacts = await prisma.contact.findMany({
+      where: { id: { in: input.repeatContactIds }, organizationId, deletedAt: null, NOT: { isOptedIn: false } },
+      select: { id: true, phoneNumber: true, firstName: true },
+    });
   } else {
     // ── Option A: Existing CRM Audience Selection ──────────────────────────
     const contactWhere: any = { organizationId, deletedAt: null, NOT: { isOptedIn: false } };
@@ -230,6 +241,41 @@ export async function createCampaign(organizationId: string, input: CreateCampai
   }
 
   return campaign;
+}
+
+/**
+ * Relaunch — a new campaign send, same template/settings, targeted at the
+ * exact same contacts a previous campaign reached (re-checked against
+ * current opt-in/deletion state, so anyone who unsubscribed since then is
+ * correctly excluded). Reuses createCampaign's full pipeline (recipient
+ * snapshotting, billing, BullMQ enqueueing) via audienceSource: 'REPEAT'
+ * rather than duplicating any of that logic here.
+ */
+export async function relaunchCampaign(organizationId: string, campaignId: string, name?: string) {
+  const original = await prisma.campaign.findFirst({
+    where: { id: campaignId, organizationId },
+    include: { recipients: { select: { contactId: true } } },
+  });
+
+  if (!original) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
+
+  const repeatContactIds = Array.from(new Set(original.recipients.map((r) => r.contactId)));
+  if (repeatContactIds.length === 0) {
+    throw new AppError('This campaign has no recipients to relaunch to.', 400, 'NO_TARGET_CONTACTS');
+  }
+
+  return createCampaign(organizationId, {
+    name: name?.trim() || `${original.name} (Relaunch)`,
+    templateId: original.templateId,
+    headerMediaUrl: original.headerMediaUrl || undefined,
+    audienceSource: 'REPEAT',
+    repeatContactIds,
+    isBatchEnabled: original.isBatchEnabled,
+    batchSize: original.batchSize,
+    batchIntervalMinutes: original.batchIntervalMinutes,
+    variableMapping: (original.variableMapping as Record<string, string>) || {},
+    campaignKnowledgeBase: original.campaignKnowledgeBase || undefined,
+  });
 }
 
 export async function listCampaigns(organizationId: string) {

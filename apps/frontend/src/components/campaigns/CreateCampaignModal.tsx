@@ -7,6 +7,14 @@ import { apiClient } from '../../services/api.client';
 interface CreateCampaignModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // Present => prefill from this existing campaign's template/settings, for
+  // sending the same broadcast to a different audience. The audience itself
+  // (CRM tags / CSV upload) and variableMapping are deliberately left blank
+  // rather than copied — a new CSV's columns won't line up with a mapping
+  // built for the old one, and silently carrying it over risks every
+  // recipient's personalization falling back to "Valued Customer" with no
+  // warning.
+  copyFrom?: any;
 }
 
 interface CsvParsedContact {
@@ -27,7 +35,7 @@ function cleanAndFormatFirstName(rawName?: string): string | undefined {
     .join(' ');
 }
 
-export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen, onClose }) => {
+export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen, onClose, copyFrom }) => {
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
@@ -47,6 +55,17 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
   const [campaignKnowledgeBase, setCampaignKnowledgeBase] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !copyFrom) return;
+    setName(`${copyFrom.name} (Copy)`);
+    setTemplateId(copyFrom.templateId || copyFrom.template?.id || '');
+    setHeaderMediaUrl(copyFrom.headerMediaUrl || '');
+    setIsBatchEnabled(Boolean(copyFrom.isBatchEnabled));
+    setBatchSize(copyFrom.batchSize || 50);
+    setBatchIntervalMinutes(copyFrom.batchIntervalMinutes || 20);
+    setCampaignKnowledgeBase(copyFrom.campaignKnowledgeBase || '');
+  }, [isOpen, copyFrom]);
 
   // A mapping picked while on one audience source (e.g. a CSV column key)
   // is meaningless for the other (CRM contacts have no CSV columns) — left
@@ -247,7 +266,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center">
             <Megaphone className="w-5 h-5 mr-2 text-emerald-400" />
-            Launch Bulk WhatsApp Campaign
+            {copyFrom ? `Copy "${copyFrom.name}" — Pick New Audience` : 'Launch Bulk WhatsApp Campaign'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />

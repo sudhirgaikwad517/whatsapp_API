@@ -377,10 +377,28 @@ export const webhookWorker = new Worker(
                   type: 'flow',
                   organizationId: waAccount.organizationId,
                   conversationId: conversation.id,
-                  text: "You've been unsubscribed and won't receive further messages from us. Contact us directly if you'd like to resubscribe.",
+                  text: "You've been unsubscribed and won't receive further messages from us. Reply START to resubscribe.",
                 },
                 { delay: 1000 }
               );
+            }
+
+            // -1b. START / resubscribe — the STOP/START pair is the standard
+            // opt-out/opt-in convention. Only ever flips isOptedIn back on
+            // (a no-op for anyone already opted in, which is the common
+            // case) and deliberately does NOT short-circuit the rest of this
+            // pipeline like STOP does — an org can and often does have its
+            // own Flow/Keyword-Bot reply configured for "start" (e.g. a
+            // "Welcome back!" message), and that should still fire exactly
+            // as it already does. Without this, that configured reply text
+            // talked about being resubscribed while the contact's isOptedIn
+            // flag silently stayed false forever, permanently excluding them
+            // from every future campaign send despite what they were told.
+            if (!isOptOutRequest && contact.isOptedIn === false && /^(start|unstop|subscribe)$/i.test(cleanTextLower)) {
+              contact = await prisma.contact.update({
+                where: { id: contact.id },
+                data: { isOptedIn: true, optedInAt: new Date() },
+              });
             }
 
             // 0. Autonomous Commerce Engine (Auto-Product & Auto-Payment Bot)

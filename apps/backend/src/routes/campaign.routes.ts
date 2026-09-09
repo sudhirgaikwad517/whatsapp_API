@@ -47,6 +47,13 @@ router.get('/:id/recipients', CampaignController.getCampaignRecipients);
 router.post('/:id/retry', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), CampaignController.retryCampaign);
 
 /**
+ * @route   POST /api/v1/campaigns/:id/relaunch
+ * @desc    Launch a new campaign to the same recipients as a previous one, same template/settings
+ * @access  Bearer (Business Owner, Manager)
+ */
+router.post('/:id/relaunch', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), CampaignController.relaunchCampaign);
+
+/**
  * @route   DELETE /api/v1/campaigns/:id
  * @desc    Delete a campaign and its recipient history
  * @access  Bearer (Business Owner, Manager)
