@@ -12,6 +12,7 @@ router.use(requirePageAccess('flows'));
 
 router.get('/', FlowController.listFlows);
 router.get('/:id', FlowController.getFlow);
+router.get('/:id/submissions', FlowController.getFlowSubmissions);
 router.post('/', FlowController.createFlow);
 router.put('/:id', FlowController.updateFlow);
 router.delete('/:id', FlowController.deleteFlow);

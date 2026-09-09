@@ -202,6 +202,8 @@ model Organization {
   autoResponderRules AutoResponderRule[]
   cannedResponses   CannedResponse[]
   flows             Flow[]
+  flowSessions      FlowSession[]
+  flowSubmissions   FlowSubmission[]
   productCatalogs   ProductCatalog[]
   auditLogs         AuditLog[]
   timelines         ContactTimeline[]
@@ -340,6 +342,7 @@ model Contact {
   conversations  Conversation[]
   campaignLogs   CampaignRecipient[]
   timeline       ContactTimeline[]
+  flowSubmissions FlowSubmission[]
 
   @@unique([organizationId, phoneNumber])
   @@index([organizationId, phoneNumber])
@@ -421,6 +424,7 @@ model Conversation {
   assignedAgent      User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
   messages           Message[]
   internalNotes      InternalNote[]
+  flowSessions       FlowSession[]
 
   @@unique([whatsappAccountId, contactId])
   @@index([organizationId, status])
@@ -474,10 +478,65 @@ model Flow {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions       FlowSession[]
+  submissions    FlowSubmission[]
+  campaigns      Campaign[]
 
   @@index([organizationId])
   @@index([triggerKeyword])
+}
+
+enum FlowSessionStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  ABANDONED
+}
+
+// Tracks a conversation's live position inside a multi-step Flow — which
+// node it's waiting at, and any data collected so far. Without this, a
+// Flow could only ever execute one node per matched trigger, since nothing
+// remembered where a conversation was between messages.
+model FlowSession {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @db.Uuid
+  conversationId String            @db.Uuid
+  flowId         String            @db.Uuid
+  currentNodeId  String            @db.VarChar(100)
+  variables      Json              @default("{}")
+  status         FlowSessionStatus @default(ACTIVE)
+  startedAt      DateTime          @default(now())
+  lastAdvancedAt DateTime          @default(now())
+  expiresAt      DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  flow           Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([conversationId, status])
+  @@index([status, expiresAt])
+}
+
+// One row per completed Flow run that reached a "Save Data" node — a
+// browsable record of collected data (e.g. appointment requests) separate
+// from the live FlowSession, which gets cleaned up/expires.
+model FlowSubmission {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  flowId         String   @db.Uuid
+  contactId      String   @db.Uuid
+  conversationId String   @db.Uuid
+  data           Json
+  completedAt    DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  flow         Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, flowId])
+  @@index([contactId])
 }
 
 model Campaign {
@@ -509,11 +568,17 @@ model Campaign {
   // (in addition to the org's general knowledge base) so it can answer
   // questions about this specific offer/campaign accurately.
   campaignKnowledgeBase String?        @db.Text
+  // When set, a recipient's first reply after this campaign is sent starts
+  // this Flow automatically (bypassing normal keyword-trigger matching) —
+  // e.g. a "Diwali Sale" campaign can jump straight into its own offer flow
+  // without requiring the customer to type a specific trigger word first.
+  triggerFlowId        String?         @db.Uuid
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   template       Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  triggerFlow    Flow?           @relation(fields: [triggerFlowId], references: [id], onDelete: SetNull)
   recipients     CampaignRecipient[]
 
   @@index([organizationId])

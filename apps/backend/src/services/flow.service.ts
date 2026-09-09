@@ -62,6 +62,27 @@ export async function deleteFlow(organizationId: string, id: string) {
   return { message: 'Flow deleted successfully.' };
 }
 
+/** Browsable list of a Flow's completed runs (data collected via "Save Data" nodes), newest first. */
+export async function listFlowSubmissions(organizationId: string, flowId: string, options: { page?: number; limit?: number } = {}) {
+  await getFlowById(organizationId, flowId);
+  const page = options.page || 1;
+  const limit = Math.min(options.limit || 50, 200);
+  const skip = (page - 1) * limit;
+
+  const [total, submissions] = await Promise.all([
+    prisma.flowSubmission.count({ where: { organizationId, flowId } }),
+    prisma.flowSubmission.findMany({
+      where: { organizationId, flowId },
+      include: { contact: { select: { id: true, firstName: true, lastName: true, phoneNumber: true } } },
+      orderBy: { completedAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  return { submissions, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+}
+
 export async function evaluateInboundFlow(organizationId: string, text: string) {
   if (!text || !text.trim()) return null;
   const cleanText = text.trim().toLowerCase();

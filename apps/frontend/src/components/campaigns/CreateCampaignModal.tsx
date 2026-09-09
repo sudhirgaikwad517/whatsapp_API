@@ -56,6 +56,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [batchIntervalMinutes, setBatchIntervalMinutes] = useState<number>(20);
   const [variableMapping, setVariableMapping] = useState<Record<string, string>>({});
   const [campaignKnowledgeBase, setCampaignKnowledgeBase] = useState('');
+  const [triggerFlowId, setTriggerFlowId] = useState('');
 
   useEffect(() => {
     if (!isOpen || !copyFrom) return;
@@ -66,10 +67,23 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
     setBatchSize(copyFrom.batchSize || 50);
     setBatchIntervalMinutes(copyFrom.batchIntervalMinutes || 20);
     setCampaignKnowledgeBase(copyFrom.campaignKnowledgeBase || '');
+    setTriggerFlowId(copyFrom.triggerFlowId || copyFrom.triggerFlow?.id || '');
     // Default to the same audience as before — the agent can still switch
     // to CRM tags or a fresh CSV below if they want different recipients.
     setAudienceSource('REPEAT');
   }, [isOpen, copyFrom]);
+
+  // Chatbot Flows this org has configured — lets the agent pick which one
+  // should auto-start the moment a recipient replies to this campaign,
+  // instead of requiring them to type a specific trigger word first.
+  const { data: flowsList } = useQuery({
+    queryKey: ['flows-list-for-campaign'],
+    queryFn: async () => {
+      const res = await apiClient.get('/flows');
+      return res.data.data;
+    },
+    enabled: isOpen,
+  });
 
   // Same-audience contactIds for a Relaunch, re-checked server-side against
   // current opt-in/deletion state (so anyone who unsubscribed since the
@@ -255,6 +269,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         batchIntervalMinutes,
         variableMapping,
         campaignKnowledgeBase: campaignKnowledgeBase.trim() || undefined,
+        triggerFlowId: triggerFlowId || undefined,
       });
       return res.data.data;
     },
@@ -278,6 +293,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setBatchSize(50);
       setBatchIntervalMinutes(20);
       setVariableMapping({});
+      setTriggerFlowId('');
       setError('');
       onClose();
     },
@@ -432,6 +448,28 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
             <p className="text-[10px] text-slate-500 mt-1">
               When a customer replies to this campaign, the AI auto-responder uses this (along with your organization's
               general knowledge base) to answer questions about this specific offer.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+              Auto-Start Chatbot Flow on Reply (Optional)
+            </label>
+            <select
+              value={triggerFlowId}
+              onChange={(e) => setTriggerFlowId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">— None (normal keyword/AI routing) —</option>
+              {flowsList?.map((f: any) => (
+                <option key={f.id} value={f.id} disabled={!f.isActive}>
+                  {f.name}{!f.isActive ? ' (inactive)' : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-500 mt-1">
+              A recipient's very first reply to this campaign jumps straight into this Chatbot Flow — no trigger word
+              needed. Leave unset to use normal Flow/Keyword-bot/AI routing instead.
             </p>
           </div>
 

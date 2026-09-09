@@ -97,6 +97,12 @@ export const webhookWorker = new Worker(
           // botCanHandle below).
           const rawMsg = msg as any;
           let extractedText: string | null = null;
+          // Raw button/list option ids (distinct from extractedText, which
+          // carries the human-readable title) — the Flow engine needs the
+          // actual id to resolve which specific button/row was tapped,
+          // since two different buttons can share the same visible title.
+          let inboundButtonReplyId: string | null = null;
+          let inboundListReplyId: string | null = null;
           if (msg.type === 'text' && msg.text) {
             extractedText = msg.text.body;
           } else if (msg.type === 'button' && rawMsg.button) {
@@ -104,8 +110,10 @@ export const webhookWorker = new Worker(
           } else if (msg.type === 'interactive' && rawMsg.interactive) {
             if (rawMsg.interactive.type === 'button_reply') {
               extractedText = rawMsg.interactive.button_reply?.title || rawMsg.interactive.button_reply?.id;
+              inboundButtonReplyId = rawMsg.interactive.button_reply?.id || null;
             } else if (rawMsg.interactive.type === 'list_reply') {
               extractedText = rawMsg.interactive.list_reply?.title || rawMsg.interactive.list_reply?.id;
+              inboundListReplyId = rawMsg.interactive.list_reply?.id || null;
             }
           }
 
@@ -142,6 +150,14 @@ export const webhookWorker = new Worker(
           // their results across the conversation-creation boundary between
           // the two blocks).
           let botCanHandle = isAiEnabled;
+          // An in-progress Chatbot Flow (waiting on this conversation's next
+          // reply — a button tap, an answer to a question, etc.) always
+          // counts as "the bot can handle it," regardless of AI/keyword
+          // config, since the flow itself owns this turn either way.
+          const hasActiveFlowSession = existingConv
+            ? Boolean(await prisma.flowSession.findFirst({ where: { conversationId: existingConv.id, status: 'ACTIVE' }, select: { id: true } }))
+            : false;
+          if (hasActiveFlowSession) botCanHandle = true;
           if (!botCanHandle && extractedText) {
             const textBody0 = extractedText.trim();
             const cleanTextLower0 = textBody0.toLowerCase();
@@ -381,6 +397,13 @@ export const webhookWorker = new Worker(
                 },
                 { delay: 1000 }
               );
+              // An explicit opt-out shouldn't leave an in-progress Chatbot
+              // Flow silently waiting on a reply that compliance now says
+              // shouldn't come.
+              await prisma.flowSession.updateMany({
+                where: { conversationId: conversation.id, status: 'ACTIVE' },
+                data: { status: 'ABANDONED' },
+              });
             }
 
             // -1b. START / resubscribe — the STOP/START pair is the standard
@@ -419,6 +442,72 @@ export const webhookWorker = new Worker(
             if (isOptOutRequest) {
               // Already handled above — no commerce/flow/keyword/AI reply for
               // an opt-out message.
+            } else if (await (async () => {
+              // In-progress Chatbot Flow — continues regardless of what else
+              // is configured, since the flow itself owns this turn once
+              // started. Checked first, ahead of Commerce/Flow-trigger/
+              // Keyword-bot/AI, all of which only apply to a FRESH message.
+              const activeFlowSession = await prisma.flowSession.findFirst({
+                where: { conversationId: conversation.id, status: 'ACTIVE' },
+              });
+              if (!activeFlowSession) return false;
+              await autoResponderQueue.add(
+                'flow-advance',
+                {
+                  type: 'flow-advance',
+                  organizationId: waAccount.organizationId,
+                  conversationId: conversation.id,
+                  sessionId: activeFlowSession.id,
+                  flowId: activeFlowSession.flowId,
+                  currentNodeId: activeFlowSession.currentNodeId,
+                  variables: activeFlowSession.variables,
+                  text: textBody,
+                  buttonReplyId: inboundButtonReplyId,
+                  listReplyId: inboundListReplyId,
+                },
+                { delay: 500 }
+              );
+              return true;
+            })()) {
+              // Handled above.
+            } else if (await (async () => {
+              // A campaign configured to auto-start a specific Flow on reply
+              // — only on the recipient's genuinely first reply to THAT
+              // campaign (status not yet REPLIED), so it doesn't hijack every
+              // later message in the conversation too. Takes priority over
+              // normal keyword-trigger matching since the whole point is not
+              // requiring the customer to type a specific word first.
+              const campaignFlowRecipient = await prisma.campaignRecipient.findFirst({
+                where: {
+                  contactId: contact.id,
+                  status: { in: ['SENT', 'DELIVERED', 'READ'] },
+                  updatedAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+                  campaign: { triggerFlowId: { not: null } },
+                },
+                orderBy: { updatedAt: 'desc' },
+                select: {
+                  campaign: { select: { triggerFlow: { select: { id: true, isActive: true, definition: true } } } },
+                },
+              });
+              const campaignFlow = campaignFlowRecipient?.campaign?.triggerFlow?.isActive
+                ? campaignFlowRecipient.campaign.triggerFlow
+                : null;
+              if (!campaignFlow) return false;
+              await autoResponderQueue.add(
+                'flow-start',
+                {
+                  type: 'flow-start',
+                  organizationId: waAccount.organizationId,
+                  conversationId: conversation.id,
+                  contactId: contact.id,
+                  flowId: campaignFlow.id,
+                  definition: campaignFlow.definition,
+                },
+                { delay: 500 }
+              );
+              return true;
+            })()) {
+              // Handled above.
             } else if (matchedProduct && cleanTextLower.length >= 3 && !/^(hi|hello|hey|start)$/i.test(cleanTextLower)) {
               await autoResponderQueue.add(
                 'commerce-link',
@@ -445,39 +534,26 @@ export const webhookWorker = new Worker(
               const matchedFlow = await evaluateInboundFlow(waAccount.organizationId, textBody);
 
               if (matchedFlow) {
-                // Follows the actual edge out of the start node ('1') to find
-                // the real first step, instead of grabbing whichever non-start
-                // node happens to come first in the builder's array (purely
-                // insertion order — the order a user dragged nodes onto the
-                // canvas, unrelated to how they're actually connected). For a
-                // flow with more than one node after the start, that could
-                // reply with a node the start node isn't even wired to.
-                // Known limitation, not fixed here: this only ever executes
-                // one step per matched trigger — there's no persisted
-                // per-conversation "which node are we on" state, so a
-                // multi-step flow (branches, an "Assign Agent" node partway
-                // through, a second message) can't advance past this first
-                // reply on later messages the way the builder implies it should.
-                const definition = (matchedFlow.definition as any) || {};
-                const nodes = definition.nodes || [];
-                const edges = definition.edges || [];
-                const firstEdge = edges.find((e: any) => e.source === '1');
-                const replyNode = firstEdge ? nodes.find((n: any) => n.id === firstEdge.target) : null;
-                let flowReplyText = replyNode?.data?.label ? (replyNode.data.label as string) : null;
-                if (flowReplyText) {
-                  // Clean node type prefix e.g. "💬 Send Message: "
-                  flowReplyText = flowReplyText.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
-                  await autoResponderQueue.add(
-                    'flow-reply',
-                    {
-                      type: 'flow',
-                      organizationId: waAccount.organizationId,
-                      conversationId: conversation.id,
-                      text: flowReplyText,
-                    },
-                    { delay: 1000 }
-                  );
-                }
+                // Starts a real, stateful FlowSession (flow-engine.service.ts)
+                // instead of sending just one message and stopping — the
+                // engine follows the edge out of the start node ('1') to find
+                // the real first step (not just whichever node happens to
+                // come first in the builder's array), and any later reply on
+                // this conversation keeps advancing through the rest of the
+                // graph (buttons, conditions, data collection, agent handoff)
+                // via the "in-progress Chatbot Flow" branch above.
+                await autoResponderQueue.add(
+                  'flow-start',
+                  {
+                    type: 'flow-start',
+                    organizationId: waAccount.organizationId,
+                    conversationId: conversation.id,
+                    contactId: contact.id,
+                    flowId: matchedFlow.id,
+                    definition: matchedFlow.definition,
+                  },
+                  { delay: 1000 }
+                );
               } else {
                 // 2. Keyword Auto-Responder Engine — checked before AI now,
                 // so a configured keyword rule always takes precedence.

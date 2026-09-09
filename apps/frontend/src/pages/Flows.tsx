@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { GitFork, Plus, Edit3, Trash2, Power, Zap, MessageSquare, Bot } from 'lucide-react';
+import { GitFork, Plus, Edit3, Trash2, Power, Zap, MessageSquare, Bot, Database } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { FlowBuilder } from '../components/flows/FlowBuilder';
+import { FlowSubmissionsModal } from '../components/flows/FlowSubmissionsModal';
 import { confirmAction } from '../components/ui/ConfirmDialog';
 
 export const Flows: React.FC = () => {
   const [activeFlowId, setActiveFlowId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [submissionsFlow, setSubmissionsFlow] = useState<{ id: string; name: string } | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -144,6 +146,14 @@ export const Flows: React.FC = () => {
                 </span>
                 <div className="flex items-center space-x-2">
                   <button
+                    onClick={() => setSubmissionsFlow({ id: flow.id, name: flow.name })}
+                    className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-all cursor-pointer"
+                    title="View Collected Data"
+                    aria-label="View collected data"
+                  >
+                    <Database className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => setActiveFlowId(flow.id)}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold text-xs border border-slate-700 transition-all flex items-center cursor-pointer"
                   >
@@ -172,6 +182,12 @@ export const Flows: React.FC = () => {
           ))
         )}
       </div>
+
+      <FlowSubmissionsModal
+        flowId={submissionsFlow?.id || null}
+        flowName={submissionsFlow?.name}
+        onClose={() => setSubmissionsFlow(null)}
+      />
     </div>
   );
 };

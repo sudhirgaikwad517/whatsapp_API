@@ -169,12 +169,13 @@ export async function sendMetaOutboundMessage(
   organizationId: string,
   toPhoneNumber: string,
   messagePayload: {
-    type: 'text' | 'template' | 'image' | 'document' | 'audio' | 'video';
+    type: 'text' | 'template' | 'image' | 'document' | 'audio' | 'video' | 'interactive';
     text?: string;
     template?: any;
     mediaUrl?: string;
     filename?: string;
     caption?: string;
+    interactive?: any;
   }
 ) {
   const waAccount = await prisma.whatsappAccount.findFirst({
@@ -208,6 +209,8 @@ export async function sendMetaOutboundMessage(
       ...(messagePayload.caption ? { caption: messagePayload.caption } : {}),
       ...(messagePayload.type === 'document' && messagePayload.filename ? { filename: messagePayload.filename } : {}),
     };
+  } else if (messagePayload.type === 'interactive' && messagePayload.interactive) {
+    body.interactive = messagePayload.interactive;
   }
 
   const response = await fetch(url, {

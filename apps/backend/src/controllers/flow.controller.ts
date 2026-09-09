@@ -63,3 +63,16 @@ export async function deleteFlow(req: AuthenticatedRequest, res: Response, next:
     next(err);
   }
 }
+
+export async function getFlowSubmissions(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const { id } = req.params;
+    const page = req.query.page ? Number(req.query.page) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const data = await FlowService.listFlowSubmissions(orgId, id, { page, limit });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}

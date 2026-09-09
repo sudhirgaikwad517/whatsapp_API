@@ -32,6 +32,10 @@ export interface CreateCampaignInput {
   // soft-deleted so it never shows up in Contacts CRM. Existing CRM contacts
   // matched by phone are never touched by this flag either way.
   saveContactsToCrm?: boolean;
+  // When set, a recipient's first reply to THIS campaign auto-starts this
+  // Chatbot Flow (see webhook.worker.ts's campaign-triggered-flow check)
+  // instead of going through normal keyword-trigger matching.
+  triggerFlowId?: string;
 }
 
 const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -202,6 +206,14 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     throw new AppError('No eligible opted-in contacts found for the selected campaign audience.', 400, 'NO_TARGET_CONTACTS');
   }
 
+  let triggerFlowId: string | null = null;
+  if (input.triggerFlowId) {
+    const flow = await prisma.flow.findFirst({ where: { id: input.triggerFlowId, organizationId }, select: { id: true, isActive: true } });
+    if (!flow) throw new AppError('Selected Chatbot Flow not found.', 404, 'FLOW_NOT_FOUND');
+    if (!flow.isActive) throw new AppError('Selected Chatbot Flow is not active.', 400, 'FLOW_NOT_ACTIVE');
+    triggerFlowId = flow.id;
+  }
+
   const isBatchEnabled = Boolean(input.isBatchEnabled);
   const batchSize = Math.max(50, Number(input.batchSize) || 50);
   const batchIntervalMinutes = Math.max(1, Number(input.batchIntervalMinutes) || 20);
@@ -221,6 +233,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
       variableMapping: input.variableMapping || {},
       campaignKnowledgeBase: input.campaignKnowledgeBase?.trim() || null,
       headerMediaUrl: input.headerMediaUrl?.trim() || null,
+      triggerFlowId,
       recipients: {
         create: targetContacts.map((c) => ({
           contactId: c.id,
@@ -330,6 +343,7 @@ export async function relaunchCampaign(organizationId: string, campaignId: strin
     batchIntervalMinutes: original.batchIntervalMinutes,
     variableMapping: (original.variableMapping as Record<string, string>) || {},
     campaignKnowledgeBase: original.campaignKnowledgeBase || undefined,
+    triggerFlowId: original.triggerFlowId || undefined,
   });
 }
 
@@ -338,7 +352,10 @@ export async function listCampaigns(organizationId: string) {
     where: {
       organizationId,
     },
-    include: { template: { select: { id: true, name: true, category: true } } },
+    include: {
+      template: { select: { id: true, name: true, category: true } },
+      triggerFlow: { select: { id: true, name: true, isActive: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 

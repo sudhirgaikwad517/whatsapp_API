@@ -1029,6 +1029,20 @@ export const Inbox: React.FC = () => {
                               <audio controls src={msg.content.mediaUrl} className="max-w-full" style={{ height: 36 }} />
                             ) : msg.type === 'VIDEO' && msg.content?.mediaUrl ? (
                               <video controls src={msg.content.mediaUrl} className="rounded-lg max-h-56 max-w-full" />
+                            ) : msg.type === 'INTERACTIVE' && (msg.content?.buttons || msg.content?.listRows) ? (
+                              <div className="space-y-1.5">
+                                <p className="whitespace-pre-line break-words">{msg.content?.text}</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(msg.content?.buttons || msg.content?.listRows || []).map((opt: any) => (
+                                    <span
+                                      key={opt.id}
+                                      className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-black/15 border border-white/20"
+                                    >
+                                      {opt.title}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
                             ) : (
                               <p className="whitespace-pre-line break-words">{msg.content?.text || (msg.type === 'TEMPLATE' ? `[Template: ${msg.content?.templateName}]` : '[Media Content]')}</p>
                             )}

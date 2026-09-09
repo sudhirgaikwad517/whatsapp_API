@@ -21,6 +21,22 @@ export const autoResponderWorker = new Worker(
       } else if (data.type === 'flow') {
         const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
         await sendOutboundTextMessage(data.organizationId, data.conversationId, data.text);
+      } else if (data.type === 'flow-start') {
+        const { startFlowSession } = await import('../services/flow-engine.service.js');
+        await startFlowSession(data.organizationId, data.conversationId, data.contactId, { id: data.flowId, definition: data.definition });
+      } else if (data.type === 'flow-advance') {
+        const { advanceFlowSession } = await import('../services/flow-engine.service.js');
+        await advanceFlowSession(
+          {
+            id: data.sessionId,
+            organizationId: data.organizationId,
+            conversationId: data.conversationId,
+            flowId: data.flowId,
+            currentNodeId: data.currentNodeId,
+            variables: data.variables,
+          },
+          { text: data.text, buttonReplyId: data.buttonReplyId, listReplyId: data.listReplyId }
+        );
       } else if (data.type === 'ai') {
         const { processAutonomousAiResponse } = await import('../services/ai.service.js');
         await processAutonomousAiResponse(data.organizationId, data.conversationId);
