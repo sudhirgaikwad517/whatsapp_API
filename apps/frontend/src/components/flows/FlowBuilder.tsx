@@ -231,7 +231,17 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
         // label-string field the backend already falls back to reading.
         const upgraded = flowData.definition.nodes.map((n: Node) => {
           if (n.id === '1') return n;
-          if (n.type === 'flowNode' && n.data?.nodeType) return n;
+          // width/height are dropped on every load — they're a snapshot of
+          // whatever size the node happened to render at on a PREVIOUS
+          // save, and our custom card's actual size depends on its content
+          // (a Buttons node with 3 options is taller than one with 1).
+          // Trusting a stale cached size instead of letting ReactFlow
+          // measure the node fresh is what made a button's own connection
+          // dot visually drift to the wrong row after reopening a flow —
+          // the underlying sourceHandle wiring itself was always correct,
+          // only its on-screen position was off.
+          const { width, height, ...rest } = n as any;
+          if (n.type === 'flowNode' && n.data?.nodeType) return rest;
           const legacyLabel = String(n.data?.label || '');
           let inferredType: NodeType = 'message';
           if (/^🔘/.test(legacyLabel)) inferredType = 'buttons';
@@ -240,7 +250,7 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
           const cleaned = legacyLabel.replace(/^(💬 Send Message:|🔘 Interactive Buttons:|🔀 Condition:|👤 Assign Agent:)\s*/i, '').trim();
           const base = makeDefaultNodeData(inferredType);
           if (inferredType === 'message') base.text = cleaned || base.text;
-          return { ...n, type: 'flowNode', data: { ...base, label: legacyLabel } };
+          return { ...rest, type: 'flowNode', data: { ...base, label: legacyLabel } };
         });
         setNodes(upgraded);
       }
@@ -258,10 +268,19 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Never persist width/height for custom nodes — see the load-time
+      // comment above for why trusting a cached size instead of a fresh
+      // measurement is what caused a button's connection dot to visually
+      // drift after reopening a flow.
+      const cleanedNodes = nodes.map((n) => {
+        if (n.type !== 'flowNode') return n;
+        const { width, height, ...rest } = n as any;
+        return rest;
+      });
       const payload = {
         name,
         triggerKeyword,
-        definition: { nodes, edges },
+        definition: { nodes: cleanedNodes, edges },
       };
 
       if (flowId) {
