@@ -325,6 +325,40 @@ async function executeNode(
   }
 }
 
+// Node types that never need customer input to decide what happens next —
+// they run immediately and fall straight through to whatever's wired after
+// them in the SAME turn, the same way Condition nodes already do. Without
+// this, "Save Data" (a silent background action, not a question) left the
+// session parked waiting for a reply that was never going to come, so
+// whatever came after it (e.g. Assign Agent) never actually ran.
+const AUTO_CONTINUE_TYPES = new Set<NonNullable<FlowNodeData['nodeType']>>(['saveData']);
+
+async function runNodeChain(
+  organizationId: string,
+  conversationId: string,
+  contactId: string,
+  flowId: string,
+  variables: Record<string, any>,
+  startNode: FlowNode,
+  nodes: FlowNode[],
+  edges: FlowEdge[]
+): Promise<{ completed: boolean; finalNode: FlowNode }> {
+  let node = startNode;
+  let guard = 0;
+  while (guard++ < 30) {
+    const result = await executeNode(organizationId, conversationId, contactId, flowId, variables, node);
+    if (result.completed) return { completed: true, finalNode: node };
+    if (!AUTO_CONTINUE_TYPES.has(getNodeType(node))) return { completed: false, finalNode: node };
+
+    const nextEdge = edgeFrom(edges, node.id);
+    if (!nextEdge) return { completed: true, finalNode: node };
+    const nextNode = nodes.find((n) => n.id === nextEdge.target);
+    if (!nextNode) return { completed: true, finalNode: node };
+    node = nextNode;
+  }
+  return { completed: true, finalNode: node };
+}
+
 async function markSession(sessionId: string, status: 'COMPLETED' | 'ABANDONED' | 'EXPIRED', variables?: Record<string, any>): Promise<void> {
   await prisma.flowSession.update({
     where: { id: sessionId },
@@ -384,9 +418,13 @@ export async function startFlowSession(
     },
   });
 
-  const result = await executeNode(organizationId, conversationId, contactId, flow.id, variables, targetNode);
-  if (result.completed) {
+  const { completed, finalNode } = await runNodeChain(organizationId, conversationId, contactId, flow.id, variables, targetNode, nodes, edges);
+  if (completed) {
     await markSession(session.id, 'COMPLETED', variables);
+  } else if (finalNode.id !== targetNode.id) {
+    // Auto-continued past the node the session started at (e.g. through a
+    // Save Data node) — persist the real resting position, not the first one.
+    await prisma.flowSession.update({ where: { id: session.id }, data: { currentNodeId: finalNode.id, variables } });
   }
 }
 
@@ -507,15 +545,24 @@ export async function advanceFlowSession(
     return;
   }
 
-  const result = await executeNode(session.organizationId, session.conversationId, contactRow.contactId, session.flowId, variables, targetNode);
+  const { completed, finalNode } = await runNodeChain(
+    session.organizationId,
+    session.conversationId,
+    contactRow.contactId,
+    session.flowId,
+    variables,
+    targetNode,
+    nodes,
+    edges
+  );
 
-  if (result.completed) {
+  if (completed) {
     await markSession(session.id, 'COMPLETED', variables);
   } else {
     await prisma.flowSession.update({
       where: { id: session.id },
       data: {
-        currentNodeId: targetNode.id,
+        currentNodeId: finalNode.id,
         variables,
         lastAdvancedAt: new Date(),
         expiresAt: new Date(Date.now() + SESSION_TIMEOUT_MS),
