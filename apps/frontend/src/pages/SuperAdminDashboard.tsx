@@ -446,7 +446,19 @@ export const SuperAdminDashboard: React.FC = () => {
     organizations: { total: 0, active: 0, suspended: 0 },
     users: { total: 0 },
     messaging: { totalMessages: 0 },
-    financials: { grossRevenue: 0, netRevenue: 0, totalGstTax: 0, totalWalletBalance: 0, metaPayable: 0, platformProfit: 0, totalReservedBalance: 0 },
+    financials: {
+      grossRevenue: 0,
+      netRevenue: 0,
+      totalGstTax: 0,
+      totalWalletBalance: 0,
+      metaPayable: 0,
+      platformProfit: 0,
+      totalReservedBalance: 0,
+      messagingMargin: 0,
+      plansMargin: 0,
+      aiCreditsMargin: 0,
+      messagingRevenueBilled: 0,
+    },
     supportTickets: [],
     auditLogs: [],
     pricingRules: [],
@@ -597,7 +609,7 @@ export const SuperAdminDashboard: React.FC = () => {
               Plans: <span className="text-emerald-500 font-bold">₹{Number(kpi?.financials?.planRevenue || 0).toFixed(2)}</span>
             </span>
             <span>
-              Messaging: <span className="text-blue-500 font-bold">₹{Number(kpi?.financials?.messagingRevenue || 0).toFixed(2)}</span>
+              Messaging: <span className="text-blue-500 font-bold">₹{Number(kpi?.financials?.messagingRevenueBilled || 0).toFixed(2)}</span>
             </span>
             <span>
               AI Credits: <span className="text-purple-400 font-bold">₹{Number(kpi?.financials?.aiCreditsRevenue || 0).toFixed(2)}</span>
@@ -613,8 +625,21 @@ export const SuperAdminDashboard: React.FC = () => {
           <div className="text-3xl font-extrabold text-amber-600">
             ₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)}
           </div>
-          <div className="text-xs text-slate-500">
-            Platform Profit Margin: <span className={`font-bold ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</span>
+          <div className="text-xs text-slate-500 space-y-0.5">
+            <div>
+              Platform Profit Margin: <span className={`font-bold ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}</span>
+            </div>
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 pt-1 border-t border-slate-800/60">
+              <span title="Messaging revenue billed to clients minus the exact Meta cost for those same messages — can go negative if Meta cost outpaces what was billed.">
+                Messaging: <span className={`font-bold ${Number(kpi?.financials?.messagingMargin || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>₹{Number(kpi?.financials?.messagingMargin || 0).toFixed(2)}</span>
+              </span>
+              <span title="Plan subscription revenue — no Meta messaging cost applies to this stream.">
+                Plans: <span className="text-emerald-500 font-bold">₹{Number(kpi?.financials?.plansMargin || 0).toFixed(2)}</span>
+              </span>
+              <span title="AI/automation credit sales — no Meta messaging cost applies to this stream.">
+                AI Credits: <span className="text-purple-400 font-bold">₹{Number(kpi?.financials?.aiCreditsMargin || 0).toFixed(2)}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -947,7 +972,7 @@ export const SuperAdminDashboard: React.FC = () => {
                             <span className="text-amber-400 font-semibold text-[11px]">Meta Cost: ₹{metaCost.toFixed(2)}</span>
                           </div>
                           <div>
-                            <span className="text-emerald-400 font-bold text-[11px]">Net Profit: ₹{markupProfit.toFixed(2)}</span>
+                            <span className={`font-bold text-[11px] ${markupProfit >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>Net Profit: ₹{markupProfit.toFixed(2)}</span>
                           </div>
                         </td>
 
@@ -1097,7 +1122,34 @@ export const SuperAdminDashboard: React.FC = () => {
                 <div className={`text-2xl font-black ${Number(kpi?.financials?.platformProfit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-600'}`}>
                   ₹{Number(kpi?.financials?.platformProfit || 0).toFixed(2)}
                 </div>
-                <p className="text-[10px] text-emerald-400 font-bold">Gross Revenue - Meta Cost = Net Profit</p>
+                <p className="text-[10px] text-emerald-400 font-bold">Sum of the three margins below</p>
+              </div>
+            </div>
+
+            {/* Meta cost is a messaging-only COGS — it never applies to Plans
+                or AI Credits revenue, so each stream's margin is broken out
+                separately instead of one lump "Gross Revenue minus Meta Cost"
+                figure that could hide a messaging-side loss inside healthy
+                Plans/AI revenue. */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pt-1">
+              <div className="bg-[#0b101e] border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-slate-400 font-semibold uppercase text-[10px]">Messaging Margin</span>
+                <div className={`text-xl font-black ${Number(kpi?.financials?.messagingMargin || 0) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  ₹{Number(kpi?.financials?.messagingMargin || 0).toFixed(2)}
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  ₹{Number(kpi?.financials?.messagingRevenueBilled || 0).toFixed(2)} billed − ₹{Number(kpi?.financials?.metaPayable || 0).toFixed(2)} Meta cost
+                </p>
+              </div>
+              <div className="bg-[#0b101e] border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-slate-400 font-semibold uppercase text-[10px]">Plans Margin</span>
+                <div className="text-xl font-black text-emerald-500">₹{Number(kpi?.financials?.plansMargin || 0).toFixed(2)}</div>
+                <p className="text-[10px] text-slate-500">No Meta cost applies to this stream</p>
+              </div>
+              <div className="bg-[#0b101e] border border-slate-800 rounded-xl p-4 space-y-1">
+                <span className="text-slate-400 font-semibold uppercase text-[10px]">AI Credits Margin</span>
+                <div className="text-xl font-black text-purple-400">₹{Number(kpi?.financials?.aiCreditsMargin || 0).toFixed(2)}</div>
+                <p className="text-[10px] text-slate-500">No Meta cost applies to this stream</p>
               </div>
             </div>
           </div>
@@ -1165,7 +1217,7 @@ export const SuperAdminDashboard: React.FC = () => {
                           <td className="py-3.5 px-4 font-bold text-amber-600">
                             ₹{metaCost.toFixed(2)}
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-indigo-400">
+                          <td className={`py-3.5 px-4 font-bold ${markupProfit >= 0 ? 'text-indigo-400' : 'text-rose-500'}`}>
                             ₹{markupProfit.toFixed(2)}
                           </td>
                           <td className="py-3.5 px-4 text-right">

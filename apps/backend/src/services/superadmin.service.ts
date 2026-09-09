@@ -302,7 +302,23 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
     ? metaAnalytics.actualMetaCostInINR
     : Number((metaAnalytics.metaDeliveredMarketing * rates.marketingMetaCost + metaAnalytics.metaDeliveredUtility * rates.utilityMetaCost).toFixed(2));
 
-  const platformProfit = Number((grossRevenue - metaPayable).toFixed(2));
+  // Meta cost is a COGS against messaging revenue ONLY — it has nothing to
+  // do with Plans or AI Credits revenue, which carry no Meta messaging cost
+  // at all. Subtracting metaPayable from the combined grossRevenue (as this
+  // used to do) buried that fact inside one lump number: a period where
+  // Meta cost genuinely exceeds messaging revenue (messaging running at a
+  // real loss, entirely subsidized by Plans/AI Credits sales) looked
+  // identical to a healthy, evenly-profitable platform, since Plans/AI
+  // revenue silently absorbed the shortfall in the total. Each revenue
+  // stream's margin is now computed against only its own cost (Plans and AI
+  // Credits carry none tracked here, so their revenue *is* their margin),
+  // and platformProfit is their explicit sum — same total as before when
+  // totalInvoicesSum happens to be grossRevenue's max, but now composed of
+  // parts that are individually meaningful instead of one opaque figure.
+  const messagingMargin = Number((totalBilledUsage - metaPayable).toFixed(2));
+  const plansMargin = planRevenue;
+  const aiCreditsMargin = aiCreditsRevenue;
+  const platformProfit = Number((plansMargin + aiCreditsMargin + messagingMargin).toFixed(2));
 
   // Fix: Calculate Dynamic Total Client Wallet Balance (Raw DB - Global Unbilled Charges)
   const globalUnbilledCharges = Math.max(0, clientBilledCalculated - billedUsageSum);
@@ -328,11 +344,27 @@ export async function getExecutiveDashboardKpi(timeRange: string = 'all') {
         planRevenue,
         aiCreditsRevenue,
         messagingRevenue,
+        // Total actually billed to clients for messaging usage — ledger
+        // debits (real charges applied, including ones not yet wrapped into
+        // a fresh recharge invoice) vs. a current-rate estimate from
+        // delivered message counts, whichever is higher. messagingRevenue
+        // above only reflects usage that happened to get invoiced at a
+        // recharge event, which understates real usage between recharges;
+        // this is the figure messagingMargin below is actually computed
+        // against, and the one that should be shown alongside it.
+        messagingRevenueBilled: totalBilledUsage,
         totalGstTax,
         totalWalletBalance,
         totalReservedBalance,
         metaPayable,
         platformProfit,
+        // Per-revenue-stream margin breakdown — see platformProfit's comment
+        // above. messagingMargin can be negative (messaging genuinely
+        // running at a loss); plansMargin/aiCreditsMargin currently equal
+        // their revenue 1:1 since no separate COGS is tracked for either.
+        messagingMargin,
+        plansMargin,
+        aiCreditsMargin,
         metaAnalytics,
       },
       systemHealth: {
@@ -420,7 +452,11 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
       const ledgerDebits = Number(ledgerDebitsSum._sum?.amount || 0);
       const clientBilled = Math.max(ledgerDebits, calculatedCharges);
 
-      const markupProfit = Number(Math.max(0, clientBilled - metaCost).toFixed(2));
+      // Not floored at 0 — an org whose Meta messaging cost genuinely
+      // exceeds what it's been billed (e.g. heavy marketing-template usage
+      // priced too thin) is a real per-org loss the operator needs to see,
+      // not one that should silently read as ₹0.00 profit.
+      const markupProfit = Number((clientBilled - metaCost).toFixed(2));
 
       const dbBalance = Number(org.wallet?.availableBalance || 0);
       const unbilledCharges = clientBilled > ledgerDebits ? clientBilled - ledgerDebits : 0;

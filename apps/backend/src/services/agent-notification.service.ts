@@ -2,7 +2,6 @@ import { prisma } from '../config/database.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 import { sendMail, buildChatAssignedEmail } from '../utils/mailer.js';
-import { getPricingRates } from './usage-metrics.service.js';
 
 /**
  * Notifies a human agent that the AI Copilot handed a conversation off to
@@ -59,7 +58,7 @@ export async function notifyAgentOfEscalation(
       varCount > 0 ? [{ type: 'body', parameters: paramValues.map((text) => ({ type: 'text', text })) }] : [];
 
     const { sendMetaOutboundMessage } = await import('./meta-whatsapp.service.js');
-    await sendMetaOutboundMessage(organizationId, agent.phoneNumber, {
+    const metaRes = await sendMetaOutboundMessage(organizationId, agent.phoneNumber, {
       type: 'template',
       template: {
         name: template.name,
@@ -68,53 +67,65 @@ export async function notifyAgentOfEscalation(
       },
     });
 
-    // Utility templates are free on Meta's side when sent while the
-    // *recipient's* 24-hour service window is already open — the recipient
-    // of THIS message is the agent (agent.phoneNumber), not the customer, so
-    // the window check has to be against the agent's own conversation with
-    // the business number, not the customer's. Checking the customer's
-    // conversation (the original version of this fix) almost always found a
-    // recent inbound message there — that's typically what triggers an
-    // escalation in the first place — so it was classifying nearly every
-    // escalation notification as "free" and skipping billing, even though
-    // Meta was actually charging the org for it (agents essentially never
-    // have their own open window with the business number).
-    const agentContact = await prisma.contact.findFirst({
-      where: { organizationId, phoneNumber: agent.phoneNumber },
+    // Persist this the same way every other outbound template send is
+    // persisted — a real Message row, not the hand-rolled wallet debit this
+    // used to do instead. getTemplateSentCounts (the single source of truth
+    // for both an org's own Utility Messages count and SuperAdmin's
+    // platform-wide telemetry) counts Message rows directly; a manual
+    // deductDirectWalletBalance call bypassed that entirely, so this send
+    // genuinely cost the org money but was invisible in every Utility
+    // Messages count anywhere in the product. Message-row billing also gets
+    // the standard reconcileUnbilledUsage pipeline's free-vs-24h-window
+    // determination for free, instead of the hand-rolled version of that
+    // check this used to duplicate here.
+    const waAccount = await prisma.whatsappAccount.findFirst({
+      where: { organizationId, deletedAt: null },
       select: { id: true },
     });
-    const agentConversation = agentContact
-      ? await prisma.conversation.findFirst({
-          where: { organizationId, contactId: agentContact.id },
-          select: { id: true },
-        })
-      : null;
-    const recentInboundFromAgent = agentConversation
-      ? await prisma.message.findFirst({
-          where: {
-            conversationId: agentConversation.id,
-            direction: 'INBOUND',
-            createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-          },
-          select: { id: true },
-        })
-      : null;
-
-    if (!recentInboundFromAgent) {
-      const rates = await getPricingRates(prisma);
-      const { deductDirectWalletBalance } = await import('./billing-wallet.service.js');
-      await deductDirectWalletBalance(
-        organizationId,
-        rates.utilityClientPrice,
-        `escalation_${conversationId}_${Date.now()}`,
-        `WhatsApp notification: chat assigned (${template.name})`
-      );
-    } else {
-      logger.info(
-        { organizationId, agentUserId, conversationId },
-        'Escalation WhatsApp notification sent free — customer service window is open.'
-      );
+    if (!waAccount) {
+      logger.warn({ organizationId, agentUserId }, 'No connected WhatsApp account — cannot record escalation notification message.');
+      return;
     }
+
+    let agentContact = await prisma.contact.findFirst({
+      where: { organizationId, phoneNumber: agent.phoneNumber, deletedAt: null },
+      select: { id: true },
+    });
+    if (!agentContact) {
+      agentContact = await prisma.contact.create({
+        data: { organizationId, phoneNumber: agent.phoneNumber, firstName: agent.fullName },
+        select: { id: true },
+      });
+    }
+
+    const agentConversation = await prisma.conversation.upsert({
+      where: { whatsappAccountId_contactId: { whatsappAccountId: waAccount.id, contactId: agentContact.id } },
+      update: {},
+      create: { organizationId, whatsappAccountId: waAccount.id, contactId: agentContact.id, status: 'OPEN' },
+      select: { id: true },
+    });
+
+    await prisma.message.create({
+      data: {
+        organizationId,
+        conversationId: agentConversation.id,
+        wamid: metaRes.wamid,
+        direction: 'OUTBOUND',
+        type: 'TEMPLATE',
+        content: { templateName: template.name, components: templateComponents, templateCategory: template.category },
+        status: 'SENT',
+        sentAt: new Date(),
+      },
+    });
+
+    await prisma.conversation.update({
+      where: { id: agentConversation.id },
+      data: {
+        lastMessageSnippet: `[Template: ${template.name}]`,
+        lastMessageAt: new Date(),
+        windowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
 
     logger.info({ organizationId, agentUserId, conversationId }, 'Agent notified of chat assignment via WhatsApp.');
   } catch (err) {
