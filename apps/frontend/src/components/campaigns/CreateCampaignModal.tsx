@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus } from 'lucide-react';
+import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, Clock, Layers, Plus, Minus, Repeat } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '../../services/api.client';
@@ -7,13 +7,14 @@ import { apiClient } from '../../services/api.client';
 interface CreateCampaignModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // Present => prefill from this existing campaign's template/settings, for
-  // sending the same broadcast to a different audience. The audience itself
-  // (CRM tags / CSV upload) and variableMapping are deliberately left blank
-  // rather than copied — a new CSV's columns won't line up with a mapping
-  // built for the old one, and silently carrying it over risks every
-  // recipient's personalization falling back to "Valued Customer" with no
-  // warning.
+  // Present => Relaunch: prefill from this existing campaign's template/
+  // settings and default the audience to its original recipients (re-
+  // checked against current opt-in/deletion status). The agent can still
+  // switch to CRM tags or a fresh CSV to target different people instead.
+  // variableMapping is deliberately never copied — a new CSV's columns
+  // won't line up with a mapping built for the old one, and silently
+  // carrying it over risks every recipient's personalization falling back
+  // to "Valued Customer" with no warning.
   copyFrom?: any;
 }
 
@@ -41,7 +42,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [dispatchTiming, setDispatchTiming] = useState<'NOW' | 'SCHEDULED'>('NOW');
   const [scheduledAt, setScheduledAt] = useState<string>('');
-  const [audienceSource, setAudienceSource] = useState<'CRM' | 'CSV'>('CRM');
+  const [audienceSource, setAudienceSource] = useState<'CRM' | 'CSV' | 'REPEAT'>('CRM');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRawRows, setCsvRawRows] = useState<string[][]>([]);
@@ -58,14 +59,29 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
 
   useEffect(() => {
     if (!isOpen || !copyFrom) return;
-    setName(`${copyFrom.name} (Copy)`);
+    setName(`${copyFrom.name} (Relaunch)`);
     setTemplateId(copyFrom.templateId || copyFrom.template?.id || '');
     setHeaderMediaUrl(copyFrom.headerMediaUrl || '');
     setIsBatchEnabled(Boolean(copyFrom.isBatchEnabled));
     setBatchSize(copyFrom.batchSize || 50);
     setBatchIntervalMinutes(copyFrom.batchIntervalMinutes || 20);
     setCampaignKnowledgeBase(copyFrom.campaignKnowledgeBase || '');
+    // Default to the same audience as before — the agent can still switch
+    // to CRM tags or a fresh CSV below if they want different recipients.
+    setAudienceSource('REPEAT');
   }, [isOpen, copyFrom]);
+
+  // Same-audience contactIds for a Relaunch, re-checked server-side against
+  // current opt-in/deletion state (so anyone who unsubscribed since the
+  // original campaign is correctly excluded from the count and the send).
+  const { data: repeatAudience, isLoading: isLoadingRepeatAudience } = useQuery({
+    queryKey: ['campaign-repeat-audience', copyFrom?.id],
+    queryFn: async () => {
+      const res = await apiClient.get(`/campaigns/${copyFrom.id}/repeat-audience`);
+      return res.data.data as { contactIds: string[]; count: number };
+    },
+    enabled: isOpen && Boolean(copyFrom?.id),
+  });
 
   // A mapping picked while on one audience source (e.g. a CSV column key)
   // is meaningless for the other (CRM contacts have no CSV columns) — left
@@ -233,6 +249,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         tagIds: audienceSource === 'CRM' ? selectedTagIds : undefined,
         csvContacts: audienceSource === 'CSV' ? csvContacts : undefined,
         saveContactsToCrm: audienceSource === 'CSV' ? saveContactsToCrm : undefined,
+        repeatContactIds: audienceSource === 'REPEAT' ? repeatAudience?.contactIds : undefined,
         isBatchEnabled,
         batchSize,
         batchIntervalMinutes,
@@ -277,7 +294,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center">
             <Megaphone className="w-5 h-5 mr-2 text-emerald-400" />
-            {copyFrom ? `Copy "${copyFrom.name}" — Pick New Audience` : 'Launch Bulk WhatsApp Campaign'}
+            {copyFrom ? `Relaunch "${copyFrom.name}"` : 'Launch Bulk WhatsApp Campaign'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
             <X className="w-5 h-5" />
@@ -607,7 +624,26 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
               Select Audience Source
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${copyFrom ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+              {copyFrom && (
+                <button
+                  type="button"
+                  onClick={() => setAudienceSource('REPEAT')}
+                  className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                    audienceSource === 'REPEAT'
+                      ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-md'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 font-semibold text-sm text-white mb-1">
+                    <Repeat className="w-4 h-4 text-emerald-400" />
+                    <span>Same Contacts as Before</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {isLoadingRepeatAudience ? 'Checking current opt-in status...' : `${repeatAudience?.count ?? 0} contacts from "${copyFrom.name}"`}
+                  </p>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setAudienceSource('CRM')}
@@ -642,7 +678,19 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
             </div>
           </div>
 
-          {audienceSource === 'CRM' ? (
+          {audienceSource === 'REPEAT' ? (
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+              <p className="text-xs font-semibold text-slate-300">
+                {isLoadingRepeatAudience
+                  ? 'Loading original audience...'
+                  : `Targeting ${repeatAudience?.count ?? 0} contacts who received "${copyFrom?.name}".`}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Re-checked against current opt-in/deletion status — anyone who unsubscribed or was removed since then is
+                automatically excluded.
+              </p>
+            </div>
+          ) : audienceSource === 'CRM' ? (
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Filter CRM Audience by Tag (Optional)
@@ -792,7 +840,8 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
                 !name ||
                 !templateId ||
                 missingRequiredHeader ||
-                (audienceSource === 'CSV' && csvContacts.length === 0)
+                (audienceSource === 'CSV' && csvContacts.length === 0) ||
+                (audienceSource === 'REPEAT' && (isLoadingRepeatAudience || !repeatAudience?.count))
               }
               className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50 flex items-center"
             >

@@ -63,6 +63,17 @@ export async function retryCampaign(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function getCampaignRepeatAudience(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const campaignId = req.params.id;
+    const data = await CampaignService.getCampaignRepeatAudience(orgId, campaignId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function relaunchCampaign(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

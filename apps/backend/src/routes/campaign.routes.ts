@@ -47,6 +47,13 @@ router.get('/:id/recipients', CampaignController.getCampaignRecipients);
 router.post('/:id/retry', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), CampaignController.retryCampaign);
 
 /**
+ * @route   GET /api/v1/campaigns/:id/repeat-audience
+ * @desc    Same-audience contactIds for a previous campaign, re-checked against current opt-in/deletion state
+ * @access  Bearer (Business Owner, Manager)
+ */
+router.get('/:id/repeat-audience', authorize(UserRole.BUSINESS_OWNER, UserRole.MANAGER), CampaignController.getCampaignRepeatAudience);
+
+/**
  * @route   POST /api/v1/campaigns/:id/relaunch
  * @desc    Launch a new campaign to the same recipients as a previous one, same template/settings
  * @access  Bearer (Business Owner, Manager)

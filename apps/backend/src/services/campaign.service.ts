@@ -262,6 +262,29 @@ export async function createCampaign(organizationId: string, input: CreateCampai
 }
 
 /**
+ * Same-audience contactIds for a previous campaign, re-checked against
+ * current opt-in/deletion state — powers the Create Campaign modal's
+ * "Same Contacts as Before" audience option (the Relaunch/Copy flow).
+ */
+export async function getCampaignRepeatAudience(organizationId: string, campaignId: string) {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: campaignId, organizationId },
+    include: { recipients: { select: { contactId: true } } },
+  });
+  if (!campaign) throw new AppError('Campaign not found.', 404, 'CAMPAIGN_NOT_FOUND');
+
+  const allContactIds = Array.from(new Set(campaign.recipients.map((r) => r.contactId)));
+  if (allContactIds.length === 0) return { contactIds: [], count: 0 };
+
+  const eligible = await prisma.contact.findMany({
+    where: { id: { in: allContactIds }, organizationId, deletedAt: null, NOT: { isOptedIn: false } },
+    select: { id: true },
+  });
+
+  return { contactIds: eligible.map((c) => c.id), count: eligible.length };
+}
+
+/**
  * Relaunch — a new campaign send, same template/settings, targeted at the
  * exact same contacts a previous campaign reached (re-checked against
  * current opt-in/deletion state, so anyone who unsubscribed since then is
