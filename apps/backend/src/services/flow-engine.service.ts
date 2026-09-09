@@ -276,12 +276,19 @@ async function executeNode(
           status: agentId ? 'ESCALATED' : 'OPEN',
         },
       });
+      // Tell the CUSTOMER too, not just the agent — without this the
+      // conversation just went quiet from their side; they had no idea
+      // they'd been handed off to a person instead of getting a bot reply.
+      await sendFlowText(
+        organizationId,
+        conversationId,
+        agentId
+          ? "I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
+          : "Thanks — we've noted your request and someone will be in touch shortly."
+      );
       if (agentId) {
         const { notifyAgentOfEscalation } = await import('./agent-notification.service.js');
         void notifyAgentOfEscalation(organizationId, agentId, conversationId);
-      } else {
-        // No one to hand off to — say something rather than silently going quiet.
-        await sendFlowText(organizationId, conversationId, "Thanks — we've noted your request and someone will be in touch shortly.");
       }
       return { completed: true };
     }
