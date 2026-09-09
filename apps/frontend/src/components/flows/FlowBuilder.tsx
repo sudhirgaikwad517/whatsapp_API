@@ -464,6 +464,11 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              // A default edge's actual clickable hitbox is only a few
+              // pixels wide, easy to miss and land on a nearby node instead
+              // — widened here so clicking anywhere near the wire (not just
+              // exactly on its visible line) selects it.
+              defaultEdgeOptions={{ interactionWidth: 30 }}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
