@@ -212,12 +212,33 @@ export async function processAutonomousAiResponse(organizationId: string, conver
 
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
-      select: { assignedAgentId: true, status: true },
+      select: { assignedAgentId: true, status: true, contactId: true },
     });
 
     // Do NOT auto respond if conversation is already assigned to a human agent or resolved
     if (conversation?.assignedAgentId || conversation?.status === 'RESOLVED') {
       return;
+    }
+
+    // A plain-language "show me your products/catalogue" gets a REAL
+    // browsing experience (photos, prices, an Order button) instead of
+    // either a text-only AI description or an unnecessary human escalation
+    // — the RAG search below only finds catalog context when the customer
+    // names a specific product, so a generic "what do you sell" would
+    // otherwise fall through to [HANDOFF_TO_HUMAN] for no good reason.
+    if (conversation?.contactId) {
+      const lastInbound = await prisma.message.findFirst({
+        where: { conversationId, direction: 'INBOUND' },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      });
+      const lastText =
+        typeof lastInbound?.content === 'object' ? (lastInbound?.content as any)?.text || '' : (lastInbound?.content as any) || '';
+      if (lastText) {
+        const { tryStartCatalogBrowseFlow } = await import('./flow-engine.service.js');
+        const startedCatalogBrowse = await tryStartCatalogBrowseFlow(organizationId, conversationId, conversation.contactId, lastText);
+        if (startedCatalogBrowse) return;
+      }
     }
 
     // Evaluate AI Autonomous Reply with Handoff Check

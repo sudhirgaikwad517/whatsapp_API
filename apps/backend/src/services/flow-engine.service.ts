@@ -28,6 +28,12 @@ interface FlowNodeData {
   buttons?: { id: string; title: string }[];
   listButtonLabel?: string;
   listRows?: { id: string; title: string; description?: string }[];
+  // list — when true, rows are built live from the org's Product Catalog
+  // (up to 10 active items) instead of listRows, and selecting one stores
+  // it into variables the same way a sendProduct node does. Lets a flow
+  // let the customer browse the WHOLE catalog rather than only whichever
+  // 1-2 products an admin manually wired up.
+  catalogMode?: boolean;
   variable?: string;
   operator?: 'equals' | 'notEquals' | 'contains';
   value?: string;
@@ -320,8 +326,30 @@ async function executeNode(
 
     case 'list': {
       const bodyText = node.data?.bodyText || 'Please choose an option:';
-      const rows = (node.data?.listRows || []).slice(0, 10);
+      let rows: { id: string; title: string; description?: string }[];
+
+      if (node.data?.catalogMode) {
+        const products = await prisma.productCatalog.findMany({
+          where: { organizationId, isActive: true },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        });
+        rows = products.map((p) => ({
+          id: p.id,
+          title: p.title,
+          description: `₹${Number(p.priceInINR).toFixed(2)}${p.description ? ' — ' + p.description : ''}`,
+        }));
+      } else {
+        rows = (node.data?.listRows || []).slice(0, 10);
+      }
+
       if (rows.length === 0) {
+        if (node.data?.catalogMode) {
+          // Nothing to browse — end here rather than pausing on an empty
+          // list the customer could never actually reply to meaningfully.
+          await sendFlowText(organizationId, conversationId, "We don't have any products listed just yet — please check back soon!");
+          return { completed: true };
+        }
         await sendFlowText(organizationId, conversationId, bodyText);
         return { completed: false };
       }
@@ -393,7 +421,12 @@ async function executeNode(
     }
 
     case 'sendProduct': {
-      const productId = node.data?.productId;
+      // A fixed, admin-picked product always wins when configured; leaving
+      // it blank turns this into a generic "show whatever was just picked"
+      // step, which is what a catalogMode List node routes into — the same
+      // node then works for any product the customer selects, instead of
+      // needing one hardcoded sendProduct node per catalog item.
+      const productId = node.data?.productId || variables.__selectedProductId;
       const product = productId
         ? await prisma.productCatalog.findFirst({ where: { id: productId, organizationId, isActive: true } })
         : null;
@@ -446,7 +479,14 @@ async function executeNode(
         await escalateToHumanAgent(organizationId, conversationId);
         return { completed: true };
       }
-      return { completed: false };
+      // Ends the flow here on purpose — anything wired after this node
+      // would fire in the SAME turn as the payment link itself, before the
+      // customer has actually paid (that's exactly what produced a
+      // premature "Thanks for your order!" message in testing). The real
+      // "payment received, order confirmed" message is sent separately,
+      // once payment actually happens — see markPaymentOrderPaid() in
+      // in-chat-payment.service.ts.
+      return { completed: true };
     }
 
     case 'end': {
@@ -568,6 +608,102 @@ export async function startFlowSession(
   }
 }
 
+// Recognizes plain-language "let me browse what you sell" requests — used
+// so the AI auto-responder can hand these off to a REAL product browsing
+// experience instead of either (a) escalating to a human just because no
+// specific product name matched its keyword-RAG search, or (b) giving a
+// text-only description with no way to actually order. Deliberately narrow
+// (catalog/product/menu/price-list wording) rather than a loose "what do
+// you have" style match, so it doesn't fire on unrelated questions.
+const CATALOG_INTENT_RE = /\b(catalog(ue)?s?|products?|price\s*list|menu|items?\s+(do\s+you\s+have|available)|what\s+do\s+you\s+(sell|have|offer))\b/i;
+
+// Exported so flow.service.ts's listFlows() can hide this auto-generated
+// flow from the admin's Flows page — it's an internal implementation detail
+// of tryStartCatalogBrowseFlow(), not something the org built and should
+// see/edit alongside their own flows.
+export const SYSTEM_CATALOG_FLOW_NAME = '__system__: Product Catalog Browser';
+
+async function getOrCreateSystemCatalogFlow(organizationId: string) {
+  const existing = await prisma.flow.findFirst({ where: { organizationId, name: SYSTEM_CATALOG_FLOW_NAME } });
+
+  // Trigger keyword is intentionally left unset — this flow is never
+  // reached via the normal keyword-match router, only ever entered
+  // directly via startFlowSession() from tryStartCatalogBrowseFlow() below.
+  const definition: FlowDefinition = {
+    nodes: [
+      { id: '1', type: 'input', data: { label: '⚡ System: Catalog Browse' } },
+      {
+        id: 'catalog-list',
+        type: 'flowNode',
+        data: { nodeType: 'list', bodyText: '🛍️ Here’s what we offer — tap to view a product:', listButtonLabel: 'Browse Products', catalogMode: true },
+      },
+      { id: 'show-product', type: 'flowNode', data: { nodeType: 'sendProduct' } },
+      {
+        id: 'product-buttons',
+        type: 'flowNode',
+        data: {
+          nodeType: 'buttons',
+          bodyText: 'Would you like to order this, see other products, or ask a question?',
+          buttons: [
+            { id: 'btn-order', title: '✅ Order This' },
+            { id: 'btn-other', title: '🔄 See Other Products' },
+            { id: 'btn-ask', title: '❓ Ask a Question' },
+          ],
+        },
+      },
+      {
+        id: 'ai-ask',
+        type: 'flowNode',
+        data: { nodeType: 'aiResponse', introText: 'Sure! Ask me anything about this product.', continueKeyword: 'continue' },
+      },
+      { id: 'pay-link', type: 'flowNode', data: { nodeType: 'paymentLink', description: 'Order Payment' } },
+    ],
+    edges: [
+      { id: 'e1', source: '1', target: 'catalog-list' },
+      { id: 'e2', source: 'catalog-list', target: 'show-product' },
+      { id: 'e3', source: 'show-product', target: 'product-buttons' },
+      { id: 'e4', source: 'product-buttons', sourceHandle: 'btn-order', target: 'pay-link' },
+      { id: 'e5', source: 'product-buttons', sourceHandle: 'btn-other', target: 'catalog-list' },
+      { id: 'e6', source: 'product-buttons', sourceHandle: 'btn-ask', target: 'ai-ask' },
+      { id: 'e7', source: 'ai-ask', target: 'product-buttons' },
+    ],
+  };
+
+  if (existing) {
+    if (existing.isActive) return existing;
+    return prisma.flow.update({ where: { id: existing.id }, data: { definition: definition as any, isActive: true } });
+  }
+  return prisma.flow.create({
+    data: { organizationId, name: SYSTEM_CATALOG_FLOW_NAME, triggerKeyword: null, definition: definition as any, isActive: true },
+  });
+}
+
+/**
+ * Called from ai.service.ts's autonomous-reply path, BEFORE it asks Gemini
+ * anything — if the customer's message reads like "show me your products"
+ * and the org actually has catalog items, starts a real browsing session
+ * (photos, prices, an Order button, per-product Q&A) instead of letting the
+ * AI either escalate to a human (its RAG search finds nothing for a generic
+ * "what do you sell") or answer in text with no way to actually buy.
+ * Returns false (does nothing) when there's no catalog-intent match or the
+ * org's catalog is empty, so the caller falls through to its normal path.
+ */
+export async function tryStartCatalogBrowseFlow(
+  organizationId: string,
+  conversationId: string,
+  contactId: string,
+  customerText: string
+): Promise<boolean> {
+  if (!customerText || !CATALOG_INTENT_RE.test(customerText)) return false;
+
+  const productCount = await prisma.productCatalog.count({ where: { organizationId, isActive: true } });
+  if (productCount === 0) return false;
+
+  const flow = await getOrCreateSystemCatalogFlow(organizationId);
+  await startFlowSession(organizationId, conversationId, contactId, flow);
+  return true;
+}
+
 /**
  * Advances an already-ACTIVE FlowSession using the customer's latest reply
  * (button tap, list selection, or free text). This is what makes a flow
@@ -609,6 +745,33 @@ export async function advanceFlowSession(
 
   if (currentType === 'buttons' || currentType === 'list') {
     const replyId = inbound.buttonReplyId || inbound.listReplyId;
+
+    if (currentType === 'list' && currentNode.data?.catalogMode) {
+      // Rows here are the org's live catalog, not per-row wired edges — the
+      // reply id IS a real ProductCatalog id. Remember what was picked (the
+      // same variables a sendProduct node sets) and follow this node's one
+      // single generic outgoing edge, same as any other non-branching step.
+      if (replyId) {
+        const picked = await prisma.productCatalog.findFirst({
+          where: { id: replyId, organizationId: session.organizationId, isActive: true },
+        });
+        if (picked) {
+          variables.__selectedProductId = picked.id;
+          variables.__selectedProductTitle = picked.title;
+          variables.__selectedProductPrice = Number(picked.priceInINR);
+        }
+      }
+      nextEdge = edges.find((e) => e.source === currentNode.id);
+
+      if (!nextEdge) {
+        await sendFlowText(session.organizationId, session.conversationId, "Sorry, I didn't quite get that — please tap one of the products above.");
+        await prisma.flowSession.update({
+          where: { id: session.id },
+          data: { lastAdvancedAt: new Date(), expiresAt: new Date(Date.now() + SESSION_TIMEOUT_MS) },
+        });
+        return;
+      }
+    } else {
     if (replyId) nextEdge = edgeFrom(edges, currentNode.id, replyId);
 
     if (!nextEdge) {
@@ -636,6 +799,7 @@ export async function advanceFlowSession(
         data: { lastAdvancedAt: new Date(), expiresAt: new Date(Date.now() + SESSION_TIMEOUT_MS) },
       });
       return;
+    }
     }
   } else if (currentType === 'collectInput') {
     const varName = currentNode.data?.variableName;

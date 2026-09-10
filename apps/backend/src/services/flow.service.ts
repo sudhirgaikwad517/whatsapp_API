@@ -1,6 +1,7 @@
 import { prisma } from '../config/database.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
 import { canonicalizeGreeting, isKnownGreeting } from './auto-responder.service.js';
+import { SYSTEM_CATALOG_FLOW_NAME } from './flow-engine.service.js';
 
 export interface CreateFlowInput {
   name: string;
@@ -17,7 +18,11 @@ export interface UpdateFlowInput {
 
 export async function listFlows(organizationId: string) {
   return prisma.flow.findMany({
-    where: { organizationId },
+    // The auto-generated catalog-browse flow (tryStartCatalogBrowseFlow())
+    // is an internal implementation detail, not something the org built —
+    // hide it from their Flows page so it doesn't read as a mystery flow
+    // they never created.
+    where: { organizationId, name: { not: SYSTEM_CATALOG_FLOW_NAME } },
     orderBy: { updatedAt: 'desc' },
   });
 }

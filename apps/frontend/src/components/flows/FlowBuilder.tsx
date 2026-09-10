@@ -124,7 +124,9 @@ const FlowNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
       : nodeType === 'buttons'
       ? data?.bodyText || 'No prompt set'
       : nodeType === 'list'
-      ? data?.bodyText || 'No prompt set'
+      ? data?.catalogMode
+        ? `${data?.bodyText || 'Browse products'} (shows your live Product Catalog, up to 10 items)`
+        : data?.bodyText || 'No prompt set'
       : nodeType === 'condition'
       ? `IF ${data?.variable ? `[${data.variable}]` : 'last reply'} ${data?.operator || 'contains'} "${data?.value || ''}"`
       : nodeType === 'collectInput'
@@ -136,7 +138,7 @@ const FlowNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
       : nodeType === 'end'
       ? data?.text || 'Ends the flow'
       : nodeType === 'sendProduct'
-      ? `Show: ${data?.productTitle || 'No product selected'}`
+      ? `Show: ${data?.productTitle || 'whichever product was just picked (dynamic)'}`
       : nodeType === 'aiResponse'
       ? `${data?.introText || 'Sure! What would you like to know?'} (reply "${data?.continueKeyword || 'continue'}" to move on)`
       : nodeType === 'paymentLink'
@@ -191,6 +193,7 @@ function makeDefaultNodeData(nodeType: NodeType): any {
         bodyText: 'Please choose an option:',
         listButtonLabel: 'View Options',
         listRows: [{ id: newId('row'), title: 'Option 1', description: '' }],
+        catalogMode: false,
       };
     case 'condition':
       return { nodeType, variable: '', operator: 'contains', value: '' };
@@ -720,39 +723,59 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
           />
         </div>
-        <div>
-          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Rows (max 10)</label>
-          <div className="space-y-2">
-            {rows.map((r, idx) => (
-              <div key={r.id} className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={r.title}
-                    maxLength={24}
-                    onChange={(e) => {
-                      const next = rows.map((row, i) => (i === idx ? { ...row, title: e.target.value } : row));
-                      onChange({ listRows: next });
-                    }}
-                    className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    placeholder={`Row ${idx + 1} title`}
-                  />
-                  <button onClick={() => onChange({ listRows: rows.filter((_, i) => i !== idx) })} className="text-rose-400 hover:text-rose-300 p-1">
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
+
+        <label className="flex items-start space-x-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer">
+          <input
+            type="checkbox"
+            checked={Boolean(node.data?.catalogMode)}
+            onChange={(e) => onChange({ catalogMode: e.target.checked })}
+            className="mt-0.5 accent-emerald-500"
+          />
+          <span>
+            <span className="block text-xs font-semibold text-white">Show my Product Catalog automatically</span>
+            <span className="block text-[10px] text-slate-500 mt-0.5">
+              Lists your live catalog (up to 10 items — WhatsApp's own limit per message) instead of the rows below.
+              Wire this node's single outgoing connection to a Send Product node — leave that node's own Product
+              field empty and it'll show whichever one the customer picked here.
+            </span>
+          </span>
+        </label>
+
+        {!node.data?.catalogMode && (
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Rows (max 10)</label>
+            <div className="space-y-2">
+              {rows.map((r, idx) => (
+                <div key={r.id} className="p-2 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={r.title}
+                      maxLength={24}
+                      onChange={(e) => {
+                        const next = rows.map((row, i) => (i === idx ? { ...row, title: e.target.value } : row));
+                        onChange({ listRows: next });
+                      }}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      placeholder={`Row ${idx + 1} title`}
+                    />
+                    <button onClick={() => onChange({ listRows: rows.filter((_, i) => i !== idx) })} className="text-rose-400 hover:text-rose-300 p-1">
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-            {rows.length < 10 && (
-              <button
-                onClick={() => onChange({ listRows: [...rows, { id: newId('row'), title: `Option ${rows.length + 1}` }] })}
-                className="text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold flex items-center"
-              >
-                <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
-              </button>
-            )}
+              ))}
+              {rows.length < 10 && (
+                <button
+                  onClick={() => onChange({ listRows: [...rows, { id: newId('row'), title: `Option ${rows.length + 1}` }] })}
+                  className="text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold flex items-center"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Row
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -915,7 +938,7 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
               }}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
             >
-              <option value="">Select a product...</option>
+              <option value="">— Whichever product was just picked (dynamic) —</option>
               {catalogProducts.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.title} — ₹{Number(p.priceInINR).toFixed(2)}
@@ -926,7 +949,9 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
         </div>
         <p className="text-[10px] text-slate-500">
           Sends the product's photo, description and price as a real WhatsApp message. Wire this node's outgoing
-          connection to an Interactive Buttons node (e.g. "Order This" / "Ask a Question") next.
+          connection to an Interactive Buttons node (e.g. "Order This" / "Ask a Question") next. Pick a fixed
+          product here to always show that one, or leave it on "whichever product was just picked" to show
+          whatever the customer selected from an earlier Product Catalog List node.
         </p>
       </div>
     );
@@ -983,7 +1008,9 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
         <p className="text-[10px] text-slate-500">
           Generates a real Razorpay payment link for whichever product was shown earlier in this same conversation
           (via a Send Product node) and sends it to the customer. Make sure Razorpay is connected under Settings →
-          Payments before using this node.
+          Payments before using this node. This node always ends the flow here — nothing wired after it will run,
+          since the customer hasn't actually paid yet when this fires. The "payment received, order confirmed"
+          message is sent automatically, separately, once they actually complete the payment.
         </p>
       </div>
     );

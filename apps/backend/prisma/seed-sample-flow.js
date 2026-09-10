@@ -1,12 +1,23 @@
 // Idempotent, production-safe script that creates (or updates, if re-run) a
 // fully-wired sample Chatbot Flow for a given organization, exercising
 // every node type added for single-product commerce: Send Product ->
-// Interactive Buttons (Order / See Other Options / Ask a Question) ->
-// AI Response (loops back) / another Send Product (loops back) -> Payment
-// Link -> End. Safe to run against production — unlike prisma/seed.ts
-// (dev-only demo data), this creates real, usable org data and re-running
-// it just updates the same flow/products in place rather than duplicating
-// them.
+// Interactive Buttons (Order / See Other Products / Ask a Question), where
+// "See Other Products" opens a live Product Catalog List (browses EVERY
+// active catalog item, not just the two seeded here) whose selection feeds
+// a dynamic Send Product node, "Ask a Question" hands off to an AI Response
+// node, and "Order This" goes to a Payment Link node (which always ends the
+// flow there — see its own comment in flow-engine.service.ts for why).
+// Safe to run against production — unlike prisma/seed.ts (dev-only demo
+// data), this creates real, usable org data and re-running it just updates
+// the same flow/products in place rather than duplicating them.
+//
+// Note: an org does NOT need this script (or any manually-built flow) just
+// to let customers browse products — ai.service.ts's
+// tryStartCatalogBrowseFlow() already auto-detects plain-language requests
+// like "show me your products" and starts an equivalent browsing session on
+// its own, catalog permitting. This script exists to give a concrete,
+// editable example of the same pattern (plus a trigger-keyword-based entry
+// point) for testing and as a starting point to customize.
 //
 // Plain JS (not TypeScript) on purpose — the production image has no
 // `tsx`/TS toolchain, only Node itself (npm ci --omit=dev strips
@@ -96,20 +107,31 @@ async function main() {
         type: 'flowNode',
         data: {
           nodeType: 'buttons',
-          bodyText: 'How would you like to proceed?',
+          bodyText: 'Would you like to order this, see other products, or ask a question?',
           buttons: [
             { id: 'btn-order', title: '✅ Order This' },
-            { id: 'btn-other', title: '🔄 See Other Options' },
+            { id: 'btn-other', title: '🔄 See Other Products' },
             { id: 'btn-ask', title: '❓ Ask a Question' },
           ],
         },
         position: { x: 400, y: 340 },
       },
       {
-        id: 'send-premium',
+        id: 'catalog-list',
         type: 'flowNode',
-        data: { nodeType: 'sendProduct', productId: premiumProduct.id, productTitle: premiumProduct.title },
+        data: {
+          nodeType: 'list',
+          bodyText: '🛍️ Here’s everything we offer — tap to view one:',
+          listButtonLabel: 'Browse Products',
+          catalogMode: true,
+        },
         position: { x: 750, y: 340 },
+      },
+      {
+        id: 'show-picked',
+        type: 'flowNode',
+        data: { nodeType: 'sendProduct' },
+        position: { x: 750, y: 500 },
       },
       {
         id: 'ai-ask',
@@ -127,22 +149,16 @@ async function main() {
         data: { nodeType: 'paymentLink', description: 'Order Payment' },
         position: { x: 400, y: 540 },
       },
-      {
-        id: 'end-node',
-        type: 'flowNode',
-        data: { nodeType: 'end', text: 'Thanks for your order! We will confirm shortly. 🙏' },
-        position: { x: 400, y: 680 },
-      },
     ],
     edges: [
       { id: 'e-1-send-basic', source: '1', target: 'send-basic', animated: true, style: { stroke: '#10b981' } },
       { id: 'e-send-basic-buttons', source: 'send-basic', target: 'main-buttons', animated: true, style: { stroke: '#10b981' } },
       { id: 'e-buttons-order-pay', source: 'main-buttons', sourceHandle: 'btn-order', target: 'pay-link', animated: true, style: { stroke: '#10b981' } },
-      { id: 'e-buttons-other-premium', source: 'main-buttons', sourceHandle: 'btn-other', target: 'send-premium', animated: true, style: { stroke: '#10b981' } },
+      { id: 'e-buttons-other-catalog', source: 'main-buttons', sourceHandle: 'btn-other', target: 'catalog-list', animated: true, style: { stroke: '#10b981' } },
       { id: 'e-buttons-ask-ai', source: 'main-buttons', sourceHandle: 'btn-ask', target: 'ai-ask', animated: true, style: { stroke: '#10b981' } },
-      { id: 'e-premium-back-buttons', source: 'send-premium', target: 'main-buttons', animated: true, style: { stroke: '#10b981' } },
+      { id: 'e-catalog-show-picked', source: 'catalog-list', target: 'show-picked', animated: true, style: { stroke: '#10b981' } },
+      { id: 'e-show-picked-back-buttons', source: 'show-picked', target: 'main-buttons', animated: true, style: { stroke: '#10b981' } },
       { id: 'e-ai-back-buttons', source: 'ai-ask', target: 'main-buttons', animated: true, style: { stroke: '#10b981' } },
-      { id: 'e-pay-end', source: 'pay-link', target: 'end-node', animated: true, style: { stroke: '#10b981' } },
     ],
   };
 
