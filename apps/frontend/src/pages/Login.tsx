@@ -53,7 +53,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 overflow-y-auto">
+    <div className="h-screen flex items-center justify-center bg-slate-950 px-4 overflow-y-auto overflow-x-hidden">
       <div className="w-full max-w-md bg-slate-900 border border-emerald-500/30 rounded-2xl p-8 shadow-2xl space-y-6 relative">
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-500/30">
           Team Dashboard
