@@ -1,11 +1,121 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ShoppingBag, Plus, Trash2, Edit3, Image as ImageIcon, Zap, Check, X } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, Edit3, Image as ImageIcon, Zap, Check, X, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { confirmAction } from '../components/ui/ConfirmDialog';
 
+const ORDER_STATUS_META: Record<string, { label: string; className: string }> = {
+  CREATED: { label: 'Awaiting Payment', className: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  PAID: { label: 'Paid', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  FAILED: { label: 'Failed', className: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+  EXPIRED: { label: 'Expired', className: 'bg-slate-700/50 text-slate-400 border-slate-600/50' },
+};
+
+const OrdersTab: React.FC = () => {
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['payment-orders-list', page],
+    queryFn: async () => {
+      const res = await apiClient.get('/catalog/orders', { params: { page, limit: 25 } });
+      return res.data.data as {
+        orders: any[];
+        total: number;
+        page: number;
+        totalPages: number;
+      };
+    },
+  });
+
+  if (isLoading) {
+    return <div className="text-center py-12 text-slate-500 text-xs">Loading orders...</div>;
+  }
+
+  if (!data || data.orders.length === 0) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-4 shadow-xl">
+        <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">
+          <Receipt className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-white">No Orders Yet</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            When a customer pays through an in-chat WhatsApp payment link (from a Chatbot Flow's Payment Link node,
+            or the keyword-triggered commerce bot), it'll show up here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[10px]">
+                <th className="text-left px-4 py-3 font-semibold">Customer</th>
+                <th className="text-left px-4 py-3 font-semibold">Amount</th>
+                <th className="text-left px-4 py-3 font-semibold">Status</th>
+                <th className="text-left px-4 py-3 font-semibold">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/70">
+              {data.orders.map((o) => {
+                const statusMeta = ORDER_STATUS_META[o.status] || { label: o.status, className: 'bg-slate-700/50 text-slate-400 border-slate-600/50' };
+                const customerName = [o.contact?.firstName, o.contact?.lastName].filter(Boolean).join(' ') || 'Unknown Customer';
+                return (
+                  <tr key={o.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-white">{customerName}</div>
+                      {o.contact?.phoneNumber && <div className="text-[10px] text-slate-500 font-mono">{o.contact.phoneNumber}</div>}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-white">₹{Number(o.totalAmount).toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusMeta.className}`}>
+                        {statusMeta.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">{new Date(o.createdAt).toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {data.totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>
+            Page {data.page} of {data.totalPages} — {data.total} order{data.total === 1 ? '' : 's'} total
+          </span>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+              disabled={page >= data.totalPages}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const Catalog: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'products' | 'orders'>('products');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
 
@@ -136,16 +246,42 @@ export const Catalog: React.FC = () => {
           </p>
         </div>
 
+        {activeTab === 'products' && (
+          <button
+            onClick={openCreateModal}
+            className="w-full sm:w-auto justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4 mr-2 stroke-[3]" />
+            Add Catalog Product
+          </button>
+        )}
+      </div>
+
+      {/* Tab Switcher */}
+      <div className="flex items-center space-x-2 border-b border-slate-800">
         <button
-          onClick={openCreateModal}
-          className="w-full sm:w-auto justify-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl flex items-center shadow-lg shadow-emerald-500/20 text-sm transition-all cursor-pointer shrink-0"
+          onClick={() => setActiveTab('products')}
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer flex items-center ${
+            activeTab === 'products' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'
+          }`}
         >
-          <Plus className="w-4 h-4 mr-2 stroke-[3]" />
-          Add Catalog Product
+          <ShoppingBag className="w-3.5 h-3.5 mr-1.5" />
+          Products
+        </button>
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-all cursor-pointer flex items-center ${
+            activeTab === 'orders' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5 mr-1.5" />
+          Orders
         </button>
       </div>
 
-      {/* Catalog Grid */}
+      {activeTab === 'orders' ? (
+        <OrdersTab />
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {isLoading ? (
           <div className="col-span-full text-center py-12 text-slate-500 text-xs">Loading products...</div>
@@ -229,6 +365,7 @@ export const Catalog: React.FC = () => {
           ))
         )}
       </div>
+      )}
 
       {/* Add / Edit Product Modal */}
       {isModalOpen && (

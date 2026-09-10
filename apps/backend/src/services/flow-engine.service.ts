@@ -617,6 +617,15 @@ export async function startFlowSession(
 // you have" style match, so it doesn't fire on unrelated questions.
 const CATALOG_INTENT_RE = /\b(catalog(ue)?s?|products?|price\s*list|menu|items?\s+(do\s+you\s+have|available)|what\s+do\s+you\s+(sell|have|offer))\b/i;
 
+// Recognizes "I want a real person" inside an AI Response flow node — used
+// so that loop doesn't run forever generating text answers when what the
+// customer actually wants is to be connected to the org's team. Confirmed
+// via live testing: phrases like "I want to discuss with your team" got
+// answered with more generic company info instead of ever escalating,
+// because this node had no human-handoff path at all before this.
+const HUMAN_HANDOFF_INTENT_RE =
+  /\b(talk|speak|chat|connect|discuss)\b[\s\S]{0,20}\b(team|human|agent|person|representative|rep|someone|support|staff)\b|\b(human|real\s+person|live\s+agent|customer\s+support|speak\s+to\s+(a\s+)?(someone|human)|talk\s+to\s+(a\s+)?human)\b/i;
+
 // Exported so flow.service.ts's listFlows() can hide this auto-generated
 // flow from the admin's Flows page — it's an internal implementation detail
 // of tryStartCatalogBrowseFlow(), not something the org built and should
@@ -810,6 +819,13 @@ export async function advanceFlowSession(
     const typed = inbound.text.trim().toLowerCase();
     if (typed === continueKeyword) {
       nextEdge = edgeFrom(edges, currentNode.id);
+    } else if (HUMAN_HANDOFF_INTENT_RE.test(inbound.text)) {
+      // Customer explicitly asked for a person, not another AI answer —
+      // escalate right here instead of looping the AI forever (it has no
+      // way to actually connect them, only to describe things in text).
+      await escalateToHumanAgent(session.organizationId, session.conversationId);
+      await markSession(session.id, 'COMPLETED', variables);
+      return;
     } else {
       // Not the "I'm done, move on" keyword — treat it as another question
       // for the AI and answer it in-place, without advancing the flow.

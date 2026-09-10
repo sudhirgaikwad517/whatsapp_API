@@ -14,6 +14,7 @@ router.use(tenantContext);
 // and a conversation-scoped action, so these are deliberately NOT gated
 // behind 'catalog' page access; only actually managing products is.
 router.get('/', CatalogController.listProducts);
+router.get('/orders', CatalogController.listOrders);
 router.get('/:id', CatalogController.getProduct);
 router.post('/payment-link', CatalogController.createPaymentLink);
 

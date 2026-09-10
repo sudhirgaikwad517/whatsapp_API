@@ -59,6 +59,18 @@ export async function deleteProduct(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function listOrders(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const orgId = req.user!.organizationId;
+    const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+    const limit = req.query.limit ? Math.min(100, Math.max(1, Number(req.query.limit))) : 25;
+    const data = await CatalogService.listPaymentOrders(orgId, { page, limit });
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function createPaymentLink(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const orgId = req.user!.organizationId;

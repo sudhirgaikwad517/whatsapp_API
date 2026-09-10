@@ -68,3 +68,40 @@ export async function deleteProduct(organizationId: string, id: string) {
   await prisma.productCatalog.delete({ where: { id } });
   return { message: 'Product deleted from catalog.' };
 }
+
+// In-chat commerce orders (Payment Link flow node + the keyword-triggered
+// commerce bot) previously had NO way to be viewed anywhere except a raw DB
+// query — org admins had no visibility into which orders were created,
+// pending, or actually paid.
+export async function listPaymentOrders(organizationId: string, { page = 1, limit = 25 }: { page?: number; limit?: number } = {}) {
+  const skip = (page - 1) * limit;
+  const [orders, total] = await Promise.all([
+    prisma.paymentOrder.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.paymentOrder.count({ where: { organizationId } }),
+  ]);
+
+  // PaymentOrder.contactId has no Prisma relation to Contact (a deliberate
+  // loose reference, not an FK) — resolve names/numbers separately instead
+  // of an include.
+  const contactIds = [...new Set(orders.map((o) => o.contactId).filter((id): id is string => Boolean(id)))];
+  const contacts = contactIds.length
+    ? await prisma.contact.findMany({
+        where: { id: { in: contactIds } },
+        select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+      })
+    : [];
+  const contactMap = new Map(contacts.map((c) => [c.id, c]));
+
+  return {
+    orders: orders.map((o) => ({ ...o, contact: o.contactId ? contactMap.get(o.contactId) || null : null })),
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
+}
