@@ -12,6 +12,13 @@ RUN npm ci
 COPY packages/shared-types ./packages/shared-types
 COPY apps/frontend ./apps/frontend
 
+# Vite reads VITE_* as real process env vars at build time (baked into the
+# static JS bundle) — passed in from docker-compose.yml's build.args, which
+# in turn comes from this repo's own .env, since a build's context can't
+# otherwise see anything outside apps/frontend.
+ARG VITE_TURNSTILE_SITE_KEY=""
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+
 RUN npm run build --workspace=@prowexa/shared-types
 RUN npm run build --workspace=@prowexa/frontend
 

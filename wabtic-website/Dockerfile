@@ -6,6 +6,14 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+
+# Vite reads VITE_* as real process env vars at build time (baked into the
+# static JS bundle) — passed in from docker-compose.yml's build.args, which
+# in turn comes from the main repo's own root .env, since this build's
+# context (./wabtic-website) can't otherwise see anything outside itself.
+ARG VITE_TURNSTILE_SITE_KEY=""
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+
 RUN npm run build
 
 # nginx-unprivileged runs as the non-root `nginx` user and listens on 8080 by

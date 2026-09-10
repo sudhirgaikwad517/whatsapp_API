@@ -94,6 +94,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        # Vite bakes VITE_* vars in at BUILD time — a build's context is
+        # isolated from the rest of the filesystem, so the only way for it
+        # to see this repo's own .env (next to this compose file) is via an
+        # explicit build arg like this, substituted by docker-compose itself.
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     container_name: prowexa_frontend
     restart: always
     ports:
@@ -110,6 +116,8 @@ services:
     build:
       context: ./wabtic-website
       dockerfile: Dockerfile
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     container_name: prowexa_website
     restart: always
     ports:
