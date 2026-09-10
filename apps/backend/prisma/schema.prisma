@@ -228,6 +228,11 @@ model User {
   emailVerifyToken  String?            @db.VarChar(255)
   resetToken        String?            @db.VarChar(255)
   resetTokenExpiry  DateTime?
+  // Signup email verification — a 6-digit OTP, not the old link-based
+  // emailVerifyToken (kept above, unused going forward, harmless).
+  emailOtpCode      String?            @db.VarChar(10)
+  emailOtpExpiresAt DateTime?
+  emailOtpAttempts  Int                @default(0)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   deletedAt         DateTime?

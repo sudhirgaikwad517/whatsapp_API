@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { MessageSquare, Lock, Mail, Phone, User, Building2, ArrowRight } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
+import { TurnstileWidget, TURNSTILE_SITE_KEY } from '../components/ui/TurnstileWidget';
+import { OtpVerificationForm } from '../components/ui/OtpVerificationForm';
 
 export const Signup: React.FC = () => {
   const [fullName, setFullName] = useState('');
@@ -12,6 +14,10 @@ export const Signup: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  // Registration succeeded -> now verifying the emailed OTP before the
+  // account is actually usable (registerUser no longer logs the user in).
+  const [awaitingOtp, setAwaitingOtp] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -20,17 +26,15 @@ export const Signup: React.FC = () => {
     setError('');
 
     try {
-      const res = await apiClient.post('/auth/register', {
+      await apiClient.post('/auth/register', {
         fullName,
         organizationName,
         email,
         phoneNumber,
         password,
+        turnstileToken,
       });
-
-      const { user } = res.data.data;
-      setAuth(user);
-      window.location.href = '/settings';
+      setAwaitingOtp(true);
     } catch (err: any) {
       const serverMsg =
         err.response?.data?.error?.message ||
@@ -41,6 +45,11 @@ export const Signup: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOtpVerified = (data: { user: any }) => {
+    setAuth(data.user);
+    window.location.href = '/settings';
   };
 
   return (
@@ -60,6 +69,10 @@ export const Signup: React.FC = () => {
           </p>
         </div>
 
+        {awaitingOtp ? (
+          <OtpVerificationForm email={email} onVerified={handleOtpVerified} />
+        ) : (
+        <>
         {error && (
           <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl">
             {error}
@@ -159,15 +172,19 @@ export const Signup: React.FC = () => {
             <p className="text-[11px] text-slate-500">At least 8 characters, with an uppercase letter and a number.</p>
           </div>
 
+          <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken('')} />
+
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-500/30 cursor-pointer mt-2"
+            disabled={isLoading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-lg shadow-emerald-500/30 cursor-pointer mt-2 disabled:opacity-50"
           >
             <span>{isLoading ? 'Creating Your Account...' : 'Create Business Account'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
+        </>
+        )}
 
         <div className="text-center pt-2 text-xs text-slate-400">
           Already have a Prowexa account?{' '}

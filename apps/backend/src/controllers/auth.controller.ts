@@ -2,15 +2,39 @@ import { Request, Response, NextFunction } from 'express';
 import * as AuthService from '../services/auth.service.js';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
 import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies, isWebsiteSurface, COOKIE_NAMES } from '../utils/auth-cookies.js';
+import { verifyTurnstileToken } from '../utils/turnstile.js';
 import { env } from '../config/env.js';
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
+    await verifyTurnstileToken(req.body?.turnstileToken, req.ip);
     const website = isWebsiteSurface(req);
+    // No tokens/cookies here — the account isn't usable until the emailed
+    // OTP is verified via verifySignupOtp below, which is what actually
+    // issues the session.
     const result = await AuthService.registerUser(req.body, website);
-    setAccessTokenCookie(res, result.tokens.accessToken, undefined, website);
-    setRefreshTokenCookie(res, result.tokens.refreshToken, undefined, website);
     res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function verifySignupOtp(req: Request, res: Response, next: NextFunction) {
+  try {
+    const website = isWebsiteSurface(req);
+    const result = await AuthService.verifySignupOtp(req.body?.email, req.body?.otp);
+    setAccessTokenCookie(res, result.accessToken, undefined, website);
+    setRefreshTokenCookie(res, result.refreshToken, undefined, website);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resendSignupOtp(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await AuthService.resendSignupOtp(req.body?.email);
+    res.status(200).json({ success: true, data: result });
   } catch (err) {
     next(err);
   }
@@ -18,6 +42,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
+    await verifyTurnstileToken(req.body?.turnstileToken, req.ip);
     const result = await AuthService.loginUser(req.body);
     const website = isWebsiteSurface(req);
     setAccessTokenCookie(res, result.accessToken, undefined, website);
@@ -80,6 +105,12 @@ export async function createSessionFromTokens(req: Request, res: Response, next:
   }
 }
 
+/**
+ * Verifies a NEW email address after a change-email request (Profile
+ * settings) — link-based, not the OTP flow above, which is signup-only.
+ * `AuthService.verifyEmail` is the shared primitive both changeEmail's
+ * emailVerifyToken and this endpoint use.
+ */
 export async function verifyEmail(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await AuthService.verifyEmail(req.body.token);
@@ -90,9 +121,10 @@ export async function verifyEmail(req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * Directly clickable from the verification email (a GET link, not an API
- * call) — verifies the token and redirects to a friendly frontend page
- * rather than returning raw JSON to whatever browser opened the link.
+ * Directly clickable from the change-email verification email (a GET link,
+ * not an API call) — verifies the token and redirects to a friendly
+ * frontend page rather than returning raw JSON to whatever browser opened
+ * the link.
  */
 export async function verifyEmailViaLink(req: Request, res: Response) {
   const token = req.query.token as string | undefined;
@@ -107,15 +139,6 @@ export async function verifyEmailViaLink(req: Request, res: Response) {
     res.redirect(`${frontendBase}/?tab=login&verified=1`);
   } catch {
     res.redirect(`${frontendBase}/?tab=login&verified=0`);
-  }
-}
-
-export async function resendVerificationEmail(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await AuthService.resendVerificationEmail(req.body.email);
-    res.status(200).json({ success: true, data: result });
-  } catch (err) {
-    next(err);
   }
 }
 

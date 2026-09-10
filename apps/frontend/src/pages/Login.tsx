@@ -3,14 +3,16 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { MessageSquare, Lock, Mail } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
+import { TurnstileWidget, TURNSTILE_SITE_KEY } from '../components/ui/TurnstileWidget';
+import { OtpVerificationForm } from '../components/ui/OtpVerificationForm';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
-  const [resendStatus, setResendStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [searchParams] = useSearchParams();
   const verifiedParam = searchParams.get('verified');
 
@@ -30,11 +32,10 @@ export const Login: React.FC = () => {
     e.preventDefault();
     setError('');
     setNeedsVerification(false);
-    setResendStatus('');
     setLoading(true);
 
     try {
-      const res = await apiClient.post('/auth/login', { email, password });
+      const res = await apiClient.post('/auth/login', { email, password, turnstileToken });
       const { user } = res.data.data;
       setAuth(user);
       navigate('/');
@@ -46,14 +47,9 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleResendVerification = async () => {
-    setResendStatus('Sending...');
-    try {
-      await apiClient.post('/auth/resend-verification', { email });
-      setResendStatus('Verification email sent — please check your inbox.');
-    } catch {
-      setResendStatus('Could not send the email right now — please try again shortly.');
-    }
+  const handleOtpVerified = (data: { user: any }) => {
+    setAuth(data.user);
+    navigate('/');
   };
 
   return (
@@ -70,6 +66,10 @@ export const Login: React.FC = () => {
           <p className="text-sm text-slate-400">Sign in to your Prowexa team dashboard — app.wabtic.com</p>
         </div>
 
+        {needsVerification ? (
+          <OtpVerificationForm email={email} onVerified={handleOtpVerified} />
+        ) : (
+        <>
         {verifiedParam === '1' && !error && (
           <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-xl text-center">
             Email verified successfully — you can now log in.
@@ -82,18 +82,8 @@ export const Login: React.FC = () => {
         )}
 
         {error && (
-          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl text-center space-y-2">
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl text-center">
             <p>{error}</p>
-            {needsVerification && (
-              <button
-                type="button"
-                onClick={handleResendVerification}
-                className="text-emerald-400 hover:underline font-semibold text-xs"
-              >
-                Resend verification email
-              </button>
-            )}
-            {resendStatus && <p className="text-xs text-slate-400">{resendStatus}</p>}
           </div>
         )}
 
@@ -139,9 +129,11 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
+          <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken('')} />
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
             className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 mt-2 cursor-pointer"
           >
             {loading ? 'Authenticating...' : 'Sign In'}
@@ -154,6 +146,8 @@ export const Login: React.FC = () => {
             Sign Up for Free
           </Link>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

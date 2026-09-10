@@ -7,6 +7,8 @@ import {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
+  verifySignupOtpSchema,
+  resendSignupOtpSchema,
   verifyEmailSchema,
   resetPasswordSchema,
   updateProfileSchema,
@@ -52,26 +54,38 @@ router.post('/refresh', AuthController.refresh);
 router.post('/logout', authenticate, AuthController.logout);
 
 /**
+ * @route   POST /api/v1/auth/verify-signup-otp
+ * @desc    Verify the 6-digit email OTP sent at registration — on success,
+ *          issues the actual session (this is what logs the new user in,
+ *          NOT /register itself).
+ * @access  Public
+ */
+router.post('/verify-signup-otp', credentialLimiter, validate(verifySignupOtpSchema), AuthController.verifySignupOtp);
+
+/**
+ * @route   POST /api/v1/auth/resend-signup-otp
+ * @desc    Resend the signup email verification OTP
+ * @access  Public
+ */
+router.post('/resend-signup-otp', credentialLimiter, validate(resendSignupOtpSchema), AuthController.resendSignupOtp);
+
+/**
  * @route   POST /api/v1/auth/verify-email
- * @desc    Verify user email address with token (API consumers)
+ * @desc    Verify a NEW email address after a change-email request (Profile
+ *          settings) — API consumers. NOT the signup flow (see
+ *          verify-signup-otp above).
  * @access  Public
  */
 router.post('/verify-email', validate(verifyEmailSchema), AuthController.verifyEmail);
 
 /**
  * @route   GET /api/v1/auth/verify-email
- * @desc    Verify user email address with token — directly clickable from the
- *          verification email; redirects to the frontend rather than returning JSON.
+ * @desc    Same as above — directly clickable from the change-email
+ *          verification email; redirects to the frontend rather than
+ *          returning JSON.
  * @access  Public
  */
 router.get('/verify-email', AuthController.verifyEmailViaLink);
-
-/**
- * @route   POST /api/v1/auth/resend-verification
- * @desc    Resend the email verification link
- * @access  Public
- */
-router.post('/resend-verification', credentialLimiter, AuthController.resendVerificationEmail);
 
 /**
  * @route   POST /api/v1/auth/forgot-password

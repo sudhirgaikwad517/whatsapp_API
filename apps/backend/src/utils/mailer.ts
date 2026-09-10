@@ -84,6 +84,20 @@ export function buildPasswordResetEmail(resetUrl: string): SendMailInput['html']
   `;
 }
 
+export function buildOtpEmail(fullName: string, otp: string): SendMailInput['html'] {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Verify your <a href="https://www.prowexa.com" style="color:#059669;text-decoration:none;">Prowexa</a> account</h2>
+      <p>Hi ${fullName}, use the code below to verify your email address. It expires in 10 minutes.</p>
+      <p style="text-align:center;margin:28px 0;">
+        <span style="display:inline-block;background:#0f172a;color:#34d399;font-size:32px;font-weight:800;letter-spacing:8px;padding:16px 28px;border-radius:12px;">${otp}</span>
+      </p>
+      <p>If you didn't try to create an account, you can safely ignore this email.</p>
+      ${EMAIL_FOOTER}
+    </div>
+  `;
+}
+
 export function buildChatAssignedEmail(agentName: string, contactName: string, orgName: string, loginUrl: string): SendMailInput['html'] {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

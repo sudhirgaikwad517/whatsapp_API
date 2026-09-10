@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "emailOtpCode" VARCHAR(10);
+ALTER TABLE "User" ADD COLUMN "emailOtpExpiresAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "emailOtpAttempts" INTEGER NOT NULL DEFAULT 0;

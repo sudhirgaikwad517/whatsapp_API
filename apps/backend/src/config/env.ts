@@ -46,6 +46,11 @@ const envSchema = z.object({
   SMTP_FROM: z.string().optional().default('Prowexa <no-reply@wabtic.com>'),
   // Where the internal team gets notified of a new website lead (Contact/Demo/popup form).
   SALES_NOTIFICATION_EMAIL: z.string().optional().default('connect@prowexa.com'),
+  // Cloudflare Turnstile secret key (server-side verification of the
+  // "Verify you are human" widget on login/register). Optional — if unset,
+  // the checks are skipped rather than locking everyone out, matching how
+  // other optional integrations (Razorpay, Gemini) degrade in this app.
+  TURNSTILE_SECRET_KEY: z.string().optional().default(''),
 });
 
 const KNOWN_INSECURE_DEFAULTS = new Set([

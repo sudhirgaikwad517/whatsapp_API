@@ -7,10 +7,31 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { logger } from '../utils/logger.js';
 import { UserRole } from '@prowexa/shared-types';
 import type { RegisterInput, LoginInput } from '../validators/auth.schema.js';
-import { sendMail, buildVerificationEmail, buildPasswordResetEmail } from '../utils/mailer.js';
+import { sendMail, buildVerificationEmail, buildPasswordResetEmail, buildOtpEmail } from '../utils/mailer.js';
 import { cleanPhone } from './contact.service.js';
 
 const BCRYPT_ROUNDS = 12;
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+function generateOtp(): string {
+  return String(crypto.randomInt(100000, 1000000)); // 6-digit, cryptographically random
+}
+
+async function sendSignupOtpEmail(user: { id: string; email: string; fullName: string }, otp: string): Promise<void> {
+  try {
+    await sendMail({
+      to: user.email,
+      subject: 'Your Prowexa verification code',
+      html: buildOtpEmail(user.fullName, otp),
+    });
+  } catch (err) {
+    // Registration should still succeed even if the email fails to send —
+    // resendSignupOtp() lets them request a new one.
+    logger.error({ userId: user.id, err }, 'Failed to send signup OTP email.');
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -44,14 +65,14 @@ function generateRefreshToken(payload: object): string {
 
 // ─── Auth Service ────────────────────────────────────────────────────────────
 
-export async function registerUser(input: RegisterInput, isWebsiteRegistration = false) {
+export async function registerUser(input: RegisterInput, _isWebsiteRegistration = false) {
   const existingUser = await prisma.user.findUnique({ where: { email: input.email } });
   if (existingUser) {
     throw new AppError('A user with this email already exists.', 409, 'EMAIL_ALREADY_REGISTERED');
   }
 
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
-  const emailVerifyToken = crypto.randomBytes(32).toString('hex');
+  const otp = generateOtp();
   const slug = await generateUniqueSlug(input.organizationName);
 
   const result = await prisma.$transaction(async (tx) => {
@@ -75,8 +96,10 @@ export async function registerUser(input: RegisterInput, isWebsiteRegistration =
         fullName: input.fullName,
         phoneNumber: cleanPhone(input.phoneNumber),
         passwordHash,
-        emailVerifyToken,
         isEmailVerified: false,
+        emailOtpCode: otp,
+        emailOtpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+        emailOtpAttempts: 0,
       },
     });
 
@@ -91,65 +114,123 @@ export async function registerUser(input: RegisterInput, isWebsiteRegistration =
     return { organization, user };
   });
 
-  logger.info({ userId: result.user.id, orgId: result.organization.id }, 'New user & organization registered');
+  logger.info({ userId: result.user.id, orgId: result.organization.id }, 'New user & organization registered — awaiting OTP verification.');
+  await sendSignupOtpEmail(result.user, otp);
 
-  try {
-    const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
-    const loginUrl = isWebsiteRegistration
-      ? `${env.FRONTEND_URL.replace(/\/$/, '')}/?tab=login`
-      : `${env.ADMIN_PANEL_URL.replace(/\/$/, '')}/login`;
-    await sendMail({
-      to: result.user.email,
-      subject: 'Verify your Prowexa account',
-      html: buildVerificationEmail(result.user.fullName, verifyUrl, loginUrl),
-    });
-  } catch (err) {
-    // Registration should still succeed even if the verification email fails
-    // to send — resendVerificationEmail() below lets them request it again.
-    logger.error({ userId: result.user.id, err }, 'Failed to send verification email after registration.');
+  // No tokens/session here on purpose — the account isn't usable until the
+  // OTP is verified via verifySignupOtp(), which is what actually issues
+  // the session. (Previously this issued tokens immediately and the
+  // frontend logged the brand-new, unverified user straight in — the OTP
+  // step was never actually enforced at signup.)
+  return {
+    email: result.user.email,
+    message: 'A verification code has been sent to your email.',
+  };
+}
+
+/**
+ * Completes signup: checks the emailed OTP and, on success, issues the
+ * real session (access + refresh tokens) — this, not registerUser, is what
+ * actually logs a brand-new user in.
+ */
+export async function verifySignupOtp(email: string, otp: string) {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: {
+      memberships: { where: { isActive: true }, take: 1, orderBy: { createdAt: 'asc' } },
+    },
+  });
+
+  // Deliberately the same generic error for "no such user" and "wrong
+  // code" — don't let this endpoint double as an email-enumeration oracle.
+  if (!user) {
+    throw new AppError('Invalid email or verification code.', 400, 'INVALID_OTP');
+  }
+
+  if (user.isEmailVerified) {
+    throw new AppError('This account is already verified — please log in.', 400, 'ALREADY_VERIFIED');
+  }
+
+  if (!user.emailOtpCode || !user.emailOtpExpiresAt || user.emailOtpExpiresAt < new Date()) {
+    throw new AppError('This code has expired — please request a new one.', 400, 'OTP_EXPIRED');
+  }
+
+  if (user.emailOtpAttempts >= OTP_MAX_ATTEMPTS) {
+    throw new AppError('Too many incorrect attempts — please request a new code.', 429, 'TOO_MANY_ATTEMPTS');
+  }
+
+  if (user.emailOtpCode !== otp) {
+    await prisma.user.update({ where: { id: user.id }, data: { emailOtpAttempts: { increment: 1 } } });
+    throw new AppError('Incorrect verification code.', 400, 'INVALID_OTP');
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { isEmailVerified: true, emailOtpCode: null, emailOtpExpiresAt: null, emailOtpAttempts: 0 },
+  });
+
+  const membership = user.memberships[0];
+  if (!membership) {
+    throw new AppError('User has no associated organization.', 403, 'NO_ORGANIZATION');
   }
 
   const tokenPayload = {
-    userId: result.user.id,
-    organizationId: result.organization.id,
-    role: UserRole.BUSINESS_OWNER,
+    userId: user.id,
+    email: user.email,
+    organizationId: membership.organizationId,
+    role: membership.role,
   };
 
   const accessToken = generateAccessToken(tokenPayload);
-  const refreshToken = generateRefreshToken(tokenPayload);
-
-  // Without this, refreshAccessToken (auth.service.ts:refreshAccessToken)
-  // finds no matching row for this token's hash and rejects every refresh
-  // attempt with INVALID_REFRESH_TOKEN. Since access tokens are short-lived
-  // (JWT_EXPIRES_IN, 15m by default) and loginUser rejects unverified
-  // accounts with EMAIL_NOT_VERIFIED, a brand-new user who hasn't verified
-  // their email within that first 15 minutes was getting locked out of the
-  // account they just created, with no way back in except the verification
-  // email — this mirrors loginUser's own refreshToken.create call.
+  const refreshToken = generateRefreshToken({ userId: user.id });
   const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
   await prisma.refreshToken.create({
     data: {
-      userId: result.user.id,
+      userId: user.id,
       tokenHash: refreshTokenHash,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
 
+  logger.info({ userId: user.id }, 'Email verified via OTP — user logged in.');
+
   return {
+    accessToken,
+    refreshToken,
     user: {
-      id: result.user.id,
-      email: result.user.email,
-      fullName: result.user.fullName,
-      phoneNumber: result.user.phoneNumber,
-      organizationId: result.organization.id,
-      role: UserRole.BUSINESS_OWNER,
-    },
-    organization: result.organization,
-    tokens: {
-      accessToken,
-      refreshToken,
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: membership.role,
+      organizationId: membership.organizationId,
     },
   };
+}
+
+export async function resendSignupOtp(email: string) {
+  // Always respond generically to prevent email enumeration.
+  const generic = { message: 'If this email is registered and unverified, a new code has been sent.' };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || user.isEmailVerified) return generic;
+
+  // Cooldown, inferred from expiry rather than a separate column — a fresh
+  // OTP's expiry is always ~10 minutes out, so if more than
+  // (10min - 60s) is still left, one was just sent. Silently no-ops rather
+  // than a distinguishing error, so as not to leak account state via
+  // response shape.
+  const withinCooldown = user.emailOtpExpiresAt && user.emailOtpExpiresAt.getTime() - Date.now() > OTP_EXPIRY_MS - OTP_RESEND_COOLDOWN_MS;
+  if (withinCooldown) return generic;
+
+  const otp = generateOtp();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { emailOtpCode: otp, emailOtpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MS), emailOtpAttempts: 0 },
+  });
+  await sendSignupOtpEmail(user, otp);
+
+  return generic;
 }
 
 export async function loginUser(input: LoginInput) {
@@ -319,27 +400,6 @@ export async function verifyEmail(token: string) {
     data: { isEmailVerified: true, emailVerifyToken: null },
   });
   return { message: 'Email verified successfully. You may now log in.' };
-}
-
-export async function resendVerificationEmail(email: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
-  // Always respond generically to prevent email enumeration
-  const generic = { message: 'If this email is registered and unverified, a new verification link has been sent.' };
-  if (!user || user.isEmailVerified) {
-    return generic;
-  }
-
-  const emailVerifyToken = crypto.randomBytes(32).toString('hex');
-  await prisma.user.update({ where: { id: user.id }, data: { emailVerifyToken } });
-
-  const verifyUrl = `${env.API_BASE_URL.replace(/\/$/, '')}/api/v1/auth/verify-email?token=${emailVerifyToken}`;
-  await sendMail({
-    to: user.email,
-    subject: 'Verify your Prowexa account',
-    html: buildVerificationEmail(user.fullName, verifyUrl),
-  });
-
-  return generic;
 }
 
 export async function forgotPassword(email: string) {
