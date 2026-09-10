@@ -8,6 +8,12 @@ export interface User {
   role: string;
   organizationId: string;
   allowedPages?: string[];
+  // Set by loginSuperAdmin/getMe for ANY active SuperAdminUser row,
+  // regardless of their specific admin role (SUPER_ADMIN/FINANCE_ADMIN/
+  // OPERATIONS_ADMIN/SUPPORT_ADMIN/SALES_ADMIN/DEVELOPER) — this, not a
+  // `role === 'SUPER_ADMIN'` string match, is what actually distinguishes a
+  // super admin session (mirrors the backend's own requireSuperAdmin check).
+  isSuperAdmin?: boolean;
 }
 
 interface AuthState {

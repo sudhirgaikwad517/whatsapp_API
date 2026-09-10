@@ -44,6 +44,11 @@ export async function loginSuperAdmin(email: string, password: string) {
       fullName: superAdmin.fullName,
       role: superAdmin.role,
       organizationId: 'SYSTEM_SUPER_ADMIN',
+      // Consistent with what GET /auth/me returns — the frontend gates
+      // access to /superadmin on this flag, not on role being literally
+      // 'SUPER_ADMIN' (a SuperAdminUser can hold any of several admin
+      // roles, all equally valid super admin sessions).
+      isSuperAdmin: true,
     },
     accessToken,
   };

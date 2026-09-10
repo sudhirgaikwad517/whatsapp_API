@@ -52,14 +52,22 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requireTenantAccess?
     return <Navigate to="/login" replace />;
   }
 
-  // Redirect SuperAdmin away from tenant view if not explicitly impersonating
-  if (requireTenantAccess && user?.role === 'SUPER_ADMIN' && !isImpersonating) {
+  // Redirect SuperAdmin away from tenant view if not explicitly impersonating.
+  // isSuperAdmin (not a role === 'SUPER_ADMIN' string match) is what actually
+  // marks a super admin session — a SuperAdminUser can hold any of several
+  // admin roles (FINANCE_ADMIN, OPERATIONS_ADMIN, ...), all equally valid,
+  // mirroring the backend's own requireSuperAdmin middleware. The old
+  // string-exact check silently bounced every non-default admin role between
+  // "/" and "/superadmin" — each landing on a broken tenant dashboard (no
+  // real organizationId) before bouncing again, which is what read as the
+  // panel "blinking".
+  if (requireTenantAccess && user?.isSuperAdmin && !isImpersonating) {
     return <Navigate to="/superadmin" replace />;
   }
 
   // Only a genuine Super Admin session may reach the /superadmin layout —
   // otherwise any authenticated tenant user could navigate there directly.
-  if (requireSuperAdmin && user?.role !== 'SUPER_ADMIN') {
+  if (requireSuperAdmin && !user?.isSuperAdmin) {
     return <Navigate to="/" replace />;
   }
 
@@ -68,7 +76,6 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requireTenantAccess?
 
 export const App: React.FC = () => {
   const syncUser = useAuthStore(state => state.syncUser);
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const [sessionChecked, setSessionChecked] = React.useState(false);
 
   // The dashboard's own "app" session cookie is separate from wabtic-website's
@@ -78,13 +85,13 @@ export const App: React.FC = () => {
   // logged in here, on app.wabtic.com, at least once.
   React.useEffect(() => {
     syncUser().finally(() => setSessionChecked(true));
-  }, [syncUser]);
-
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      syncUser();
-    }
-  }, [isAuthenticated, syncUser]);
+    // Runs once per mount only — every login/logout/impersonate transition
+    // in this app does a full window.location.href reload (never a
+    // client-side auth-state flip), so a second effect re-running syncUser()
+    // whenever isAuthenticated changed was firing redundantly on every
+    // mount anyway, never actually catching a real transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!sessionChecked) {
     return <div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>;
