@@ -251,6 +251,39 @@ async function roundRobinAssign(organizationId: string): Promise<string | null> 
   return openCounts[0]?.id || null;
 }
 
+// Shared by the Assign Agent node AND the Payment Link node's failure path
+// (e.g. an org hasn't configured Razorpay yet) — round-robin picks a human,
+// updates the conversation, tells the CUSTOMER (not just the agent) so the
+// conversation doesn't just go quiet, and notifies the agent.
+async function escalateToHumanAgent(
+  organizationId: string,
+  conversationId: string,
+  customerMessage?: string
+): Promise<string | null> {
+  const agentId = await roundRobinAssign(organizationId);
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: {
+      assignedAgentId: agentId,
+      assignedAt: agentId ? new Date() : null,
+      agentOpenedAt: null,
+      status: agentId ? 'ESCALATED' : 'OPEN',
+    },
+  });
+  await sendFlowText(
+    organizationId,
+    conversationId,
+    agentId
+      ? customerMessage?.trim() || "I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
+      : "Thanks — we've noted your request and someone will be in touch shortly."
+  );
+  if (agentId) {
+    const { notifyAgentOfEscalation } = await import('./agent-notification.service.js');
+    void notifyAgentOfEscalation(organizationId, agentId, conversationId);
+  }
+  return agentId;
+}
+
 interface ExecResult {
   completed: boolean;
 }
@@ -332,33 +365,9 @@ async function executeNode(
     }
 
     case 'assignAgent': {
-      const agentId = await roundRobinAssign(organizationId);
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          assignedAgentId: agentId,
-          assignedAt: agentId ? new Date() : null,
-          agentOpenedAt: null,
-          status: agentId ? 'ESCALATED' : 'OPEN',
-        },
-      });
-      // Tell the CUSTOMER too, not just the agent — without this the
-      // conversation just went quiet from their side; they had no idea
-      // they'd been handed off to a person instead of getting a bot reply.
       // Org-editable via the node's inspector (customerMessage), not a
       // hardcoded system string — falls back to a sensible default.
-      const handoffMessage = node.data?.customerMessage?.trim();
-      await sendFlowText(
-        organizationId,
-        conversationId,
-        agentId
-          ? handoffMessage || "I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
-          : "Thanks — we've noted your request and someone will be in touch shortly."
-      );
-      if (agentId) {
-        const { notifyAgentOfEscalation } = await import('./agent-notification.service.js');
-        void notifyAgentOfEscalation(organizationId, agentId, conversationId);
-      }
+      await escalateToHumanAgent(organizationId, conversationId, node.data?.customerMessage);
       return { completed: true };
     }
 
@@ -413,8 +422,11 @@ async function executeNode(
       const productTitle = variables.__selectedProductTitle || 'your order';
       if (typeof amount !== 'number' || amount <= 0) {
         logger.warn({ conversationId, flowId }, 'paymentLink node reached with no prior selected product/price in session variables.');
-        await sendFlowText(organizationId, conversationId, "Sorry, we couldn't determine the amount to charge — please contact us directly to complete your order.");
-        return { completed: false };
+        // No amount to charge (a flow-design gap, e.g. no Send Product node
+        // earlier) — don't leave the customer stuck with just an apology,
+        // hand them to a human who can actually take the order manually.
+        await escalateToHumanAgent(organizationId, conversationId);
+        return { completed: true };
       }
       try {
         const { createRazorpayInChatPaymentLink } = await import('./in-chat-payment.service.js');
@@ -425,8 +437,14 @@ async function executeNode(
           node.data?.description?.trim() || `Order for ${productTitle}`
         );
       } catch (err) {
-        logger.error({ err, conversationId, flowId }, 'Failed to create in-flow payment link.');
-        await sendFlowText(organizationId, conversationId, "Sorry, we're unable to generate a payment link right now — our team will follow up with you shortly.");
+        // Most commonly an org that hasn't configured Razorpay keys yet
+        // (createRazorpayInChatPaymentLink throws RAZORPAY_NOT_CONFIGURED),
+        // but also covers any other gateway failure. Either way, the
+        // customer already wants to pay — auto-escalate to a human instead
+        // of just apologizing and hoping the org notices later.
+        logger.error({ err, conversationId, flowId }, 'Failed to create in-flow payment link — escalating to a human agent instead.');
+        await escalateToHumanAgent(organizationId, conversationId);
+        return { completed: true };
       }
       return { completed: false };
     }
