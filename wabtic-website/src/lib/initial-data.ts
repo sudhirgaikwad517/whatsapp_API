@@ -227,7 +227,7 @@ export const API_DOCS_DATA: ApiEndpoint[] = [
     method: 'GET',
     endpoint: '/v1/auth/verify',
     headers: {
-      'Authorization': 'Bearer wabtic_live_sk_9f8d7c6b5a4e3d2c1b0a',
+      'Authorization': 'Bearer WABTIC_API_KEY',
       'Content-Type': 'application/json'
     },
     bodyParams: [],
@@ -278,7 +278,7 @@ echo curl_exec($ch);
     method: 'POST',
     endpoint: '/v1/messages/text',
     headers: {
-      'Authorization': 'Bearer wabtic_live_sk_9f8d7c6b5a4e3d2c1b0a',
+      'Authorization': 'Bearer WABTIC_API_KEY',
       'Content-Type': 'application/json'
     },
     bodyParams: [
@@ -369,7 +369,7 @@ def verify_sig(body, sig, secret):
     method: 'GET',
     endpoint: '/v1/compliance/merchant',
     headers: {
-      'Authorization': 'Bearer wabtic_live_sk_9f8d7c6b5a4e3d2c1b0a'
+      'Authorization': 'Bearer WABTIC_API_KEY'
     },
     bodyParams: [],
     samplePayload: null,
