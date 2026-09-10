@@ -13,7 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed:superadmin": "node prisma/seed-superadmin.js",
-    "seed:sample-flow": "tsx prisma/seed-sample-flow.ts",
+    "seed:sample-flow": "node prisma/seed-sample-flow.js",
     "rotate:encryption-key": "node prisma/rotate-encryption-key.js",
     "test": "vitest run"
   },

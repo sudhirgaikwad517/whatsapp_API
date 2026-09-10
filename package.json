@@ -10,6 +10,8 @@
   "scripts": {
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "seed:superadmin": "npm run seed:superadmin --workspace=apps/backend",
+    "seed:sample-flow": "npm run seed:sample-flow --workspace=apps/backend --",
     "simulate:webhook": "npx tsx apps/backend/scripts/simulate-webhook.ts",
     "prisma:generate": "npx prisma generate --schema=apps/backend/prisma/schema.prisma",
     "prisma:migrate": "npx prisma migrate dev --schema=apps/backend/prisma/schema.prisma",

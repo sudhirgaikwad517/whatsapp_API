@@ -8,9 +8,14 @@
 // it just updates the same flow/products in place rather than duplicating
 // them.
 //
-// Usage (run inside the backend container, where DATABASE_URL is set):
-//   npx tsx prisma/seed-sample-flow.ts <organization-slug-or-id>
-// or via the npm script:
+// Plain JS (not TypeScript) on purpose — the production image has no
+// `tsx`/TS toolchain, only Node itself (npm ci --omit=dev strips
+// devDependencies like tsx), and this script needs to run there directly.
+// Same convention as seed-superadmin.js.
+//
+// Usage (run inside the backend container):
+//   node prisma/seed-sample-flow.js <organization-slug-or-id>
+// or via the npm script (from apps/backend, not the monorepo root):
 //   npm run seed:sample-flow -- <organization-slug-or-id>
 import { PrismaClient } from '@prisma/client';
 
@@ -23,8 +28,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 async function main() {
   const orgIdentifier = process.argv[2] || process.env.ORG_SLUG;
   if (!orgIdentifier) {
-    console.error('Usage: npm run seed:sample-flow -- <organization-slug-or-id>');
-    console.error('   or: ORG_SLUG=<slug-or-id> npm run seed:sample-flow');
+    console.error('Usage: node prisma/seed-sample-flow.js <organization-slug-or-id>');
+    console.error('   or: ORG_SLUG=<slug-or-id> node prisma/seed-sample-flow.js');
     process.exit(1);
   }
 
@@ -39,11 +44,11 @@ async function main() {
 
   // Idempotent sample products, keyed by a stable SKU — re-running this
   // script never creates duplicates, it just reuses what's already there.
-  async function upsertSampleProduct(sku: string, title: string, description: string, priceInINR: number) {
-    const existing = await prisma.productCatalog.findFirst({ where: { organizationId: org!.id, sku } });
+  async function upsertSampleProduct(sku, title, description, priceInINR) {
+    const existing = await prisma.productCatalog.findFirst({ where: { organizationId: org.id, sku } });
     if (existing) return existing;
     return prisma.productCatalog.create({
-      data: { organizationId: org!.id, sku, title, description, priceInINR, isActive: true },
+      data: { organizationId: org.id, sku, title, description, priceInINR, isActive: true },
     });
   }
 
