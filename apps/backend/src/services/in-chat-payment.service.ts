@@ -4,6 +4,7 @@ import { AppError } from '../middlewares/error-handler.middleware.js';
 import { sendOutboundTextMessage } from './inbox.service.js';
 import { safeDecryptToken } from '../utils/encryption.js';
 import { logger } from '../utils/logger.js';
+import { emitToOrganization } from '../socket/inbox.gateway.js';
 
 export async function createRazorpayInChatPaymentLink(
   organizationId: string,
@@ -114,4 +115,43 @@ export async function createRazorpayInChatPaymentLink(
     paymentLink: shortUrl,
     whatsappMessageText,
   };
+}
+
+/**
+ * Confirms an in-chat commerce PaymentOrder as paid — shared by both the
+ * instant Razorpay "payment_link.paid" webhook (payment-webhook.service.ts)
+ * and the 3-minute poll-worker fallback (payment-order-poll.worker.ts), so
+ * a payment gets confirmed the moment the webhook arrives when an org has
+ * configured one, without ever losing the polling safety net for orgs that
+ * haven't. The `status: 'CREATED'` guard on the update makes this safe to
+ * call from both paths racing each other — only the first one to land
+ * actually flips the status and sends the confirmation; the other becomes
+ * a no-op.
+ */
+export async function markPaymentOrderPaid(paymentOrderId: string): Promise<void> {
+  const result = await prisma.paymentOrder.updateMany({
+    where: { id: paymentOrderId, status: 'CREATED' },
+    data: { status: 'PAID' },
+  });
+  if (result.count === 0) return;
+
+  const paymentOrder = await prisma.paymentOrder.findUnique({ where: { id: paymentOrderId } });
+  if (!paymentOrder) return;
+
+  if (paymentOrder.contactId) {
+    const conversation = await prisma.conversation.findFirst({
+      where: { organizationId: paymentOrder.organizationId, contactId: paymentOrder.contactId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (conversation) {
+      await sendOutboundTextMessage(
+        paymentOrder.organizationId,
+        conversation.id,
+        `✅ *Payment Received!*\n\nThank you — we've received your payment of ₹${Number(paymentOrder.totalAmount).toFixed(2)}. Your order is confirmed.`
+      );
+    }
+  }
+
+  emitToOrganization(paymentOrder.organizationId, 'payment_order_paid', { paymentOrderId: paymentOrder.id, amount: paymentOrder.totalAmount });
+  logger.info({ paymentOrderId: paymentOrder.id, organizationId: paymentOrder.organizationId }, 'In-chat commerce payment confirmed.');
 }

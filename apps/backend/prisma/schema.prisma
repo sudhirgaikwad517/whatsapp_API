@@ -164,6 +164,13 @@ model Organization {
   isAiAutoRespondEnabled Boolean       @default(false)
   razorpayKeyId     String?            @db.VarChar(255)
   razorpayKeySecret String?            @db.Text
+  // The webhook signing secret from THIS org's own Razorpay Dashboard
+  // (Settings > Webhooks) — needed because in-chat commerce Payment Links
+  // are created against the org's own Razorpay account, so a
+  // "payment_link.paid" event for them is signed with the org's own
+  // secret, never the platform's RAZORPAY_WEBHOOK_SECRET. Optional — if
+  // unset, payments still get confirmed via the 3-minute poll worker.
+  razorpayWebhookSecret String?         @db.Text
   // Tenant's own business/tax identity — shown in the "Bill To" section of
   // the invoices this org receives, distinct from the platform's own
   // invoice letterhead (SystemSettings).

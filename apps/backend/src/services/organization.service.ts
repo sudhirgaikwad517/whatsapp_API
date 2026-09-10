@@ -70,6 +70,7 @@ export async function updateOrganization(
     isAiAutoRespondEnabled?: boolean;
     razorpayKeyId?: string;
     razorpayKeySecret?: string;
+    razorpayWebhookSecret?: string;
     billingAddress?: string;
     billingGstin?: string;
     billingPan?: string;
@@ -87,6 +88,7 @@ export async function updateOrganization(
   if (data.isAiAutoRespondEnabled !== undefined) updateData.isAiAutoRespondEnabled = Boolean(data.isAiAutoRespondEnabled);
   if (data.razorpayKeyId !== undefined) updateData.razorpayKeyId = data.razorpayKeyId;
   if (data.razorpayKeySecret !== undefined) updateData.razorpayKeySecret = data.razorpayKeySecret ? encryptToken(data.razorpayKeySecret) : null;
+  if (data.razorpayWebhookSecret !== undefined) updateData.razorpayWebhookSecret = data.razorpayWebhookSecret ? encryptToken(data.razorpayWebhookSecret) : null;
   if (data.billingAddress !== undefined) updateData.billingAddress = data.billingAddress;
   if (data.billingGstin !== undefined) updateData.billingGstin = data.billingGstin;
   if (data.billingPan !== undefined) updateData.billingPan = data.billingPan;

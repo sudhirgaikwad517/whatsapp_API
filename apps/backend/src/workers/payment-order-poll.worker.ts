@@ -5,7 +5,6 @@ import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { safeDecryptToken } from '../utils/encryption.js';
 import { paymentOrderPollQueue } from '../queues/index.js';
-import { emitToOrganization } from '../socket/inbox.gateway.js';
 
 const POLL_WINDOW_DAYS = 3;
 
@@ -39,25 +38,10 @@ async function pollPendingPaymentOrders(): Promise<void> {
 
       const rzpStatus = res.data?.status;
       if (rzpStatus === 'paid') {
-        await prisma.paymentOrder.update({ where: { id: order.id }, data: { status: 'PAID' } });
-
-        if (order.contactId) {
-          const conversation = await prisma.conversation.findFirst({
-            where: { organizationId: order.organizationId, contactId: order.contactId },
-            orderBy: { updatedAt: 'desc' },
-          });
-          if (conversation) {
-            const { sendOutboundTextMessage } = await import('../services/inbox.service.js');
-            await sendOutboundTextMessage(
-              order.organizationId,
-              conversation.id,
-              `✅ *Payment Received!*\n\nThank you — we've received your payment of ₹${Number(order.totalAmount).toFixed(2)}. Your order is confirmed.`
-            );
-          }
-        }
-
-        emitToOrganization(order.organizationId, 'payment_order_paid', { paymentOrderId: order.id, amount: order.totalAmount });
-        logger.info({ paymentOrderId: order.id, organizationId: order.organizationId }, 'In-chat commerce payment confirmed via poll.');
+        // Shared with the instant "payment_link.paid" webhook path — safe to
+        // call from both, whichever lands first wins (see its own comment).
+        const { markPaymentOrderPaid } = await import('../services/in-chat-payment.service.js');
+        await markPaymentOrderPaid(order.id);
       } else if (rzpStatus === 'expired' || rzpStatus === 'cancelled') {
         await prisma.paymentOrder.update({ where: { id: order.id }, data: { status: rzpStatus === 'expired' ? 'EXPIRED' : 'FAILED' } });
       }

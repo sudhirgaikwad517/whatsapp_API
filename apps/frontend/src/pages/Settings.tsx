@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Settings as SettingsIcon, Link2, ShieldCheck, CheckCircle, RefreshCw, Bot, Plus, Trash2, Tag, CreditCard } from 'lucide-react';
-import { apiClient } from '../services/api.client';
+import { apiClient, API_BASE_URL } from '../services/api.client';
 
 declare global {
   interface Window {
@@ -30,6 +30,7 @@ export const Settings: React.FC = () => {
   const [isAiAutoRespondEnabled, setIsAiAutoRespondEnabled] = useState(false);
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+  const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState('');
   const [msg, setMsg] = useState('');
 
   const queryClient = useQueryClient();
@@ -156,6 +157,7 @@ export const Settings: React.FC = () => {
       const res = await apiClient.patch('/organization', {
         razorpayKeyId,
         razorpayKeySecret,
+        ...(razorpayWebhookSecret ? { razorpayWebhookSecret } : {}),
       });
       return res.data.data;
     },
@@ -652,6 +654,27 @@ export const Settings: React.FC = () => {
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
             />
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-800/80">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+            Webhook Secret <span className="text-slate-500 normal-case font-normal">(optional — for instant payment confirmation)</span>
+          </label>
+          <input
+            type="password"
+            value={razorpayWebhookSecret}
+            onChange={(e) => setRazorpayWebhookSecret(e.target.value)}
+            placeholder="••••••••••••••••••••"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+          />
+          <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+            Without this, payments made through an in-chat WhatsApp payment link are still confirmed automatically
+            (within ~3 minutes). To confirm them instantly instead: in your own Razorpay Dashboard, go to Settings →
+            Webhooks → Add New Webhook, set the URL to{' '}
+            <code className="text-emerald-400 bg-slate-950 px-1 py-0.5 rounded">{API_BASE_URL}/webhooks/payments/razorpay</code>
+            , enable the <code className="text-emerald-400">payment_link.paid</code> event, then paste the Secret it
+            gives you here.
+          </p>
         </div>
 
         <div className="flex justify-end pt-2">
