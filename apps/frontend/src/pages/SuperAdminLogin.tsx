@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { ShieldAlert, Lock, Mail, ArrowRight } from 'lucide-react';
 import { apiClient } from '../services/api.client';
 import { useAuthStore } from '../store/auth.store';
+import { TurnstileWidget, TURNSTILE_SITE_KEY } from '../components/ui/TurnstileWidget';
 
 export const SuperAdminLogin: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -17,7 +19,7 @@ export const SuperAdminLogin: React.FC = () => {
     setError('');
 
     try {
-      const res = await apiClient.post('/superadmin/login', { email, password });
+      const res = await apiClient.post('/superadmin/login', { email, password, turnstileToken });
       const { user } = res.data.data;
 
       setAuth(user);
@@ -30,7 +32,7 @@ export const SuperAdminLogin: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-y-auto">
       {/* Glow Effects */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -94,10 +96,12 @@ export const SuperAdminLogin: React.FC = () => {
             </div>
           </div>
 
+          <TurnstileWidget onVerify={setTurnstileToken} onExpire={() => setTurnstileToken('')} />
+
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-lg shadow-purple-500/30 cursor-pointer"
+            disabled={isLoading || (Boolean(TURNSTILE_SITE_KEY) && !turnstileToken)}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3.5 rounded-xl text-xs flex items-center justify-center space-x-2 transition-all shadow-lg shadow-purple-500/30 cursor-pointer disabled:opacity-50"
           >
             <span>{isLoading ? 'Authenticating Super Admin...' : 'Login to ERP Control Plane'}</span>
             <ArrowRight className="w-4 h-4" />

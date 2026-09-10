@@ -9,9 +9,11 @@ import {
   COOKIE_NAMES,
 } from '../utils/auth-cookies.js';
 import { AppError } from '../middlewares/error-handler.middleware.js';
+import { verifyTurnstileToken } from '../utils/turnstile.js';
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
+    await verifyTurnstileToken(req.body?.turnstileToken, req.ip);
     const { email, password } = req.body;
     const data = await SuperAdminService.loginSuperAdmin(email, password);
     setAccessTokenCookie(res, data.accessToken, 24 * 60 * 60 * 1000);
