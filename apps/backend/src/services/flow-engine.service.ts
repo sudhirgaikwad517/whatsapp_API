@@ -9,7 +9,19 @@ import { sendMetaOutboundMessage } from './meta-whatsapp.service.js';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface FlowNodeData {
-  nodeType?: 'trigger' | 'message' | 'buttons' | 'list' | 'condition' | 'collectInput' | 'saveData' | 'assignAgent' | 'end';
+  nodeType?:
+    | 'trigger'
+    | 'message'
+    | 'buttons'
+    | 'list'
+    | 'condition'
+    | 'collectInput'
+    | 'saveData'
+    | 'assignAgent'
+    | 'end'
+    | 'sendProduct'
+    | 'aiResponse'
+    | 'paymentLink';
   label?: string;
   text?: string;
   bodyText?: string;
@@ -22,6 +34,16 @@ interface FlowNodeData {
   promptText?: string;
   variableName?: string;
   fields?: { variableName: string; attributeKey: string }[];
+  // assignAgent — customer-facing handoff message, org-editable instead of
+  // a hardcoded system string.
+  customerMessage?: string;
+  // sendProduct
+  productId?: string;
+  // aiResponse
+  introText?: string;
+  continueKeyword?: string;
+  // paymentLink
+  description?: string;
 }
 
 interface FlowNode {
@@ -154,6 +176,50 @@ async function sendFlowButtons(
   });
 }
 
+// Sends a catalog product as a real WhatsApp image message with a
+// formatted caption — same shape as the agent's manual "Send Product from
+// Catalog" action in Live Inbox — falling back to a plain text card if the
+// product has no image.
+async function sendFlowProductCard(
+  organizationId: string,
+  conversationId: string,
+  product: { title: string; description: string | null; priceInINR: any; imageUrl: string | null }
+): Promise<void> {
+  const caption = `🛍️ *${product.title}*\n\n📌 ${product.description || ''}\n💰 *Price:* ₹${Number(product.priceInINR).toFixed(2)}`;
+
+  if (!product.imageUrl) {
+    await sendFlowText(organizationId, conversationId, caption);
+    return;
+  }
+
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId }, include: { contact: true } });
+  if (!conversation) return;
+
+  const metaRes = await sendMetaOutboundMessage(organizationId, conversation.contact.phoneNumber, {
+    type: 'image',
+    mediaUrl: product.imageUrl,
+    caption,
+  });
+
+  await prisma.message.create({
+    data: {
+      organizationId,
+      conversationId,
+      wamid: metaRes.wamid,
+      direction: 'OUTBOUND',
+      type: 'IMAGE',
+      content: { mediaUrl: product.imageUrl, caption },
+      status: 'SENT',
+      sentAt: new Date(),
+    },
+  });
+
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { lastMessageSnippet: caption.slice(0, 100), lastMessageAt: new Date() },
+  });
+}
+
 // Same convention as webhook.worker.ts's round-robin: Managers/Agents first,
 // Business Owner only as a last-resort fallback when there's no one else —
 // never part of the regular rotation (see that file's fix for why).
@@ -279,11 +345,14 @@ async function executeNode(
       // Tell the CUSTOMER too, not just the agent — without this the
       // conversation just went quiet from their side; they had no idea
       // they'd been handed off to a person instead of getting a bot reply.
+      // Org-editable via the node's inspector (customerMessage), not a
+      // hardcoded system string — falls back to a sensible default.
+      const handoffMessage = node.data?.customerMessage?.trim();
       await sendFlowText(
         organizationId,
         conversationId,
         agentId
-          ? "I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
+          ? handoffMessage || "I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
           : "Thanks — we've noted your request and someone will be in touch shortly."
       );
       if (agentId) {
@@ -314,6 +383,54 @@ async function executeNode(
       return { completed: false };
     }
 
+    case 'sendProduct': {
+      const productId = node.data?.productId;
+      const product = productId
+        ? await prisma.productCatalog.findFirst({ where: { id: productId, organizationId, isActive: true } })
+        : null;
+      if (!product) {
+        await sendFlowText(organizationId, conversationId, "Sorry, this item isn't available right now.");
+        return { completed: false };
+      }
+      // Remembered for a later Save Data / Send Payment Link node further
+      // down the same flow — those don't know or care which product this
+      // particular run was for otherwise.
+      variables.__selectedProductId = product.id;
+      variables.__selectedProductTitle = product.title;
+      variables.__selectedProductPrice = Number(product.priceInINR);
+      await sendFlowProductCard(organizationId, conversationId, product);
+      return { completed: false };
+    }
+
+    case 'aiResponse': {
+      const intro = node.data?.introText || 'Sure! What would you like to know?';
+      await sendFlowText(organizationId, conversationId, intro);
+      return { completed: false };
+    }
+
+    case 'paymentLink': {
+      const amount = variables.__selectedProductPrice;
+      const productTitle = variables.__selectedProductTitle || 'your order';
+      if (typeof amount !== 'number' || amount <= 0) {
+        logger.warn({ conversationId, flowId }, 'paymentLink node reached with no prior selected product/price in session variables.');
+        await sendFlowText(organizationId, conversationId, "Sorry, we couldn't determine the amount to charge — please contact us directly to complete your order.");
+        return { completed: false };
+      }
+      try {
+        const { createRazorpayInChatPaymentLink } = await import('./in-chat-payment.service.js');
+        await createRazorpayInChatPaymentLink(
+          organizationId,
+          conversationId,
+          amount,
+          node.data?.description?.trim() || `Order for ${productTitle}`
+        );
+      } catch (err) {
+        logger.error({ err, conversationId, flowId }, 'Failed to create in-flow payment link.');
+        await sendFlowText(organizationId, conversationId, "Sorry, we're unable to generate a payment link right now — our team will follow up with you shortly.");
+      }
+      return { completed: false };
+    }
+
     case 'end': {
       const text = node.data?.text || node.data?.label;
       if (text) await sendFlowText(organizationId, conversationId, text);
@@ -325,13 +442,18 @@ async function executeNode(
   }
 }
 
-// Node types that never need customer input to decide what happens next —
-// they run immediately and fall straight through to whatever's wired after
-// them in the SAME turn, the same way Condition nodes already do. Without
-// this, "Save Data" (a silent background action, not a question) left the
+// Only node types that structurally NEED something from the customer to
+// decide what happens next actually pause a flow — everything else (a
+// message, showing a product, saving data, generating a payment link...)
+// runs immediately and falls straight through to whatever's wired after it
+// in the SAME turn, the same way Condition nodes already do. Without this,
+// e.g. "Save Data" (a silent background action, not a question) left the
 // session parked waiting for a reply that was never going to come, so
-// whatever came after it (e.g. Assign Agent) never actually ran.
-const AUTO_CONTINUE_TYPES = new Set<NonNullable<FlowNodeData['nodeType']>>(['saveData']);
+// whatever came after it (like Assign Agent) never actually ran — and a
+// "Send Product" followed by an Interactive Buttons prompt would have sent
+// only the product and then waited on an unrelated reply instead of
+// immediately showing the buttons too.
+const PAUSE_TYPES = new Set<NonNullable<FlowNodeData['nodeType']>>(['buttons', 'list', 'collectInput', 'aiResponse']);
 
 async function runNodeChain(
   organizationId: string,
@@ -348,7 +470,7 @@ async function runNodeChain(
   while (guard++ < 30) {
     const result = await executeNode(organizationId, conversationId, contactId, flowId, variables, node);
     if (result.completed) return { completed: true, finalNode: node };
-    if (!AUTO_CONTINUE_TYPES.has(getNodeType(node))) return { completed: false, finalNode: node };
+    if (PAUSE_TYPES.has(getNodeType(node))) return { completed: false, finalNode: node };
 
     const nextEdge = edgeFrom(edges, node.id);
     if (!nextEdge) return { completed: true, finalNode: node };
@@ -501,6 +623,28 @@ export async function advanceFlowSession(
     const varName = currentNode.data?.variableName;
     if (varName) variables[varName] = inbound.text;
     nextEdge = edgeFrom(edges, currentNode.id);
+  } else if (currentType === 'aiResponse') {
+    const continueKeyword = (currentNode.data?.continueKeyword || 'continue').trim().toLowerCase();
+    const typed = inbound.text.trim().toLowerCase();
+    if (typed === continueKeyword) {
+      nextEdge = edgeFrom(edges, currentNode.id);
+    } else {
+      // Not the "I'm done, move on" keyword — treat it as another question
+      // for the AI and answer it in-place, without advancing the flow.
+      const { suggestReply } = await import('./ai.service.js');
+      const answer = await suggestReply(session.organizationId, session.conversationId);
+      await sendFlowText(session.organizationId, session.conversationId, answer);
+      await sendFlowText(
+        session.organizationId,
+        session.conversationId,
+        `Ask me anything else, or reply "${currentNode.data?.continueKeyword || 'continue'}" when you're ready to move on.`
+      );
+      await prisma.flowSession.update({
+        where: { id: session.id },
+        data: { lastAdvancedAt: new Date(), expiresAt: new Date(Date.now() + SESSION_TIMEOUT_MS) },
+      });
+      return;
+    }
   } else {
     // Plain message (or any other non-branching node) — one way forward.
     nextEdge = edgeFrom(edges, currentNode.id);

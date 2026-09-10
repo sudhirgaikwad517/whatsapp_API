@@ -35,6 +35,9 @@ import {
   FormInput,
   Database,
   FlagOff,
+  ShoppingBag,
+  Sparkles,
+  CreditCard,
 } from 'lucide-react';
 import { apiClient } from '../../services/api.client';
 
@@ -43,7 +46,19 @@ interface FlowBuilderProps {
   onClose: () => void;
 }
 
-type NodeType = 'trigger' | 'message' | 'buttons' | 'list' | 'condition' | 'collectInput' | 'saveData' | 'assignAgent' | 'end';
+type NodeType =
+  | 'trigger'
+  | 'message'
+  | 'buttons'
+  | 'list'
+  | 'condition'
+  | 'collectInput'
+  | 'saveData'
+  | 'assignAgent'
+  | 'end'
+  | 'sendProduct'
+  | 'aiResponse'
+  | 'paymentLink';
 
 interface ButtonOption {
   id: string;
@@ -69,6 +84,9 @@ const NODE_META: Record<NodeType, { label: string; color: string; icon: React.Re
   saveData: { label: 'Save Data', color: '#22c55e', icon: <Database className="w-3.5 h-3.5" /> },
   assignAgent: { label: 'Assign Agent', color: '#a855f7', icon: <UserCheck className="w-3.5 h-3.5" /> },
   end: { label: 'End Flow', color: '#64748b', icon: <FlagOff className="w-3.5 h-3.5" /> },
+  sendProduct: { label: 'Send Product', color: '#f97316', icon: <ShoppingBag className="w-3.5 h-3.5" /> },
+  aiResponse: { label: 'AI Response', color: '#8b5cf6', icon: <Sparkles className="w-3.5 h-3.5" /> },
+  paymentLink: { label: 'Payment Link', color: '#14b8a6', icon: <CreditCard className="w-3.5 h-3.5" /> },
 };
 
 function newId(prefix: string): string {
@@ -117,6 +135,12 @@ const FlowNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
       ? 'Hands this conversation to a human agent'
       : nodeType === 'end'
       ? data?.text || 'Ends the flow'
+      : nodeType === 'sendProduct'
+      ? `Show: ${data?.productTitle || 'No product selected'}`
+      : nodeType === 'aiResponse'
+      ? `${data?.introText || 'Sure! What would you like to know?'} (reply "${data?.continueKeyword || 'continue'}" to move on)`
+      : nodeType === 'paymentLink'
+      ? `Send payment link for the selected product${data?.description ? ` — ${data.description}` : ''}`
       : '';
 
   return (
@@ -175,9 +199,15 @@ function makeDefaultNodeData(nodeType: NodeType): any {
     case 'saveData':
       return { nodeType, fields: [] as SaveField[] };
     case 'assignAgent':
-      return { nodeType };
+      return { nodeType, customerMessage: '' };
     case 'end':
       return { nodeType, text: 'Thanks! We\'ll be in touch shortly.' };
+    case 'sendProduct':
+      return { nodeType, productId: '', productTitle: '' };
+    case 'aiResponse':
+      return { nodeType, introText: 'Sure! What would you like to know?', continueKeyword: 'continue' };
+    case 'paymentLink':
+      return { nodeType, description: '' };
     default:
       return { nodeType };
   }
@@ -363,6 +393,9 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
     { type: 'collectInput', label: 'Collect Input', icon: <FormInput className="w-4 h-4 mr-2 text-pink-400 shrink-0" /> },
     { type: 'saveData', label: 'Save Data to Contact', icon: <Database className="w-4 h-4 mr-2 text-green-400 shrink-0" /> },
     { type: 'assignAgent', label: 'Assign Support Agent', icon: <UserCheck className="w-4 h-4 mr-2 text-purple-400 shrink-0" /> },
+    { type: 'sendProduct', label: 'Send Product / Package', icon: <ShoppingBag className="w-4 h-4 mr-2 text-orange-400 shrink-0" /> },
+    { type: 'aiResponse', label: 'AI Response', icon: <Sparkles className="w-4 h-4 mr-2 text-violet-400 shrink-0" /> },
+    { type: 'paymentLink', label: 'Send Payment Link', icon: <CreditCard className="w-4 h-4 mr-2 text-teal-400 shrink-0" /> },
     { type: 'end', label: 'End Flow', icon: <FlagOff className="w-4 h-4 mr-2 text-slate-400 shrink-0" /> },
   ];
 
@@ -584,6 +617,17 @@ export const FlowBuilder: React.FC<FlowBuilderProps> = ({ flowId, onClose }) => 
 // ── Per-node-type inspector form ──────────────────────────────────────────
 const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any>) => void }> = ({ node, onChange }) => {
   const nodeType: NodeType = node.data?.nodeType || 'message';
+
+  // Called unconditionally (not just inside the sendProduct branch below) so
+  // the hook order never shifts when the selected node's type changes.
+  const { data: catalogProducts, isLoading: isCatalogLoading } = useQuery({
+    queryKey: ['products-list-for-flow'],
+    queryFn: async () => {
+      const res = await apiClient.get('/catalog');
+      return res.data.data as { id: string; title: string; priceInINR: number }[];
+    },
+    enabled: nodeType === 'sendProduct',
+  });
 
   if (nodeType === 'message' || nodeType === 'end') {
     return (
@@ -831,10 +875,117 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
 
   if (nodeType === 'assignAgent') {
     return (
-      <p className="text-[11px] text-slate-400">
-        When reached, this hands the conversation to a human agent (round-robin across your team) and stops the flow
-        there — the same assignment logic used everywhere else in Live Inbox.
-      </p>
+      <div className="space-y-3">
+        <p className="text-[11px] text-slate-400">
+          When reached, this hands the conversation to a human agent (round-robin across your team) — the same
+          assignment logic used everywhere else in Live Inbox.
+        </p>
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
+            Message sent to the customer on handoff
+          </label>
+          <textarea
+            rows={3}
+            value={node.data?.customerMessage || ''}
+            onChange={(e) => onChange({ customerMessage: e.target.value })}
+            placeholder="I'm connecting you with one of our live support specialists right away. Please hold on, a team member will assist you shortly! 🙏"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"
+          />
+          <p className="text-[10px] text-slate-500 mt-1">Leave blank to use the default message shown above as a placeholder.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (nodeType === 'sendProduct') {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Product / Package</label>
+          {isCatalogLoading ? (
+            <p className="text-[11px] text-slate-500">Loading catalog...</p>
+          ) : !catalogProducts || catalogProducts.length === 0 ? (
+            <p className="text-[11px] text-amber-400">No catalog products yet — add one under Catalog first.</p>
+          ) : (
+            <select
+              value={node.data?.productId || ''}
+              onChange={(e) => {
+                const picked = catalogProducts.find((p) => p.id === e.target.value);
+                onChange({ productId: e.target.value, productTitle: picked?.title || '' });
+              }}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">Select a product...</option>
+              {catalogProducts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title} — ₹{Number(p.priceInINR).toFixed(2)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <p className="text-[10px] text-slate-500">
+          Sends the product's photo, description and price as a real WhatsApp message. Wire this node's outgoing
+          connection to an Interactive Buttons node (e.g. "Order This" / "Ask a Question") next.
+        </p>
+      </div>
+    );
+  }
+
+  if (nodeType === 'aiResponse') {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Intro Message</label>
+          <textarea
+            rows={2}
+            value={node.data?.introText || ''}
+            onChange={(e) => onChange({ introText: e.target.value })}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
+            Keyword the customer types to move on
+          </label>
+          <input
+            type="text"
+            value={node.data?.continueKeyword || ''}
+            onChange={(e) => onChange({ continueKeyword: e.target.value })}
+            placeholder="continue"
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+        <p className="text-[10px] text-slate-500">
+          Uses your AI Assistant (same knowledge base &amp; product catalog it already uses in Live Inbox) to answer
+          whatever the customer asks here. It keeps answering follow-up questions until they type the keyword above,
+          then continues to whatever's wired next.
+        </p>
+      </div>
+    );
+  }
+
+  if (nodeType === 'paymentLink') {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
+            Payment description (optional)
+          </label>
+          <input
+            type="text"
+            value={node.data?.description || ''}
+            onChange={(e) => onChange({ description: e.target.value })}
+            placeholder="e.g. Order for Premium Salon Package"
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+        <p className="text-[10px] text-slate-500">
+          Generates a real Razorpay payment link for whichever product was shown earlier in this same conversation
+          (via a Send Product node) and sends it to the customer. Make sure Razorpay is connected under Settings →
+          Payments before using this node.
+        </p>
+      </div>
     );
   }
 
