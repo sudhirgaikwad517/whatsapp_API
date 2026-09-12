@@ -48,6 +48,11 @@ interface FlowNodeData {
   // aiResponse
   introText?: string;
   continueKeyword?: string;
+  // Org-editable label for the tappable "move on" button shown after each
+  // AI answer — customers don't have to type continueKeyword by hand.
+  // Defaults to "Continue to Order" but isn't order-specific wording only;
+  // an admin can rename it to fit whatever comes next in their flow.
+  continueButtonLabel?: string;
   // paymentLink
   description?: string;
 }
@@ -663,7 +668,12 @@ async function getOrCreateSystemCatalogFlow(organizationId: string) {
       {
         id: 'ai-ask',
         type: 'flowNode',
-        data: { nodeType: 'aiResponse', introText: 'Sure! Ask me anything about this product.', continueKeyword: 'continue' },
+        data: {
+          nodeType: 'aiResponse',
+          introText: 'Sure! Ask me anything about this product.',
+          continueKeyword: 'continue',
+          continueButtonLabel: 'Continue to Order',
+        },
       },
       { id: 'pay-link', type: 'flowNode', data: { nodeType: 'paymentLink', description: 'Order Payment' } },
     ],
@@ -816,8 +826,13 @@ export async function advanceFlowSession(
     nextEdge = edgeFrom(edges, currentNode.id);
   } else if (currentType === 'aiResponse') {
     const continueKeyword = (currentNode.data?.continueKeyword || 'continue').trim().toLowerCase();
+    const continueButtonLabel = currentNode.data?.continueButtonLabel?.trim() || 'Continue to Order';
     const typed = inbound.text.trim().toLowerCase();
-    if (typed === continueKeyword) {
+    // Either a real button tap or the typed fallback keyword moves the
+    // flow on — the button is what most customers will actually use, but
+    // the keyword still works too (e.g. if their WhatsApp client doesn't
+    // render buttons, or they just type it out of habit).
+    if (inbound.buttonReplyId === '__ai_continue__' || typed === continueKeyword) {
       nextEdge = edgeFrom(edges, currentNode.id);
     } else if (HUMAN_HANDOFF_INTENT_RE.test(inbound.text)) {
       // Customer explicitly asked for a person, not another AI answer —
@@ -828,15 +843,15 @@ export async function advanceFlowSession(
       return;
     } else {
       // Not the "I'm done, move on" keyword — treat it as another question
-      // for the AI and answer it in-place, without advancing the flow.
+      // for the AI and answer it in-place, without advancing the flow. A
+      // real tappable button (not just a typed-keyword hint) is what lets
+      // the customer move on without having to type anything.
       const { suggestReply } = await import('./ai.service.js');
       const answer = await suggestReply(session.organizationId, session.conversationId);
       await sendFlowText(session.organizationId, session.conversationId, answer);
-      await sendFlowText(
-        session.organizationId,
-        session.conversationId,
-        `Ask me anything else, or reply "${currentNode.data?.continueKeyword || 'continue'}" when you're ready to move on.`
-      );
+      await sendFlowButtons(session.organizationId, session.conversationId, 'Ask me anything else, or tap below when you\'re ready:', [
+        { id: '__ai_continue__', title: continueButtonLabel.slice(0, 20) },
+      ]);
       await prisma.flowSession.update({
         where: { id: session.id },
         data: { lastAdvancedAt: new Date(), expiresAt: new Date(Date.now() + SESSION_TIMEOUT_MS) },

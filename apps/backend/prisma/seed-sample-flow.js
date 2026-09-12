@@ -140,6 +140,7 @@ async function main() {
           nodeType: 'aiResponse',
           introText: 'Sure! Ask me anything about this package.',
           continueKeyword: 'continue',
+          continueButtonLabel: 'Continue to Order',
         },
         position: { x: 50, y: 340 },
       },

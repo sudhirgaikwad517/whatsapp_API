@@ -140,7 +140,7 @@ const FlowNodeCard: React.FC<NodeProps> = ({ data, selected }) => {
       : nodeType === 'sendProduct'
       ? `Show: ${data?.productTitle || 'whichever product was just picked (dynamic)'}`
       : nodeType === 'aiResponse'
-      ? `${data?.introText || 'Sure! What would you like to know?'} (reply "${data?.continueKeyword || 'continue'}" to move on)`
+      ? `${data?.introText || 'Sure! What would you like to know?'} ("${data?.continueButtonLabel || 'Continue to Order'}" button to move on)`
       : nodeType === 'paymentLink'
       ? `Send payment link for the selected product${data?.description ? ` — ${data.description}` : ''}`
       : '';
@@ -208,7 +208,7 @@ function makeDefaultNodeData(nodeType: NodeType): any {
     case 'sendProduct':
       return { nodeType, productId: '', productTitle: '' };
     case 'aiResponse':
-      return { nodeType, introText: 'Sure! What would you like to know?', continueKeyword: 'continue' };
+      return { nodeType, introText: 'Sure! What would you like to know?', continueKeyword: 'continue', continueButtonLabel: 'Continue to Order' };
     case 'paymentLink':
       return { nodeType, description: '' };
     default:
@@ -971,7 +971,24 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
-            Keyword the customer types to move on
+            "Move On" Button Label
+          </label>
+          <input
+            type="text"
+            maxLength={20}
+            value={node.data?.continueButtonLabel || ''}
+            onChange={(e) => onChange({ continueButtonLabel: e.target.value })}
+            placeholder="Continue to Order"
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+          />
+          <p className="text-[10px] text-slate-500 mt-1">
+            Shown as a real tappable button after every AI answer, so the customer doesn't have to type anything to
+            move on. Rename it to fit whatever's wired next (e.g. "Back to Menu").
+          </p>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">
+            Typed fallback keyword (optional)
           </label>
           <input
             type="text"
@@ -980,11 +997,15 @@ const NodeInspector: React.FC<{ node: Node; onChange: (patch: Record<string, any
             placeholder="continue"
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono focus:outline-none focus:border-emerald-500"
           />
+          <p className="text-[10px] text-slate-500 mt-1">
+            Also works if typed by hand instead of tapping the button — useful for WhatsApp clients that don't render
+            buttons.
+          </p>
         </div>
         <p className="text-[10px] text-slate-500">
           Uses your AI Assistant (same knowledge base &amp; product catalog it already uses in Live Inbox) to answer
-          whatever the customer asks here. It keeps answering follow-up questions until they type the keyword above,
-          then continues to whatever's wired next.
+          whatever the customer asks here. It keeps answering follow-up questions until they tap the button (or type
+          the fallback keyword), then continues to whatever's wired next.
         </p>
       </div>
     );
