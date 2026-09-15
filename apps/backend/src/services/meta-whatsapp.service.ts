@@ -306,6 +306,38 @@ export interface CreateTemplateInput {
   }>;
 }
 
+/**
+ * Meta rejects a template with a bare "Invalid parameter" error if a mix of
+ * Quick Reply and Call-to-Action (PHONE_NUMBER/URL) buttons isn't ordered
+ * with Quick Replies first — the builder UI lets an admin add them in
+ * whatever order they click "+Reply"/"+Call"/"+URL", so this reorders
+ * (stable sort, preserves relative order within each group) rather than
+ * relying on them knowing that rule.
+ */
+function buildMetaButtonsComponent(buttons: NonNullable<CreateTemplateInput['buttons']>) {
+  const ordered = [...buttons].sort((a, b) => {
+    const rank = (t: string) => (t === 'QUICK_REPLY' ? 0 : 1);
+    return rank(a.type) - rank(b.type);
+  });
+  return {
+    type: 'BUTTONS',
+    buttons: ordered.map((b) => {
+      if (b.type === 'PHONE_NUMBER') return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber };
+      if (b.type === 'URL') return { type: 'URL', text: b.text, url: b.url };
+      return { type: 'QUICK_REPLY', text: b.text };
+    }),
+  };
+}
+
+/** Meta's error responses often carry a much more specific error_user_msg
+ * (or error_user_title) than the generic top-level message ("Invalid
+ * parameter") — surface whichever is most specific instead of just the
+ * generic one, so a failed submission actually says what's wrong. */
+function extractMetaErrorMessage(responseData: any, fallback: string): string {
+  const err = responseData?.error;
+  return err?.error_user_msg || err?.message || fallback;
+}
+
 export async function createMetaTemplate(organizationId: string, input: CreateTemplateInput) {
   const waAccount = await prisma.whatsappAccount.findFirst({
     where: { organizationId, deletedAt: null },
@@ -385,18 +417,7 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
 
   // Buttons component
   if (input.buttons && input.buttons.length > 0) {
-    components.push({
-      type: 'BUTTONS',
-      buttons: input.buttons.map((b) => {
-        if (b.type === 'PHONE_NUMBER') {
-          return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber };
-        }
-        if (b.type === 'URL') {
-          return { type: 'URL', text: b.text, url: b.url };
-        }
-        return { type: 'QUICK_REPLY', text: b.text };
-      }),
-    });
+    components.push(buildMetaButtonsComponent(input.buttons));
   }
 
   const payload = {
@@ -423,7 +444,7 @@ export async function createMetaTemplate(organizationId: string, input: CreateTe
   if (!response.ok) {
     logger.error({ responseData }, 'Failed to submit template to Meta Graph API');
     throw new AppError(
-      responseData?.error?.message || 'Meta API rejected template creation request.',
+      extractMetaErrorMessage(responseData, 'Meta API rejected template creation request.'),
       response.status || 400,
       'META_TEMPLATE_CREATE_ERROR'
     );
@@ -615,14 +636,7 @@ export async function editMetaTemplate(organizationId: string, templateId: strin
 
   // Buttons component
   if (input.buttons && input.buttons.length > 0) {
-    components.push({
-      type: 'BUTTONS',
-      buttons: input.buttons.map((b) => {
-        if (b.type === 'PHONE_NUMBER') return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phoneNumber };
-        if (b.type === 'URL') return { type: 'URL', text: b.text, url: b.url };
-        return { type: 'QUICK_REPLY', text: b.text };
-      }),
-    });
+    components.push(buildMetaButtonsComponent(input.buttons));
   }
 
   const decryptedToken = decryptToken(template.whatsappAccount.encryptedAccessToken);
@@ -642,7 +656,7 @@ export async function editMetaTemplate(organizationId: string, templateId: strin
   if (!response.ok) {
     logger.error({ responseData }, 'Failed to edit template in Meta Graph API');
     throw new AppError(
-      responseData?.error?.message || 'Meta API rejected template edit request.',
+      extractMetaErrorMessage(responseData, 'Meta API rejected template edit request.'),
       response.status || 400,
       'META_TEMPLATE_EDIT_ERROR'
     );
