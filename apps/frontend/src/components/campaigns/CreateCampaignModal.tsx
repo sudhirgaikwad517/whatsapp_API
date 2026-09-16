@@ -3,6 +3,7 @@ import { X, Megaphone, Send, UploadCloud, Users, FileSpreadsheet, CheckCircle2, 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '../../services/api.client';
+import { parseCsvLine } from '../../utils/csv';
 
 interface CreateCampaignModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
   const [phoneColIdx, setPhoneColIdx] = useState<number>(-1);
   const [nameColIdx, setNameColIdx] = useState<number>(-1);
   const [emailColIdx, setEmailColIdx] = useState<number>(-1);
-  const [saveContactsToCrm, setSaveContactsToCrm] = useState<boolean>(true);
+  const [saveContactsToCrm, setSaveContactsToCrm] = useState<boolean>(false);
   const [csvFileName, setCsvFileName] = useState<string>('');
   const [isBatchEnabled, setIsBatchEnabled] = useState<boolean>(true);
   const [batchSize, setBatchSize] = useState<number>(50);
@@ -192,9 +193,9 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
         const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
         if (lines.length === 0) throw new Error('Uploaded CSV file is empty.');
 
-        const rawHeaders = lines[0].split(',').map((h) => h.trim().replace(/["']/g, ''));
+        const rawHeaders = parseCsvLine(lines[0]);
         const headersLower = rawHeaders.map((h) => h.toLowerCase());
-        const rows = lines.slice(1).map((line) => line.split(',').map((c) => c.trim().replace(/["']/g, '')));
+        const rows = lines.slice(1).map((line) => parseCsvLine(line));
 
         if (rows.length === 0) {
           throw new Error('No data rows found below the header row.');
@@ -273,8 +274,13 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       });
       return res.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (campaign: any) => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      if (campaign?.skippedCsvRowCount > 0) {
+        toast.warning(`${campaign.skippedCsvRowCount} row(s) skipped — invalid phone number after CSV parsing`, {
+          description: campaign.skippedCsvRowSamples?.length ? `e.g. "${campaign.skippedCsvRowSamples.join('", "')}"` : undefined,
+        });
+      }
       setName('');
       setTemplateId('');
       setHeaderMediaUrl('');
@@ -287,7 +293,7 @@ export const CreateCampaignModal: React.FC<CreateCampaignModalProps> = ({ isOpen
       setPhoneColIdx(-1);
       setNameColIdx(-1);
       setEmailColIdx(-1);
-      setSaveContactsToCrm(true);
+      setSaveContactsToCrm(false);
       setCsvFileName('');
       setIsBatchEnabled(true);
       setBatchSize(50);

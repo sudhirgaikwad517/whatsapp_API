@@ -112,6 +112,8 @@ export async function createCampaign(organizationId: string, input: CreateCampai
 
   let targetContacts: Array<{ id: string; phoneNumber: string; firstName?: string | null }> = [];
 
+  const skippedCsvRows: string[] = [];
+
   if (input.audienceSource === 'CSV' && input.csvContacts?.length) {
     // ── Option B: CSV Upload Specific Audience (Full Name in CRM, First Name in Campaign) ──
     const processedPhones = new Set<string>();
@@ -120,10 +122,26 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     for (const rawContact of input.csvContacts) {
       if (!rawContact.phoneNumber) continue;
       const formattedPhone = cleanPhone(rawContact.phoneNumber);
+      // A malformed CSV row (e.g. a comma inside an unquoted business name
+      // shifting every later column for that row) can hand this a garbled,
+      // oversized value instead of a real phone number. Contact.phoneNumber
+      // is VarChar(50) — writing anything longer used to throw an opaque,
+      // unhandled Prisma error that aborted the ENTIRE campaign, not just
+      // this one bad row. Skip it and keep the rest of the batch going.
+      if (!formattedPhone || formattedPhone.length > 50) {
+        skippedCsvRows.push(rawContact.phoneNumber);
+        continue;
+      }
       if (processedPhones.has(formattedPhone)) continue; // Skip duplicate inside CSV file
       processedPhones.add(formattedPhone);
 
       const { firstName, lastName } = parseFullName(rawContact.firstName);
+      // Same defensive truncation for the other CSV-sourced fields — a
+      // shifted row can just as easily hand a too-long value to firstName/
+      // lastName (VarChar(100)) or email (VarChar(255)).
+      const safeFirstName = firstName?.slice(0, 100);
+      const safeLastName = lastName?.slice(0, 100);
+      const safeEmail = rawContact.email?.trim().slice(0, 255) || undefined;
 
       // Find existing contact in CRM (Deduplication against existing database)
       let contact = await prisma.contact.findUnique({
@@ -141,9 +159,9 @@ export async function createCampaign(organizationId: string, input: CreateCampai
           data: {
             organizationId,
             phoneNumber: formattedPhone,
-            firstName,
-            lastName,
-            email: rawContact.email,
+            firstName: safeFirstName,
+            lastName: safeLastName,
+            email: safeEmail,
             customAttributes: rawContact.customAttributes || {},
             isOptedIn: true,
             // A CampaignRecipient row always needs a real contactId (required
@@ -161,7 +179,7 @@ export async function createCampaign(organizationId: string, input: CreateCampai
         contact = await prisma.contact.update({
           where: { id: contact.id },
           data: {
-            ...(firstName && (!contact.firstName || contact.firstName === 'Customer') ? { firstName, ...(lastName ? { lastName } : {}) } : {}),
+            ...(safeFirstName && (!contact.firstName || contact.firstName === 'Customer') ? { firstName: safeFirstName, ...(safeLastName ? { lastName: safeLastName } : {}) } : {}),
             ...(rawContact.customAttributes ? { customAttributes: { ...((contact.customAttributes as object) || {}), ...rawContact.customAttributes } } : {}),
           },
         });
@@ -271,7 +289,10 @@ export async function createCampaign(organizationId: string, input: CreateCampai
     );
   }
 
-  return campaign;
+  // Lets the frontend tell the org admin "N rows were skipped, check your
+  // CSV" instead of them only ever seeing a clean success with a lower
+  // recipient count than they expected and no idea why.
+  return { ...campaign, skippedCsvRowCount: skippedCsvRows.length, skippedCsvRowSamples: skippedCsvRows.slice(0, 5) };
 }
 
 /**

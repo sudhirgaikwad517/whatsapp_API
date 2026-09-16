@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../services/api.client';
+import { parseCsvLine } from '../../utils/csv';
 
 interface ImportCsvModalProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ export const ImportCsvModal: React.FC<ImportCsvModalProps> = ({ isOpen, onClose 
     const startIdx = lines[0].toLowerCase().includes('phone') ? 1 : 0;
 
     for (let i = startIdx; i < lines.length; i++) {
-      const parts = lines[i].split(',').map((p) => p.trim().replace(/^["']|["']$/g, ''));
+      const parts = parseCsvLine(lines[i]);
       if (parts[0]) {
         parsedContacts.push({
           phoneNumber: parts[0],
