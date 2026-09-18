@@ -52,6 +52,13 @@ export const SuperAdminDashboard: React.FC = () => {
   const [isSubmittingTicketAction, setIsSubmittingTicketAction] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [selectedFinanceOrgId, setSelectedFinanceOrgId] = useState<string | null>(null);
+
+  // Plan Assignment Modal States
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [planModalOrg, setPlanModalOrg] = useState<any>(null);
+  const [planModalTier, setPlanModalTier] = useState<string>('PRO');
+  const [planModalExpiryDate, setPlanModalExpiryDate] = useState<string>('');
+
   const queryClient = useQueryClient();
   const startImpersonation = useAuthStore((state) => state.startImpersonation);
 
@@ -309,18 +316,20 @@ export const SuperAdminDashboard: React.FC = () => {
 
   // Update Plan Tier Mutation
   const updatePlanMutation = useMutation({
-    mutationFn: async ({ orgId, planTier }: { orgId: string; planTier: string }) => {
+    mutationFn: async ({ orgId, planTier, planExpiryDate }: { orgId: string; planTier: string; planExpiryDate?: string }) => {
       const res = await apiClient.post('/superadmin/plan-tier', {
         organizationId: orgId,
         planTier,
+        planExpiryDate: planExpiryDate || undefined,
       });
       return res.data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['superadmin-orgs'] });
-      toast.success('Plan tier updated successfully!');
+      toast.success('Plan updated successfully!');
+      setIsPlanModalOpen(false);
     },
-    onError: (err: any) => toast.error('Failed to update plan tier', { description: err.message }),
+    onError: (err: any) => toast.error('Failed to update plan', { description: err.message }),
   });
 
   // Pricing Rules & Markups — one PricingRule row per (countryCode, category),
@@ -922,15 +931,27 @@ export const SuperAdminDashboard: React.FC = () => {
                         
                         {/* Plan Tier Selector */}
                         <td className="py-4 px-6">
-                          <select
-                            value={currentPlan}
-                            onChange={(e) => updatePlanMutation.mutate({ orgId: org.id, planTier: e.target.value })}
-                            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-purple-300 focus:outline-none focus:border-purple-500"
-                          >
-                            <option value="STARTER">STARTER (₹1,499)</option>
-                            <option value="PRO">PRO (₹3,999)</option>
-                            <option value="ENTERPRISE">ENTERPRISE (₹8,999)</option>
-                          </select>
+                          <div className="flex items-center gap-2">
+                            <span className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs font-bold text-purple-300">
+                              {currentPlan}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setPlanModalOrg(org);
+                                setPlanModalTier(currentPlan);
+                                setPlanModalExpiryDate(org.planExpiryDate ? new Date(org.planExpiryDate).toISOString().split('T')[0] : '');
+                                setIsPlanModalOpen(true);
+                              }}
+                              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition-colors"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                          {org.planExpiryDate && (
+                            <div className="text-[10px] text-slate-500 mt-1">
+                              Expires: {new Date(org.planExpiryDate).toLocaleDateString()}
+                            </div>
+                          )}
                         </td>
 
                         {/* AI Credits Balance & Quick Grant */}
@@ -1986,6 +2007,73 @@ export const SuperAdminDashboard: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Plan Assignment Modal */}
+      {isPlanModalOpen && planModalOrg && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-purple-400" />
+                Assign Plan Tier
+              </h3>
+              <button
+                onClick={() => setIsPlanModalOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">Organization</label>
+                <div className="text-white font-medium">{planModalOrg.name}</div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">Plan Tier</label>
+                <select
+                  value={planModalTier}
+                  onChange={(e) => setPlanModalTier(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="STARTER">STARTER (₹1,499)</option>
+                  <option value="PRO">PRO (₹3,999)</option>
+                  <option value="ENTERPRISE">ENTERPRISE (₹8,999)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">Expiry Date</label>
+                <input
+                  type="date"
+                  value={planModalExpiryDate}
+                  onChange={(e) => setPlanModalExpiryDate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 [color-scheme:dark]"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Leave blank for no expiry.</p>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex justify-end gap-3">
+              <button
+                onClick={() => setIsPlanModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => updatePlanMutation.mutate({ orgId: planModalOrg.id, planTier: planModalTier, planExpiryDate: planModalExpiryDate })}
+                disabled={updatePlanMutation.isPending}
+                className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-500/20 disabled:opacity-50"
+              >
+                {updatePlanMutation.isPending ? 'Saving...' : 'Save Plan'}
+              </button>
+            </div>
           </div>
         </div>
       )}

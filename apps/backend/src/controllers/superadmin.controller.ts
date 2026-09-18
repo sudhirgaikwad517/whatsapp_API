@@ -150,8 +150,9 @@ export async function deleteOrganization(req: AuthenticatedRequest, res: Respons
 
 export async function updatePlanTier(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { organizationId, planTier } = req.body;
-    const data = await SuperAdminService.updateOrganizationPlanTier(organizationId, planTier, req.user!.userId, req.ip);
+    const { organizationId, planTier, planExpiryDate } = req.body;
+    const expiryDateObj = planExpiryDate ? new Date(planExpiryDate) : undefined;
+    const data = await SuperAdminService.updateOrganizationPlanTier(organizationId, planTier, expiryDateObj, req.user!.userId, req.ip);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

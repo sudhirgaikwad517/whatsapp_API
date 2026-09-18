@@ -473,6 +473,7 @@ export async function getOrganizationsList(options: { page?: number; limit?: num
           ...org.wallet,
           availableBalance: netBalance,
         } : null,
+        planExpiryDate: org.planExpiryDate,
         planActiveSince: latestPlanInvoice?.createdAt || null,
         financialTelemetry: {
           metaCost,
@@ -623,6 +624,7 @@ export async function deleteOrganization(organizationId: string, actorAdminId?: 
 export async function updateOrganizationPlanTier(
   organizationId: string,
   planTier: PlanTier,
+  planExpiryDate?: Date,
   actorAdminId?: string,
   ipAddress?: string
 ) {
@@ -630,7 +632,10 @@ export async function updateOrganizationPlanTier(
 
   const updated = await prisma.organization.update({
     where: { id: organizationId },
-    data: { planTier },
+    data: { 
+      planTier,
+      ...(planExpiryDate !== undefined && { planExpiryDate })
+    },
   });
 
   await prisma.superAdminAuditLog.create({
@@ -639,7 +644,7 @@ export async function updateOrganizationPlanTier(
       targetOrganizationId: organizationId,
       action: 'UPDATE_PLAN_TIER',
       resource: 'Organization',
-      details: { planTier },
+      details: { planTier, planExpiryDate },
       ipAddress: ipAddress || '127.0.0.1',
     },
   });
